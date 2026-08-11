@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "holonmed"
+version = "0.1.0"
+description = "Apoyo a la decisión clínica con validación ontológica sobre SNOMED CT"
+readme = "../README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+keywords = ["snomed", "clinical-nlp", "bayesian", "medical-informatics", "llm"]
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+    "python-multipart>=0.0.12",
+    "pandas>=2.2",
+    "rapidfuzz>=3.10",
+    "python-arango>=8.1",
+    "reportlab>=4.2",
+    "pypdf>=5.1",
+    "dateparser>=1.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+]
+
+[project.scripts]
+holonmed = "holonmed.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["holonmed*"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# `Depends(...)` en el valor por defecto es el idioma de FastAPI, no un
+# descuido: el framework resuelve la llamada por petición.
+"holonmed/api/routes/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,29 @@
+# Sólo la base de datos. El backend y el frontend se ejecutan en local
+# durante el desarrollo, y Ollama corre en el host para poder usar la GPU.
+#
+#   docker compose up -d
+#
+# ArangoDB queda expuesto únicamente en 127.0.0.1. Si lo publicas en una
+# interfaz accesible desde la red, cambia la contraseña antes.
+
+services:
+  arangodb:
+    image: arangodb:3.12
+    container_name: holonmed-arango
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8529:8529'
+    environment:
+      ARANGO_ROOT_PASSWORD: ${HOLONMED_ARANGO_PASSWORD:-changeme}
+    volumes:
+      - arango_data:/var/lib/arangodb3
+      - arango_apps:/var/lib/arangodb3-apps
+    healthcheck:
+      test: ['CMD', 'arangosh', '--server.authentication', 'false', '--javascript.execute-string', 'db._version()']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  arango_data:
+  arango_apps:

@@ -1,0 +1,84 @@
+# =====================================================================
+# HolonMed — .gitignore
+# Repositorio PÚBLICO. Todo lo que entre aquí es irreversible.
+# Ante la duda, ignóralo.
+# =====================================================================
+
+# --- SECRETOS (NUNCA, BAJO NINGUNA CIRCUNSTANCIA) --------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+client_secret*.json
+token.json
+service_account*.json
+*_credentials.json
+secrets/
+.secrets/
+
+# --- DATOS DE PACIENTE (PHI / HIPAA / LOPD) --------------------------
+# Ningún dato clínico real puede vivir en el repositorio.
+data/patients/
+data/phi/
+*.phi.json
+generated_docs/
+uploads/
+*.pdf
+!docs/**/*.pdf
+
+# --- SNOMED CT (LICENCIA SNOMED INTERNATIONAL — NO REDISTRIBUIBLE) ---
+# Requiere licencia de afiliado. Se descarga con scripts/setup_snomed.py
+data/snomed/
+sct2_*.txt
+der2_*.txt
+snomed_*.txt
+snomed_cache.pkl
+*.pkl
+
+# --- MODELOS DE IA (GIGANTES) ----------------------------------------
+*.gguf
+*.safetensors
+*.bin
+models/
+!backend/holonmed/models.py
+
+# --- PYTHON ----------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- NODE / FRONTEND -------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+*.local
+
+# --- LOGS Y TEMPORALES -----------------------------------------------
+*.log
+logs/
+_backups/
+*.bak
+*.tmp
+
+# --- SISTEMA / EDITOR ------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json

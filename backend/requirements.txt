@@ -1,0 +1,28 @@
+# Instalación: pip install -r requirements.txt
+# Alternativa recomendada: pip install -e ".[dev]"
+
+# --- API ---
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+
+# --- Modelos y configuración ---
+pydantic>=2.9
+pydantic-settings>=2.6
+
+# --- Cliente LLM (Ollama por HTTP) ---
+httpx>=0.27
+
+# --- Motor SNOMED ---
+pandas>=2.2
+rapidfuzz>=3.10
+
+# --- Persistencia ---
+python-arango>=8.1
+
+# --- Documentos ---
+reportlab>=4.2
+pypdf>=5.1
+
+# --- Utilidades ---
+dateparser>=1.2
