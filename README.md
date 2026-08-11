@@ -1,11 +1,12 @@
 # HolonMed
 
 Sistema de apoyo a la decisión clínica que convierte narrativa médica libre
-en hallazgos estructurados, normalizados contra SNOMED CT y **auditados
-antes de entrar en la historia del paciente**.
+en hallazgos estructurados, normalizados contra un vocabulario controlado y
+**auditados antes de entrar en la historia del paciente**.
 
-Todo el procesamiento ocurre en local mediante [Ollama](https://ollama.com).
-Ninguna narrativa clínica sale de la máquina.
+Todo el procesamiento ocurre en local: [Ollama](https://ollama.com) para el
+razonamiento, SQLite embebido para los datos. Ninguna narrativa clínica sale
+de la máquina.
 
 > **No es un dispositivo médico.** Ninguna salida de este sistema sustituye
 > el juicio de un profesional sanitario. Lee [DISCLAIMER.md](DISCLAIMER.md)
@@ -30,13 +31,13 @@ Un LLM sin restricciones tampoco, porque su trabajo es sonar coherente.
 
 ## El enfoque
 
-Cada hallazgo pasa por tres capas antes de considerarse cierto, y en cada
+Cada hallazgo pasa por cuatro capas antes de considerarse cierto, y en cada
 una puede ser rechazado:
 
 | Capa | Pregunta | Mecanismo |
 |------|----------|-----------|
-| **0 — Skill-hints** | ¿Lo codificó ya un humano? | Diccionario término→SNOMED ID del protocolo activo |
-| **1 — Recuperación** | ¿Existe el concepto? | Búsqueda difusa (rapidfuzz) o BM25 sobre SNOMED CT |
+| **0 — Skill-hints** | ¿Lo codificó ya un humano? | Diccionario término→código del protocolo activo |
+| **1 — Recuperación** | ¿Existe el concepto? | FTS5 con BM25 acota; puntuado difuso ordena |
 | **2 — Re-ranking** | ¿Es *este* concepto? | El LLM audita candidatos y **puede responder "ninguno"** |
 | **3 — Auditoría lógica** | ¿Lo sostiene la evidencia? | Comparación numérica explícita contra el protocolo |
 
@@ -49,19 +50,20 @@ El resultado no es un booleano sino un veredicto de tres estados:
 - **RUIDO** — descartado. **Se muestra igualmente**, con el motivo.
 
 Esa última decisión es deliberada: un sistema que oculta lo que rechaza no
-se puede auditar. Si el validador empieza a descartar de más, quieres
-verlo.
+se puede auditar. Si el validador empieza a descartar de más, quieres verlo.
 
 ### Guardas de colisión
 
 Hay pares de conceptos que un motor de similitud confunde y un clínico
 jamás. Están codificados como bloqueos duros que **ni siquiera el LLM puede
-saltarse** ([`core/snomed.py`](backend/holonmed/core/snomed.py)):
+saltarse** ([`core/validator.py`](backend/holonmed/core/validator.py)):
 
 ```
 amilasa   ⊗ lipasa        dos enzimas distintas
 lipasemia ⊗ lipemia       enzima vs. lípidos
 natremia  ⊗ potasemia     sodio vs. potasio
+glucemia  ⊗ glucosuria    en sangre vs. en orina
+hematuria ⊗ hematemesis   sangre en orina vs. en vómito
 hipo…     ⊗ hiper…        dirección del desvío invertida
 ```
 
@@ -75,29 +77,40 @@ odds_posterior = odds_previo × Π(LR de cada hallazgo validado)
 
 Lo que lo hace útil no es el número final sino la traza: de dónde salió la
 probabilidad previa, qué factor de riesgo la movió y qué hallazgo aportó
-cada likelihood ratio. Un clínico puede recorrer el razonamiento y
-discrepar de un paso concreto.
+cada likelihood ratio. Un clínico puede recorrer el razonamiento y discrepar
+de un paso concreto.
 
 **Sólo la evidencia validada actualiza la probabilidad.** Un hallazgo en
 alerta se ve en pantalla pero no mueve la aguja.
+
+### El grafo clínico
+
+El vocabulario no es una lista plana sino un grafo dirigido. Eso permite la
+consulta que justifica toda la estructura:
+
+```bash
+curl 'localhost:8000/api/grafo/cohorte?codigo=HM:0730'
+```
+
+Devuelve los pacientes con **cualquier** alteración enzimática — aunque en
+sus notas nadie escribiera esas palabras, sólo «lipasa elevada» o
+«hiperamilasemia». El grafo deduce la relación.
+
+Para que esa consulta sea barata, el cierre transitivo se materializa
+únicamente para los conceptos que aparecen en datos clínicos reales.
+Materializar un vocabulario completo serían decenas de millones de filas;
+materializar lo que se usa son unos miles, y convierte la consulta en un
+join indexado. Ver [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 ---
 
 ## Arranque rápido
 
-### Requisitos
-
-- Python 3.10+ y Node 20+
-- [Ollama](https://ollama.com) con al menos un modelo descargado
-- Licencia de afiliado de SNOMED CT (ver más abajo)
-- ArangoDB — opcional; sin él, el sistema funciona pero no persiste nada
-
-### Instalación
+Sin descargas de terminología, sin servidor de base de datos y sin trámites
+de licencia:
 
 ```bash
-git clone https://github.com/alcyedmundo281/holonmed.git
-cd holonmed
-cp .env.example .env
+git clone https://github.com/alcyedmundo281/holonmed.git && cd holonmed
 ```
 
 ```bash
@@ -109,57 +122,74 @@ ollama pull gemma2:9b && ollama pull llama3
 ```
 
 ```bash
-docker compose up -d
+.venv/bin/holonmed check
 ```
 
-### SNOMED CT
-
-La terminología **no está en este repositorio** y no puede estarlo: es
-propiedad de SNOMED International y requiere licencia de afiliado,
-gratuita en los países miembros.
-
-1. Comprueba si tu país es miembro en [snomed.org](https://www.snomed.org/member-countries)
-2. Solicita la licencia a través de tu centro nacional
-3. Descarga la *Spanish Edition* (basta el **Snapshot**)
-4. Descomprime los `.txt` en `backend/data/snomed/`
+`check` dice exactamente qué falta y con qué comando se arregla. Cuando
+esté todo en verde:
 
 ```bash
-cd backend && python scripts/setup_snomed.py --verificar
-```
-
-```bash
-python scripts/setup_snomed.py --construir-cache
-```
-
-La primera ingesta tarda varios minutos; después el arranque es instantáneo
-gracias al cache binario.
-
-### Comprobar el entorno
-
-```bash
-cd backend && .venv/bin/holonmed check
-```
-
-Dice exactamente qué falta y con qué comando se arregla.
-
-### Ejecutar
-
-```bash
-cd backend && .venv/bin/holonmed serve --reload
+.venv/bin/holonmed serve --reload
 ```
 
 ```bash
 cd frontend && npm install && npm run dev
 ```
 
-La interfaz queda en http://localhost:5173 y la documentación interactiva
-de la API en http://localhost:8000/docs.
+La interfaz queda en http://localhost:5173 y la documentación interactiva de
+la API en http://localhost:8000/docs.
 
 ### Probar sin interfaz
 
 ```bash
 holonmed tic "Varón 45a, dolor epigástrico en cinturón. Amilasa 1200, lipasa 890, calcio 6.8"
 ```
+
+### Requisitos
+
+- Python 3.10+ y Node 20+
+- [Ollama](https://ollama.com) con los modelos configurados descargados
+
+Eso es todo. La base de datos es un archivo SQLite que se crea sola, y el
+vocabulario clínico base viene incluido.
+
+---
+
+## Vocabulario clínico
+
+El repositorio incluye un **vocabulario semilla** de unos 110 conceptos
+frecuentes en español, con sus sinónimos y su jerarquía. Es contenido propio
+del proyecto, bajo la misma licencia que el código, y **no contiene códigos
+de ninguna terminología con licencia**.
+
+Sirve para que el validador funcione recién clonado: reconoce y normaliza lo
+habitual, y rechaza lo que no reconoce. Sin vocabulario no habría validación
+posible, y un validador que lo acepta todo es peor que no tener validador.
+
+Reconoce sinónimos sin necesidad de LLM:
+
+| Escribes | Normaliza a |
+|----------|-------------|
+| «lipasa elevada» | Hiperlipasemia |
+| «calcio bajo» | Hipocalcemia |
+| «falta de aire» | Disnea |
+| «orina oscura» | Coluria |
+
+### Importar una terminología completa
+
+Para codificar de verdad — facturación, interoperabilidad, HCE — hace falta
+una terminología estándar. El repositorio distribuye **el código que las
+lee**, nunca los datos:
+
+```bash
+python scripts/importar_terminologia.py --rf2 /ruta/al/Snapshot/Terminology
+```
+
+**SNOMED CT** requiere licencia de afiliado, gratuita en los países
+miembros. Comprueba el tuyo en
+[snomed.org/member-countries](https://www.snomed.org/member-countries) y
+solicítala a través del centro nacional. Obtenerla y cumplirla es
+responsabilidad de quien la importa.
 
 ---
 
@@ -179,7 +209,7 @@ narrativa clínica
 └─────────────┘
       │
       ▼
-┌─────────────┐   hints → recuperación → re-ranking → auditoría
+┌─────────────┐   hints → FTS5 → re-ranking → auditoría
 │ VALIDACIÓN  │   VALIDADO / ALERTA / RUIDO
 └─────────────┘
       │
@@ -189,28 +219,29 @@ narrativa clínica
 └─────────────┘
       │
       ▼
-   ResultadoTic
+   ResultadoTic  ──►  grafo del paciente
 ```
 
 ```
 backend/holonmed/
 ├── core/
-│   ├── snomed.py      validación ontológica y guardas de colisión
-│   ├── verifier.py    auditoría lógica contra criterios de laboratorio
-│   ├── bayes.py       inferencia abductiva explicable
-│   ├── skills.py      protocolos clínicos y extracción de hints
-│   └── pipeline.py    orquestación del ciclo completo
-├── llm/client.py      cliente Ollama async con parseo defensivo
-├── db/arango.py       persistencia (opcional)
-├── api/               FastAPI
-└── services/          recetas PDF, agenda, laboratorio
+│   ├── terminology.py  índice FTS5 + carga de vocabularios
+│   ├── validator.py    validación ontológica y guardas de colisión
+│   ├── verifier.py     auditoría lógica contra criterios de laboratorio
+│   ├── bayes.py        inferencia abductiva explicable
+│   ├── skills.py       protocolos clínicos y extracción de hints
+│   └── pipeline.py     orquestación del ciclo completo
+├── db/
+│   ├── schema.sql      esquema SQLite, incluido el grafo
+│   └── store.py        repositorios y consultas de grafo
+├── llm/client.py       cliente Ollama async con parseo defensivo
+├── api/                FastAPI
+└── services/           recetas PDF, agenda, laboratorio
 ```
 
-Detalles en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+### Vocabulario del dominio
 
-### Vocabulario
-
-El dominio impone los nombres, y merece la pena entenderlos:
+El proyecto usa nombres deliberados, y merece la pena entenderlos:
 
 - **Infón** — el átomo de verdad. Un hallazgo clínico único, normalizado y
   auditado, con su procedencia textual.
@@ -236,11 +267,11 @@ modelo; el JSON-LD lo consume el código directamente:
   "criterios_laboratorio": {
     "reglas": [
       { "parametro": "Calcio sérico", "corte_inferior": 8.5,
-        "termino_si_bajo": "Hipocalcemia", "snomed_id": "5291005" }
+        "termino_si_bajo": "Hipocalcemia" }
     ]
   },
   "signDetected": [
-    { "name": "Hiperlipasemia (>3x)", "snomed_id": "10443000", "bayes_lr": 24.0 }
+    { "name": "Hiperlipasemia (>3x)", "bayes_lr": 24.0 }
   ]
 }
 ```
@@ -258,22 +289,22 @@ Guía completa en [docs/SKILLS.md](docs/SKILLS.md).
 cd backend && pytest -q && ruff check .
 ```
 
-Los tests no requieren Ollama, SNOMED ni ArangoDB: el pipeline se ejercita
-con dobles de prueba. Cubren sobre todo las propiedades de seguridad —
-que la evidencia no validada no cuente, que las colisiones se bloqueen, que
-un LR mal configurado no produzca certeza del 100 %.
+Los tests no requieren Ollama ni ninguna terminología externa. Cubren sobre
+todo las propiedades de seguridad: que la evidencia no validada no cuente,
+que las colisiones se bloqueen, que un LR mal configurado no produzca
+certeza del 100 %, que el grafo encuentre por ancestro y que un descarte no
+muestre un término que el clínico nunca escribió.
 
 ## Privacidad y seguridad
 
-- **Procesamiento local.** Ollama corre en tu máquina. No hay llamadas a
-  APIs de terceros con datos de paciente.
+- **Procesamiento local.** Ollama corre en tu máquina y la base es un
+  archivo. No hay llamadas a terceros con datos de paciente.
 - **Sin credenciales en el repositorio.** El `.gitignore` bloquea patrones
   de secretos y la CI falla si alguno se cuela.
-- **Sin datos de paciente en el repositorio.** Los ficticios de
+- **Sin datos de paciente.** `*.db` está ignorado; los pacientes de
   `scripts/seed_demo.py` son inventados.
 - Antes de usar esto con pacientes reales, revisa el RGPD/LOPD o la
-  normativa que te aplique. Que el procesamiento sea local ayuda, pero no
-  te exime de nada.
+  normativa que te aplique, y cifra el disco donde viva la base.
 
 ## Origen
 
@@ -286,5 +317,13 @@ persistencia, la interfaz y la generación de documentos.
 [AGPL-3.0](LICENSE). Si despliegas una versión modificada como servicio en
 red, debes publicar el código fuente de esa versión.
 
-SNOMED CT tiene su propia licencia, independiente de esta. El código para
-consumirla es libre; la terminología no se redistribuye aquí.
+Todas las dependencias son permisivas o de dominio público. Se evitó
+deliberadamente ArangoDB, que desde su versión 3.12 usa BUSL-1.1 y cuya
+Community Edition prohíbe el uso comercial; SQLite es de dominio público y
+no impone ninguna condición aguas abajo.
+
+## Citación
+
+Si usas HolonMed en un trabajo académico, cítalo con los metadatos de
+[CITATION.cff](CITATION.cff). Ver [docs/PUBLICAR.md](docs/PUBLICAR.md) para
+obtener un DOI de Zenodo.

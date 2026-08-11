@@ -21,8 +21,8 @@ flowchart TD
     C --> D[Extracción guiada]
     D -->|hallazgos en bruto| E{Capa 0: skill-hints}
 
-    E -->|coincidencia exacta| V[VALIDADO<br/>score 100]
-    E -->|sin hint| F[Capa 1: recuperación]
+    E -->|coincidencia| V[VALIDADO<br/>score 100]
+    E -->|sin hint| F[Capa 1: FTS5 + difuso]
 
     F -->|sin candidatos| R[RUIDO]
     F -->|top 15| G{Capa 2: re-ranking}
@@ -45,6 +45,7 @@ flowchart TD
     AL -.->|no cuenta como prueba| M
     R -.->|no cuenta como prueba| M
     M --> N[ResultadoTic]
+    V --> G2[Grafo del paciente]
 ```
 
 ## Por qué tres estados y no dos
@@ -53,14 +54,78 @@ Un booleano válido/inválido obliga a elegir entre dos errores malos: dejar
 pasar hallazgos dudosos, o descartar hallazgos correctos en silencio.
 
 El estado intermedio **ALERTA** cubre el caso real más frecuente: el
-concepto existe en SNOMED con buena puntuación, pero la auditoría no
-encontró en el texto la evidencia numérica que lo sostenga. Suele ocurrir
-cuando el clínico escribe una impresión sin el dato de apoyo. Eso no es una
-alucinación, pero tampoco es un hecho verificado.
+concepto existe con buena puntuación, pero la auditoría no encontró en el
+texto la evidencia numérica que lo sostenga. Suele ocurrir cuando el clínico
+escribe una impresión sin el dato de apoyo. Eso no es una alucinación, pero
+tampoco es un hecho verificado.
 
 Un hallazgo en alerta **se muestra y no cuenta**: aparece en pantalla para
 que un humano decida, pero no entra en la línea de tiempo del holón ni
 actualiza ninguna probabilidad.
+
+Y un hallazgo descartado conserva **lo que escribió el clínico**, no lo que
+el motor estuvo a punto de elegir. Mostrar «otro concepto» donde el médico
+puso «coluria» haría el descarte incomprensible; el casi-match queda en la
+traza, que es donde sirve para auditar.
+
+## Recuperación en dos fases
+
+La versión anterior cargaba el vocabulario entero en diccionarios de Python
+y ejecutaba `rapidfuzz` sobre **todos** los términos en cada consulta. Con
+la extensión española de SNOMED eso son más de un millón de comparaciones
+por hallazgo, y cientos de MB residentes.
+
+Ahora son dos fases:
+
+1. **FTS5** reduce el millón de términos a unas decenas de candidatos, con
+   índice invertido y ranking BM25. Dentro de SQLite, sin cargar nada.
+2. **rapidfuzz** puntúa sólo esos candidatos. Sigue aportando tolerancia a
+   erratas, pero sobre 40 cadenas en vez de un millón.
+
+El coste pasa de lineal en el tamaño del vocabulario a prácticamente
+constante, y la memoria del proceso deja de depender de él.
+
+La consulta FTS se construye escapando cada palabra entre comillas y
+uniéndolas con `OR`. Es necesario porque FTS5 tiene sintaxis propia
+(`NEAR`, `-`, `*`, comillas) y el texto viene de la salida de un LLM: sin
+escapar, un hallazgo con un guion sería un error de sintaxis.
+
+## El grafo ontológico
+
+Tres piezas con responsabilidades distintas:
+
+| Tabla | Qué guarda | Por qué |
+|-------|-----------|---------|
+| `es_un` | Aristas directas padre/hijo | La verdad. Es un DAG: un concepto puede tener varios padres |
+| `ancestro` | Cierre transitivo materializado | Optimización de consulta, sólo de lo que se usa |
+| `mapeo` | Equivalencias entre sistemas | SNOMED → CIE-10, HPO → SNOMED |
+
+### Por qué el cierre es parcial
+
+Consultar los ancestros de un concepto suelto es barato con un CTE
+recursivo: la profundidad típica son doce saltos y `es_un` está indexado.
+
+Lo caro es la pregunta agregada: «qué pacientes tienen algo bajo esta rama».
+Sin cierre hay que recorrer recursivamente por cada paciente.
+
+Pero materializar el cierre completo de SNOMED serían decenas de millones de
+filas para un vocabulario que un despliegue concreto apenas usa. La solución
+es materializar **sólo los conceptos que aparecen en datos clínicos**,
+construyendo el cierre al guardar un infón validado. Son unos miles de
+filas, la consulta de cohorte pasa a ser un join indexado, y el cierre crece
+con el uso real en vez de con el tamaño del vocabulario.
+
+Se hace fuera de la transacción del tic a propósito: es una optimización de
+lectura, no parte del dato clínico, y su fallo no debe invalidar un tic ya
+guardado.
+
+### La vista de grafo del paciente
+
+`vecindad()` no devuelve el grafo entero, sino la porción que el paciente
+ocupa: sus hallazgos validados más tres niveles de ancestros. El límite de
+tres es deliberado — subir hasta la raíz conectaría todo con todo y no
+explicaría nada, mientras que tres niveles hacen aparecer las agrupaciones
+con sentido clínico.
 
 ## Los pesos de la confianza
 
@@ -68,63 +133,45 @@ actualiza ninguna probabilidad.
 confianza = score_ontológico × 0.6 + score_lógico × 0.4
 ```
 
-La ontología pesa más porque es determinista: o el concepto existe en
-SNOMED o no existe. La auditoría lógica depende del juicio de un modelo de
-lenguaje, y por eso pondera menos aunque su pregunta sea más interesante.
+La ontología pesa más porque es determinista: o el concepto existe o no. La
+auditoría lógica depende del juicio de un modelo de lenguaje, y por eso
+pondera menos aunque su pregunta sea más interesante.
 
 Los umbrales (85 para validar, 75 para alertar, 60 para molestarse en
-auditar) son configurables en `.env`, pero **son parámetros de seguridad
-clínica**: bajarlos aumenta directamente la tasa de falsos positivos que
-entran en la historia.
-
-## Backends de SNOMED
-
-Dos implementaciones intercambiables tras el mismo protocolo:
-
-| | `LocalSnomedIndex` | `ArangoSnomedIndex` |
-|---|---|---|
-| Motor | rapidfuzz sobre diccionario en memoria | ArangoSearch BM25, analizador `text_es` |
-| Arranque | instantáneo con cache pickle | instantáneo |
-| Memoria | cientos de MB en el proceso | fuera del proceso |
-| Escala | una instancia | varias instancias comparten índice |
-
-La normalización de scores es la parte delicada: rapidfuzz da 0-100
-directamente, mientras que BM25 no está acotado. El backend de Arango
-normaliza contra el mejor resultado de cada consulta para que los umbrales
-del pipeline signifiquen lo mismo con ambos motores.
-
-`HOLONMED_SNOMED_BACKEND=auto` elige local si encuentra los datos, y Arango
-si no.
-
-## Persistencia opcional
-
-ArangoDB se eligió por dos razones del dominio: la historia clínica es un
-grafo, y ArangoSearch da búsqueda BM25 en español sin montar un
-Elasticsearch aparte.
-
-Pero el sistema **arranca sin base de datos**. Los repositorios devuelven
-vacío, `/health` lo reporta y el validador funciona igual. Un fallo de
-persistencia no debe impedir que alguien use el motor.
-
-Por eso hay un sondeo TCP de un segundo antes de invocar al driver: sin él,
-`python-arango` reintenta con backoff exponencial y el arranque tarda casi
-un minuto en una máquina sin ArangoDB — un impuesto absurdo sobre el caso
-que sí queremos soportar.
-
-## Colecciones
-
-| Colección | Contenido |
-|-----------|-----------|
-| `Pacientes` | Datos demográficos y antecedentes |
-| `Tics` | Cada ciclo completo, con su texto original y todos sus infones |
-| `Infones` | Sólo los validados, indexados para la línea de tiempo |
-| `Citas` | Agenda |
-| `Documentos` | Metadatos de los PDF generados |
-
-Se guardan **todos** los infones en `Tics`, incluidos los descartados: es
-lo que permite auditar el comportamiento del validador a posteriori. En
-`Infones` sólo entran los validados, que son los consultables como
+auditar) son configurables, pero **son parámetros de seguridad clínica**:
+bajarlos aumenta directamente la tasa de falsos positivos que entran en la
 historia.
+
+## Persistencia
+
+SQLite embebido. La decisión inmediata fue de licencia — ArangoDB pasó a
+BUSL-1.1 en la 3.12 y su Community Edition prohíbe el uso comercial y
+limita el tamaño del dataset — pero el resultado técnico encaja mejor con el
+caso de uso:
+
+- Cero instalación. `git clone` y funciona.
+- Un único archivo, que el profesional puede cifrar y respaldar como
+  cualquier otro documento.
+- FTS5 da búsqueda BM25 en español sin montar un Elasticsearch aparte.
+- Dominio público: no impone ninguna condición aguas abajo.
+
+La conexión es por hilo (`threading.local`) porque FastAPI ejecuta las rutas
+síncronas en un pool y un `sqlite3.Connection` no se comparte entre hilos.
+Las escrituras van tras un lock: SQLite admite un escritor a la vez, y en
+modo WAL las lecturas no se bloquean.
+
+### Colecciones
+
+| Tabla | Contenido |
+|-------|-----------|
+| `paciente` | Datos demográficos y antecedentes |
+| `tic` | Cada ciclo completo, con su texto original |
+| `infon` | **Todos** los infones, incluidos los descartados |
+| `cita` | Agenda |
+
+Se guardan también los descartados: es lo que permite auditar después si el
+validador está rechazando de más. La línea de tiempo consultable filtra por
+`estado = 'VALIDADO'`.
 
 ## El cliente LLM
 
@@ -133,8 +180,8 @@ fijada por configuración (0 por defecto — en clínica no se sube).
 
 El parseo es defensivo por necesidad: los modelos locales envuelven el JSON
 en vallas markdown, lo preceden de charla o lo cierran mal. `extraer_json`
-intenta parseo directo, extracción de valla y recorte entre llaves. Si
-nada funciona devuelve `{}`, **nunca una suposición**.
+intenta parseo directo, extracción de valla y recorte entre llaves. Si nada
+funciona devuelve `{}`, **nunca una suposición**.
 
 `elegir_opcion` es el otro patrón importante: para clasificaciones de
 conjunto cerrado (triaje, intención), valida la respuesta contra las
@@ -143,15 +190,15 @@ debe abrir la puerta a valores fuera del conjunto.
 
 ## Seguridad de entrada
 
-Dos superficies merecen atención porque reciben datos derivados de la
-salida de un LLM:
+Tres superficies reciben datos derivados de la salida de un LLM:
 
-- **Nombres de skill** (`SkillManager.cargar`): el triaje devuelve un
-  nombre que se convierte en ruta de archivo. Se normaliza con `Path.name`
-  y se verifica la contención en el directorio antes de leer.
+- **Nombres de skill** (`SkillManager.cargar`): el triaje devuelve un nombre
+  que se convierte en ruta. Se normaliza con `Path.name` y se verifica la
+  contención en el directorio antes de leer.
 - **Campos de paciente** (`PacienteRepo.actualizar`): el router
-  conversacional extrae `campo` y `valor` del mensaje del usuario. Hay
-  lista blanca de campos actualizables.
+  conversacional extrae `campo` y `valor` del mensaje. Hay lista blanca.
+- **Consultas FTS** (`_consulta_fts`): se escapa cada palabra para que la
+  sintaxis de FTS5 no se interprete.
 
 Los nombres de documento en `/api/documentos/{nombre}` se resuelven y se
 comprueba la contención antes de servirlos.

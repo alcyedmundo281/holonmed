@@ -1,3 +1,10 @@
-from .arango import CitaRepo, Database, PacienteRepo, TicRepo
+from .store import CitaRepo, Database, GraphRepo, PacienteRepo, TicRepo, normalizar
 
-__all__ = ["CitaRepo", "Database", "PacienteRepo", "TicRepo"]
+__all__ = [
+    "CitaRepo",
+    "Database",
+    "GraphRepo",
+    "PacienteRepo",
+    "TicRepo",
+    "normalizar",
+]

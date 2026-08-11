@@ -1,0 +1,52 @@
+{
+  "$comentario": [
+    "Metadatos para Zenodo. Se leen automáticamente al crear un release en",
+    "GitHub y tienen prioridad sobre lo que Zenodo deduzca por su cuenta.",
+    "",
+    "ANTES DE PUBLICAR: rellena los campos marcados con TODO. El nombre y el",
+    "ORCID quedan en el registro DataCite del DOI de forma permanente.",
+    "",
+    "Zenodo ignora las claves que no reconoce, así que este comentario no",
+    "rompe nada."
+  ],
+
+  "title": "HolonMed: apoyo a la decisión clínica con validación ontológica y razonamiento bayesiano explicable",
+
+  "description": "<p>HolonMed convierte narrativa clínica libre en hallazgos estructurados y auditados.</p><p>Un modelo de lenguaje local propone hallazgos; un validador de tres capas decide cuáles son ciertos: los ancla a un vocabulario controlado mediante recuperación en dos fases (índice invertido con ranking BM25, después puntuado difuso), pide al modelo que actúe como auditor de terminología pudiendo responder <em>ninguno</em>, comprueba la evidencia numérica contra los criterios del protocolo activo, y bloquea emparejamientos clínicamente prohibidos que un motor de similitud confundiría —hiperlipasemia frente a hiperlipemia, amilasa frente a lipasa, hipo- frente a hiper-.</p><p>El veredicto tiene tres estados: validado, en alerta y descartado. Los descartes se muestran con su motivo, de modo que el comportamiento del validador sea auditable en lugar de silencioso. Sólo la evidencia validada alimenta el motor de inferencia, que aplica razonamiento bayesiano sobre odds y devuelve la traza completa —prevalencia de partida, factores de riesgo aplicados y likelihood ratio de cada hallazgo— en lugar de una probabilidad opaca.</p><p>El conocimiento clínico vive en protocolos declarativos (Markdown con JSON-LD embebido) que aportan códigos verificados, puntos de corte de laboratorio y likelihood ratios, de forma que añadir un dominio clínico no requiere tocar el código.</p><p>Todo el procesamiento ocurre en local: modelos mediante Ollama y persistencia en SQLite embebido, con el grafo ontológico modelado como cierre transitivo materializado. Ningún dato de paciente sale de la máquina.</p><p><strong>No es un dispositivo médico</strong> y no sustituye el juicio de un profesional sanitario.</p>",
+
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "AGPL-3.0-or-later",
+  "language": "spa",
+
+  "creators": [
+    {
+      "name": "TODO Apellido, TODO Nombre",
+      "affiliation": "TODO",
+      "orcid": "0000-0000-0000-0000"
+    }
+  ],
+
+  "keywords": [
+    "clinical decision support",
+    "clinical natural language processing",
+    "ontology",
+    "controlled vocabulary",
+    "bayesian inference",
+    "explainable AI",
+    "large language models",
+    "hallucination detection",
+    "medical informatics",
+    "privacy-preserving healthcare",
+    "Spanish clinical text"
+  ],
+
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/alcyedmundo281/holonmed",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}

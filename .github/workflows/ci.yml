@@ -26,9 +26,17 @@ jobs:
         run: ruff check .
 
       - name: Tests
-        # No requieren Ollama, SNOMED ni ArangoDB: el pipeline se ejercita
-        # con dobles de prueba.
+        # No requieren Ollama ni ninguna terminología externa: el pipeline
+        # se ejercita con dobles y el almacén con una base temporal.
         run: pytest -q
+
+      - name: El sistema arranca sin nada instalado
+        # Comprueba la promesa de "clonar y usar": sin modelos, sin
+        # terminología con licencia y sin servidor de base de datos, el
+        # vocabulario semilla debe cargar y el validador quedar operativo.
+        run: |
+          python scripts/importar_terminologia.py --semilla
+          python scripts/importar_terminologia.py --estado
 
   frontend:
     runs-on: ubuntu-latest

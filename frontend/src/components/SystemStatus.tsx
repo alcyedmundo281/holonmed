@@ -34,31 +34,28 @@ export function SystemStatus({ estado }: { estado: EstadoSistema | null }) {
       critico: true,
     });
   } else {
-    const instalados = estado.llm.modelos.map((m) => m.split(':')[0]);
-    for (const modelo of [estado.llm.configurados.clinico, estado.llm.configurados.router]) {
-      if (!instalados.includes(modelo.split(':')[0])) {
-        problemas.push({
-          texto: `Falta el modelo ${modelo}`,
-          remedio: `ollama pull ${modelo}`,
-          critico: true,
-        });
-      }
+    for (const modelo of estado.llm.faltantes) {
+      problemas.push({
+        texto: `Falta el modelo ${modelo}`,
+        remedio: `ollama pull ${modelo}`,
+        critico: true,
+      });
     }
   }
 
-  if (!estado.snomed.disponible) {
+  if (!estado.vocabulario.disponible) {
     problemas.push({
-      texto: 'SNOMED CT no está cargado: los hallazgos no se podrán validar',
-      remedio: 'python scripts/setup_snomed.py --verificar',
+      texto: 'Sin vocabulario clínico: los hallazgos no se podrán validar',
+      remedio: 'python scripts/importar_terminologia.py --semilla',
       critico: true,
     });
   }
 
   if (!estado.base_datos.conectada) {
     problemas.push({
-      texto: 'ArangoDB no disponible: nada se guardará entre sesiones',
-      remedio: 'docker compose up -d arangodb',
-      critico: false,
+      texto: `No se pudo abrir la base de datos: ${estado.base_datos.error ?? ''}`,
+      remedio: 'comprueba los permisos de escritura en backend/data/',
+      critico: true,
     });
   }
 

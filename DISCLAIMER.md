@@ -46,9 +46,11 @@ No debe usarse como única base para ninguna decisión sobre un paciente.
    hallazgos, y eso rara vez es cierto en clínica. Hallazgos correlacionados
    inflan la probabilidad posterior.
 
-5. **La cobertura de SNOMED CT en español es desigual.** Algunos conceptos
-   frecuentes no tienen término preferente en la extensión española y
-   quedarán marcados como ruido aunque sean correctos.
+5. **La cobertura del vocabulario limita lo que se puede validar.** El
+   vocabulario semilla incluido cubre unos 110 conceptos frecuentes: todo
+   lo que quede fuera se marcará como ruido aunque sea clínicamente
+   correcto. Importar una terminología completa amplía la cobertura, pero
+   incluso SNOMED CT en español tiene lagunas y sinónimos ausentes.
 
 6. **Sin trazabilidad reglamentaria.** No hay registro de auditoría
    inmutable, firma electrónica cualificada ni control de versiones de
@@ -56,18 +58,21 @@ No debe usarse como única base para ninguna decisión sobre un paciente.
 
 ## Datos de paciente
 
-El procesamiento es local: las narrativas no salen de tu máquina. Eso
-elimina un riesgo, no todos.
+El procesamiento es local: las narrativas no salen de tu máquina, y la
+base de datos es un archivo bajo tu control. Eso elimina un riesgo, no
+todos.
 
 Antes de introducir datos reales:
 
 - Verifica la base legal del tratamiento (RGPD art. 6 y 9, o la normativa
   que te aplique).
-- Cifra el disco donde se almacene la base de datos.
-- Cambia la contraseña por defecto de ArangoDB y no lo expongas fuera de
-  `localhost`.
+- Cifra el disco donde viva `backend/data/holonmed.db`. SQLite no cifra
+  nada por sí mismo: el archivo es legible por cualquiera con acceso.
+- No expongas la API fuera de `localhost` sin poner autenticación delante;
+  el sistema no trae ninguna.
 - Recuerda que los PDF generados en `generated_docs/` contienen datos
   identificables.
+- Al pedir ayuda o abrir un issue, nunca adjuntes la base ni notas reales.
 
 ## Responsabilidad
 

@@ -1,0 +1,176 @@
+-- Esquema de HolonMed sobre SQLite.
+--
+-- SQLite es de dominio público y va embebido: no hay servidor que instalar,
+-- ni licencia que revisar, ni puerto que exponer. Para un sistema clínico
+-- que corre en la máquina del profesional, eso no es una limitación sino
+-- justo lo que se quiere.
+--
+-- El grafo se modela con tres piezas:
+--   * `es_un`    — aristas directas de la jerarquía (padre/hijo)
+--   * `ancestro` — cierre transitivo materializado, sólo de lo que se usa
+--   * `mapeo`    — equivalencias entre sistemas de codificación
+--
+-- Ver docs/GRAFO.md para el porqué de esa separación.
+
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+-- =====================================================================
+-- TERMINOLOGÍA
+-- =====================================================================
+
+-- Un concepto es una idea clínica, independiente de cómo se escriba.
+CREATE TABLE IF NOT EXISTS concepto (
+    id          INTEGER PRIMARY KEY,
+    sistema     TEXT NOT NULL,   -- 'holonmed' | 'snomed' | 'hpo' | 'icd10'
+    codigo      TEXT NOT NULL,
+    termino     TEXT NOT NULL,   -- término preferente para mostrar
+    semantica   TEXT,            -- 'hallazgo' | 'trastorno' | 'procedimiento' | …
+    UNIQUE (sistema, codigo)
+);
+
+-- Las formas de escribir un concepto: preferente, sinónimos, abreviaturas.
+-- Separar `termino` de `concepto` es lo que permite que "fiebre",
+-- "hipertermia" y "febrícula" apunten al mismo sitio.
+CREATE TABLE IF NOT EXISTS termino (
+    id          INTEGER PRIMARY KEY,
+    concepto_id INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    texto       TEXT NOT NULL,
+    normalizado TEXT NOT NULL,   -- minúsculas y sin acentos, para igualdad exacta
+    preferente  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_termino_concepto ON termino(concepto_id);
+CREATE INDEX IF NOT EXISTS idx_termino_normalizado ON termino(normalizado);
+
+-- Búsqueda de texto completo con ranking BM25, nativa de SQLite.
+-- Sustituye a ArangoSearch sin añadir ninguna dependencia.
+CREATE VIRTUAL TABLE IF NOT EXISTS termino_fts USING fts5(
+    texto,
+    content = 'termino',
+    content_rowid = 'id',
+    tokenize = "unicode61 remove_diacritics 2"
+);
+
+CREATE TRIGGER IF NOT EXISTS termino_ai AFTER INSERT ON termino BEGIN
+    INSERT INTO termino_fts(rowid, texto) VALUES (new.id, new.texto);
+END;
+
+CREATE TRIGGER IF NOT EXISTS termino_ad AFTER DELETE ON termino BEGIN
+    INSERT INTO termino_fts(termino_fts, rowid, texto) VALUES ('delete', old.id, old.texto);
+END;
+
+CREATE TRIGGER IF NOT EXISTS termino_au AFTER UPDATE ON termino BEGIN
+    INSERT INTO termino_fts(termino_fts, rowid, texto) VALUES ('delete', old.id, old.texto);
+    INSERT INTO termino_fts(rowid, texto) VALUES (new.id, new.texto);
+END;
+
+-- =====================================================================
+-- GRAFO ONTOLÓGICO
+-- =====================================================================
+
+-- Aristas directas de la jerarquía. Es un DAG, no un árbol: un concepto
+-- puede tener varios padres (una neumonía es infección Y enfermedad
+-- pulmonar), y el modelo tiene que admitirlo.
+CREATE TABLE IF NOT EXISTS es_un (
+    hijo_id   INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    padre_id  INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    PRIMARY KEY (hijo_id, padre_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_es_un_padre ON es_un(padre_id);
+
+-- Cierre transitivo materializado.
+--
+-- El cierre completo de SNOMED serían decenas de millones de filas, así
+-- que sólo se materializa para los conceptos que realmente aparecen en
+-- los datos clínicos. Se construye al insertar un infón y convierte las
+-- consultas de cohorte ("pacientes con algo bajo enfermedad pancreática")
+-- en un join indexado en vez de un recorrido recursivo por paciente.
+CREATE TABLE IF NOT EXISTS ancestro (
+    descendiente_id INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    ancestro_id     INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    profundidad     INTEGER NOT NULL,
+    PRIMARY KEY (descendiente_id, ancestro_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ancestro_ancestro ON ancestro(ancestro_id);
+
+-- Equivalencias entre sistemas: SNOMED → CIE-10, HPO → SNOMED, etc.
+CREATE TABLE IF NOT EXISTS mapeo (
+    concepto_id     INTEGER NOT NULL REFERENCES concepto(id) ON DELETE CASCADE,
+    sistema_destino TEXT NOT NULL,
+    codigo_destino  TEXT NOT NULL,
+    PRIMARY KEY (concepto_id, sistema_destino, codigo_destino)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mapeo_destino ON mapeo(sistema_destino, codigo_destino);
+
+-- =====================================================================
+-- CLÍNICA
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS paciente (
+    id           TEXT PRIMARY KEY,
+    nombre       TEXT NOT NULL,
+    edad         INTEGER,
+    sexo         TEXT,
+    telefono     TEXT,
+    antecedentes TEXT NOT NULL DEFAULT '',
+    creado       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_paciente_nombre ON paciente(nombre);
+
+-- Un tic es un ciclo completo de procesamiento.
+CREATE TABLE IF NOT EXISTS tic (
+    id             INTEGER PRIMARY KEY,
+    paciente_id    TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    timestamp      TEXT NOT NULL,
+    skill          TEXT NOT NULL,
+    texto_original TEXT NOT NULL,
+    resumen        TEXT NOT NULL DEFAULT '',
+    inferencia     TEXT             -- JSON de la inferencia bayesiana
+);
+
+CREATE INDEX IF NOT EXISTS idx_tic_paciente ON tic(paciente_id, timestamp DESC);
+
+-- Se guardan TODOS los infones, incluidos los descartados: es lo que
+-- permite auditar después si el validador está rechazando de más.
+CREATE TABLE IF NOT EXISTS infon (
+    id                INTEGER PRIMARY KEY,
+    tic_id            INTEGER NOT NULL REFERENCES tic(id) ON DELETE CASCADE,
+    paciente_id       TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    concepto_id       INTEGER REFERENCES concepto(id) ON DELETE SET NULL,
+    timestamp         TEXT NOT NULL,
+    texto_origen      TEXT NOT NULL,
+    termino_propuesto TEXT NOT NULL,
+    termino           TEXT NOT NULL,
+    codigo            TEXT,
+    sistema           TEXT,
+    cie10             TEXT,
+    linaje            TEXT,
+    estado            TEXT NOT NULL,   -- VALIDADO | ALERTA | RUIDO
+    confianza         REAL NOT NULL DEFAULT 0,
+    score_ontologico  REAL NOT NULL DEFAULT 0,
+    score_logico      REAL NOT NULL DEFAULT 0,
+    razon_auditoria   TEXT NOT NULL DEFAULT '',
+    origen_skill      TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_infon_paciente ON infon(paciente_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_infon_estado ON infon(paciente_id, estado);
+CREATE INDEX IF NOT EXISTS idx_infon_concepto ON infon(concepto_id);
+CREATE INDEX IF NOT EXISTS idx_infon_tic ON infon(tic_id);
+
+CREATE TABLE IF NOT EXISTS cita (
+    id           INTEGER PRIMARY KEY,
+    paciente_id  TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    fecha        TEXT NOT NULL,
+    interpretada INTEGER NOT NULL DEFAULT 0,
+    motivo       TEXT NOT NULL DEFAULT '',
+    estado       TEXT NOT NULL DEFAULT 'agendada',
+    creada       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cita_paciente ON cita(paciente_id, fecha);

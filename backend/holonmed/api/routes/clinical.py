@@ -95,3 +95,22 @@ async def listar_skills(ctx: AppContext = Depends(get_context)):
             }
         )
     return salida
+
+
+@router.get("/pacientes/{paciente_id}/problemas")
+async def lista_problemas(paciente_id: str, ctx: AppContext = Depends(get_context)):
+    """Lista de problemas: conceptos validados, deduplicados y fechados.
+
+    Es la primera vista que mira un clínico. La primera y la última
+    aparición son lo que distingue un problema agudo de uno arrastrado.
+    """
+    return ctx.tics.lista_problemas(paciente_id)
+
+
+@router.get("/tics/{tic_id}")
+async def tic_completo(tic_id: str, ctx: AppContext = Depends(get_context)):
+    """Un tic con su texto original y todos sus infones, incluidos los descartados."""
+    tic = ctx.tics.tic_completo(tic_id)
+    if not tic:
+        raise HTTPException(404, "Tic no encontrado")
+    return tic

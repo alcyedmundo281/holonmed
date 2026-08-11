@@ -29,7 +29,7 @@ from ..models import (
 )
 from .bayes import AntigenPresentingCell
 from .skills import Skill, SkillManager
-from .snomed import SnomedValidator
+from .validator import OntologyValidator
 from .verifier import ClinicalVerifier
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class CrystallizationPipeline:
         self,
         llm: OllamaClient,
         skills: SkillManager,
-        validador: SnomedValidator,
+        validador: OntologyValidator,
         verificador: ClinicalVerifier,
         bayes: AntigenPresentingCell | None = None,
         settings: Settings | None = None,
@@ -221,18 +221,21 @@ class CrystallizationPipeline:
         # casi-match queda en la traza, que es donde sirve para auditar.
         if estado == EstadoInfon.RUIDO:
             termino_final = termino
-            snomed_id = cie10 = linaje = None
-            if match.snomed_id:
+            concepto_id = codigo = sistema = cie10 = linaje = None
+            if match.codigo:
                 razon = f"descartado (casi coincidió con '{match.termino}'): {razon}"
         else:
             termino_final = match.termino
-            snomed_id, cie10, linaje = match.snomed_id, match.cie10, match.linaje
+            concepto_id, codigo, sistema = match.concepto_id, match.codigo, match.sistema
+            cie10, linaje = match.cie10, match.linaje
 
         return Infon(
             texto_origen=cita or texto_original[:120],
             termino_propuesto=termino,
-            termino_snomed=termino_final,
-            snomed_id=snomed_id,
+            termino=termino_final,
+            codigo=codigo,
+            sistema=sistema,
+            concepto_id=concepto_id,
             cie10_code=cie10,
             linaje_clinico=linaje,
             estado=estado,

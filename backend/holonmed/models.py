@@ -39,12 +39,20 @@ class Infon(BaseModel):
     texto_origen: str = Field(description="Cita textual de la narrativa original")
     termino_propuesto: str = Field(description="Lo que el LLM extrajo, sin normalizar")
 
-    # Normalización ontológica
-    termino_snomed: str = Field(description="Término oficial tras la normalización")
-    snomed_id: str | None = None
+    # Normalización ontológica. El sistema de codificación es explícito
+    # porque el vocabulario es intercambiable: puede ser el semilla del
+    # proyecto, SNOMED CT si tienes licencia, o cualquier otro importado.
+    termino: str = Field(description="Término preferente tras la normalización")
+    codigo: str | None = None
+    sistema: str | None = Field(
+        default=None, description="'holonmed' | 'snomed' | 'hpo' | …"
+    )
+    concepto_id: int | None = Field(
+        default=None, description="Clave interna del concepto en el grafo"
+    )
     cie10_code: str | None = None
     linaje_clinico: str | None = Field(
-        default=None, description="Concepto padre en la jerarquía IS_A de SNOMED"
+        default=None, description="Concepto padre en la jerarquía del grafo"
     )
 
     # Veredicto y trazabilidad
@@ -128,7 +136,7 @@ class HolonPaciente(BaseModel):
 
     def metadatos_para_bayes(self) -> dict[str, Any]:
         """Contexto demográfico que alimenta la probabilidad a priori."""
-        historicos = " ".join(i.termino_snomed for i in self.linea_tiempo)
+        historicos = " ".join(i.termino for i in self.linea_tiempo)
         return {
             "edad": self.edad,
             "sexo": self.sexo,

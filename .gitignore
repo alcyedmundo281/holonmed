@@ -22,6 +22,12 @@ secrets/
 
 # --- DATOS DE PACIENTE (PHI / HIPAA / LOPD) --------------------------
 # Ningún dato clínico real puede vivir en el repositorio.
+# La base SQLite contiene historias completas: nunca se versiona.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 data/patients/
 data/phi/
 *.phi.json
@@ -30,14 +36,18 @@ uploads/
 *.pdf
 !docs/**/*.pdf
 
-# --- SNOMED CT (LICENCIA SNOMED INTERNATIONAL — NO REDISTRIBUIBLE) ---
-# Requiere licencia de afiliado. Se descarga con scripts/setup_snomed.py
+# --- TERMINOLOGÍAS CON LICENCIA (NO REDISTRIBUIBLES) -----------------
+# El código para leerlas es libre; los datos no se distribuyen aquí.
+# El único vocabulario versionado es data/vocabulario_semilla.json, que
+# es contenido propio del proyecto.
 data/snomed/
+data/terminologias/
 sct2_*.txt
 der2_*.txt
 snomed_*.txt
-snomed_cache.pkl
 *.pkl
+*.owl
+*.obo
 
 # --- MODELOS DE IA (GIGANTES) ----------------------------------------
 *.gguf

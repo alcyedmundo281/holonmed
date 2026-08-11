@@ -27,21 +27,33 @@ const ESTILOS: Record<EstadoInfon, { borde: string; fondo: string; texto: string
 };
 
 const LEYENDA: Record<EstadoInfon, string> = {
-  VALIDADO: 'Concepto confirmado en SNOMED y sostenido por la evidencia del texto.',
+  VALIDADO: 'Concepto confirmado en el vocabulario y sostenido por la evidencia del texto.',
   ALERTA: 'El concepto existe, pero la auditoría no pudo confirmarlo. Revísalo.',
   RUIDO: 'Descartado: no se ancló a un concepto fiable. No entra en la historia.',
 };
 
-export function InfonCard({ infon }: { infon: Infon }) {
+interface Props {
+  infon: Infon;
+  resaltado?: boolean;
+  onSeleccionar?: () => void;
+}
+
+export function InfonCard({ infon, resaltado = false, onSeleccionar }: Props) {
   const [abierto, setAbierto] = useState(false);
   const estilo = ESTILOS[infon.estado];
   const { Icono } = estilo;
 
   return (
-    <div className={`border-l-4 ${estilo.borde} ${estilo.fondo} rounded-r-md mb-2 shadow-sm`}>
+    <div
+      className={`border-l-4 ${estilo.borde} ${estilo.fondo} rounded-r-md mb-2 shadow-sm
+                  ${resaltado ? 'ring-2 ring-indigo-500' : ''}`}
+    >
       <button
         type="button"
-        onClick={() => setAbierto(!abierto)}
+        onClick={() => {
+          setAbierto(!abierto);
+          onSeleccionar?.();
+        }}
         className="w-full text-left p-3 flex items-start gap-3"
         aria-expanded={abierto}
       >
@@ -50,7 +62,7 @@ export function InfonCard({ infon }: { infon: Infon }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
             <h4 className={`font-semibold ${estilo.texto} truncate`}>
-              {infon.termino_snomed}
+              {infon.termino}
             </h4>
             <span className="text-xs font-mono text-slate-500 shrink-0">
               {infon.confianza.toFixed(0)}%
@@ -58,9 +70,9 @@ export function InfonCard({ infon }: { infon: Infon }) {
           </div>
 
           <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {infon.snomed_id && (
+            {infon.codigo && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 font-mono">
-                SCTID {infon.snomed_id}
+                {infon.sistema}:{infon.codigo}
               </span>
             )}
             {infon.cie10_code && (
@@ -89,7 +101,7 @@ export function InfonCard({ infon }: { infon: Infon }) {
             «{infon.texto_origen}»
           </p>
 
-          {infon.termino_propuesto !== infon.termino_snomed && (
+          {infon.termino_propuesto !== infon.termino && (
             <p>
               <span className="text-slate-500">El modelo propuso:</span>{' '}
               <span className="font-mono">{infon.termino_propuesto}</span>

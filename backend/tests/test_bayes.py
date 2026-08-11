@@ -26,7 +26,7 @@ def infon(termino: str, estado: EstadoInfon = EstadoInfon.VALIDADO) -> Infon:
     return Infon(
         texto_origen="…",
         termino_propuesto=termino,
-        termino_snomed=termino,
+        termino=termino,
         estado=estado,
     )
 

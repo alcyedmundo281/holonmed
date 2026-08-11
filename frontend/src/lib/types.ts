@@ -7,8 +7,10 @@ export interface Infon {
   timestamp: string;
   texto_origen: string;
   termino_propuesto: string;
-  termino_snomed: string;
-  snomed_id: string | null;
+  termino: string;
+  codigo: string | null;
+  sistema: string | null;
+  concepto_id: number | null;
   cie10_code: string | null;
   linaje_clinico: string | null;
   estado: EstadoInfon;
@@ -39,12 +41,14 @@ export interface ResultadoTic {
 }
 
 export interface Paciente {
-  _key: string;
+  id: string;
   nombre: string;
   edad?: number | null;
   sexo?: string | null;
   telefono?: string | null;
   antecedentes?: string;
+  tics?: number;
+  ultima_visita?: string | null;
 }
 
 export interface EntradaHistorial {
@@ -57,6 +61,32 @@ export interface EntradaHistorial {
   inferencia: InferenciaBayesiana | null;
 }
 
+export interface Problema {
+  termino: string;
+  codigo: string | null;
+  sistema: string | null;
+  cie10: string | null;
+  linaje: string | null;
+  apariciones: number;
+  primera: string;
+  ultima: string;
+  confianza: number;
+}
+
+export interface NodoGrafo {
+  id: number;
+  codigo: string;
+  sistema: string;
+  termino: string;
+  tipo: 'hallazgo' | 'agrupacion';
+  peso: number;
+}
+
+export interface Grafo {
+  nodos: NodoGrafo[];
+  aristas: { origen: number; destino: number }[];
+}
+
 export interface Skill {
   nombre: string;
   descripcion: string;
@@ -67,13 +97,19 @@ export interface Skill {
 
 export interface EstadoSistema {
   operativo: boolean;
-  base_datos: { conectada: boolean; error: string | null };
-  snomed: { backend: string; disponible: boolean };
+  base_datos: {
+    conectada: boolean;
+    ruta: string;
+    error: string | null;
+    estadisticas: Record<string, number>;
+  };
+  vocabulario: { disponible: boolean; sistemas: Record<string, number> };
   skills: string[];
   llm: {
     host: string;
     disponible: boolean;
     modelos: string[];
+    faltantes: string[];
     configurados: { clinico: string; router: string };
   };
 }
@@ -83,11 +119,13 @@ export type RespuestaChat =
   | { tipo: 'tic'; datos: ResultadoTic }
   | { tipo: 'receta'; datos: { url: string; items: unknown[]; aviso: string } }
   | { tipo: 'agenda'; datos: { legible: string; motivo: string; estado: string } }
-  | { tipo: 'whatsapp'; datos: { url: string; telefono: string; mensaje: string; aviso: string } }
+  | {
+      tipo: 'whatsapp';
+      datos: { url: string; telefono: string; mensaje: string; aviso: string };
+    }
   | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean; creado?: boolean }
   | { tipo: 'error'; mensaje: string };
 
-// Umbral a partir del cual una hipótesis se presenta como probable.
-// Coincide con el veredicto que calcula el backend.
+// Umbrales de presentación. Coinciden con el veredicto del backend.
 export const UMBRAL_PROBABLE = 50;
 export const UMBRAL_CONFIRMADA = 90;

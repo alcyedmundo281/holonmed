@@ -47,9 +47,14 @@ protocolo. Escríbela pensando en eso.
 ]
 ```
 
-Cada entrada aporta dos cosas: un **skill-hint** (el par nombre→SNOMED ID
-que gana a cualquier búsqueda difusa) y un **likelihood ratio** para el
-motor bayesiano.
+Cada entrada aporta dos cosas: un **skill-hint** (el par nombre→código que
+gana a cualquier búsqueda difusa) y un **likelihood ratio** para el motor
+bayesiano.
+
+El código puede pertenecer a cualquier sistema. Si el vocabulario que lo
+contiene no está cargado, el hint sigue valiendo — lo revisó un humano —
+pero el infón no podrá ofrecer linaje ni mapeo a CIE-10, y eso se ve en el
+resultado.
 
 Sobre los LR:
 

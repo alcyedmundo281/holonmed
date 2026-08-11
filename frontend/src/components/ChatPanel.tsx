@@ -153,7 +153,7 @@ function interpretar(r: RespuestaChat): Mensaje {
     case 'paciente':
       return {
         autor: 'sistema',
-        texto: r.datos ? `Paciente: ${r.datos.nombre} (${r.datos._key})` : 'Sin coincidencias.',
+        texto: r.datos ? `Paciente: ${r.datos.nombre} (${r.datos.id})` : 'Sin coincidencias.',
       };
 
     case 'tic': {

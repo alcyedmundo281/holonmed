@@ -58,20 +58,25 @@ async def _check() -> int:
     else:
         print("        arranca Ollama con: ollama serve")
 
-    snomed = estado["snomed"]
-    print(marca(snomed["disponible"]) + f"SNOMED ({snomed['backend']})")
-    if not snomed["disponible"]:
-        print("        prepara los datos: python scripts/setup_snomed.py --help")
+    vocab = estado["vocabulario"]
+    print(marca(vocab["disponible"]) + "vocabulario clínico")
+    if vocab["sistemas"]:
+        for sistema, n in sorted(vocab["sistemas"].items()):
+            print(f"        {sistema}: {n:,} conceptos")
+    else:
+        print("        carga el base: python scripts/importar_terminologia.py --semilla")
 
     bd = estado["base_datos"]
-    print(marca(bd["conectada"]) + "ArangoDB")
+    print(marca(bd["conectada"]) + f"base de datos ({bd['ruta']})")
     if not bd["conectada"]:
         print(f"        {bd['error']}")
-        print("        opcional: el validador funciona sin persistencia")
+    else:
+        st = bd["estadisticas"]
+        print(f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones")
 
     print(marca(bool(estado["skills"])) + f"skills: {', '.join(estado['skills'])}")
 
-    listo = llm_ok and snomed["disponible"]
+    listo = llm_ok and vocab["disponible"]
     print("\n" + ("Sistema operativo." if listo else "Faltan requisitos."))
     return 0 if listo else 1
 
@@ -92,10 +97,10 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
 
     print(f"\nInfones ({len(resultado.infones)}):")
     for infon in resultado.infones:
-        codigo = infon.snomed_id or "sin código"
+        codigo = f"{infon.sistema}:{infon.codigo}" if infon.codigo else "sin código"
         cie = f" · CIE-10 {infon.cie10_code}" if infon.cie10_code else ""
-        print(f"  [{infon.estado.value:9}] {infon.termino_snomed}")
-        print(f"              SNOMED {codigo}{cie} · confianza {infon.confianza}%")
+        print(f"  [{infon.estado.value:9}] {infon.termino}")
+        print(f"              {codigo}{cie} · confianza {infon.confianza}%")
         print(f"              {infon.razon_auditoria[:100]}")
 
     if resultado.inferencia:

@@ -1,0 +1,55 @@
+# Metadatos de citación. GitHub los lee y muestra un botón "Cite this
+# repository"; Zenodo los usa para rellenar el registro del DOI.
+#
+# ANTES DE PUBLICAR: sustituye los valores marcados con TODO por tus datos
+# reales. El nombre que quede aquí es el que aparecerá en la cita formal y
+# en el registro DataCite, y corregirlo después de acuñar el DOI es
+# engorroso.
+
+cff-version: 1.2.0
+title: >-
+  HolonMed: apoyo a la decisión clínica con validación ontológica
+  y razonamiento bayesiano explicable
+message: Si usas este software en un trabajo académico, por favor cítalo.
+type: software
+
+authors:
+  - given-names: TODO
+    family-names: TODO
+    email: TODO
+    # Consíguelo gratis en https://orcid.org — vincula el DOI a tu
+    # identidad de investigador de forma permanente.
+    orcid: 'https://orcid.org/0000-0000-0000-0000'
+    affiliation: TODO
+
+repository-code: 'https://github.com/alcyedmundo281/holonmed'
+url: 'https://github.com/alcyedmundo281/holonmed'
+license: AGPL-3.0-or-later
+version: 0.2.0
+date-released: '2026-08-10'
+
+abstract: >-
+  HolonMed convierte narrativa clínica libre en hallazgos estructurados y
+  auditados. Un modelo de lenguaje local propone hallazgos; un validador de
+  tres capas decide cuáles son ciertos, anclándolos a un vocabulario
+  controlado, comprobando la evidencia numérica contra el protocolo activo
+  y bloqueando emparejamientos clínicamente prohibidos que un motor de
+  similitud confundiría. El veredicto tiene tres estados — validado, en
+  alerta y descartado — y los descartes se muestran con su motivo, de forma
+  que el comportamiento del validador sea auditable. Sobre la evidencia
+  validada corre un motor bayesiano que devuelve la traza completa del
+  razonamiento en lugar de una probabilidad opaca. Todo el procesamiento
+  ocurre en local, sin enviar datos de paciente a servicios externos.
+
+keywords:
+  - clinical decision support
+  - clinical natural language processing
+  - ontology
+  - controlled vocabulary
+  - bayesian inference
+  - explainable AI
+  - large language models
+  - hallucination detection
+  - medical informatics
+  - privacy-preserving healthcare
+  - Spanish clinical text

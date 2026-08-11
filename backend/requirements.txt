@@ -13,12 +13,13 @@ pydantic-settings>=2.6
 # --- Cliente LLM (Ollama por HTTP) ---
 httpx>=0.27
 
-# --- Motor SNOMED ---
-pandas>=2.2
+# --- Motor terminológico ---
+# La recuperación pesada la hace FTS5, dentro de SQLite. rapidfuzz sólo
+# puntúa las decenas de candidatos que FTS5 devuelve.
 rapidfuzz>=3.10
 
 # --- Persistencia ---
-python-arango>=8.1
+# SQLite va en la biblioteca estándar: sin dependencia y sin servidor.
 
 # --- Documentos ---
 reportlab>=4.2

@@ -77,14 +77,14 @@ class AntigenPresentingCell:
             if not infon.es_valido:
                 continue
 
-            lr, etiqueta = self._buscar_lr(infon.termino_snomed, mapa_lr)
+            lr, etiqueta = self._buscar_lr(infon.termino, mapa_lr)
             if lr is None or lr == 1.0:
                 continue
 
             odds *= lr
             direccion = "a favor" if lr > 1 else "en contra"
             evidencia.append(
-                f"{infon.termino_snomed} → LR {lr} ({direccion}, vía '{etiqueta}')"
+                f"{infon.termino} → LR {lr} ({direccion}, vía '{etiqueta}')"
             )
 
         prob_final = odds / (1 + odds)

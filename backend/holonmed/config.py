@@ -2,8 +2,8 @@
 
 Todo valor ajustable vive aquí y se lee del entorno (o de `.env`). Ningún
 módulo debe leer `os.environ` por su cuenta: así hay un único sitio donde
-auditar qué configura el sistema, algo que importa cuando los umbrales
-que ajustas son de seguridad clínica.
+auditar qué configura el sistema, algo que importa cuando los umbrales que
+ajustas son de seguridad clínica.
 """
 
 from functools import lru_cache
@@ -11,6 +11,8 @@ from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+RAIZ = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
@@ -29,33 +31,22 @@ class Settings(BaseSettings):
     llm_timeout_fast: float = 30.0
     llm_timeout_slow: float = 120.0
 
-    # --- ArangoDB ----------------------------------------------------
-    arango_url: str = "http://localhost:8529"
-    arango_db: str = "holonmed"
-    arango_user: str = "root"
-    arango_password: str = "changeme"
+    # --- Almacenamiento ----------------------------------------------
+    # SQLite embebido: un único archivo, sin servidor. Ciframos el disco,
+    # no el motor.
+    db_path: Path = RAIZ / "data" / "holonmed.db"
 
-    # --- SNOMED ------------------------------------------------------
-    snomed_backend: str = "auto"  # local | arango | auto
-    snomed_dir: Path = Path("./data/snomed")
-    snomed_descriptions: str = (
-        "sct2_Description_SpanishExtensionSnapshot-es_INT_20251110.txt"
-    )
-    snomed_map: str | None = (
-        "der2_iisssccRefset_ExtendedMapSpanishExtensionSnapshot_INT_20251110.txt"
-    )
-    snomed_relationships: str | None = (
-        "sct2_Relationship_SpanishExtensionSnapshot_INT_20251110.txt"
-    )
+    # --- Vocabulario --------------------------------------------------
+    # El semilla es contenido propio y se carga solo. Cualquier otra
+    # terminología se importa con scripts/importar_terminologia.py.
+    vocabulario_semilla: Path = RAIZ / "data" / "vocabulario_semilla.json"
+    autocargar_semilla: bool = True
 
     # --- Umbrales del validador (seguridad clínica) ------------------
-    # Cambiarlos altera qué hallazgos el sistema considera fiables.
     threshold_validated: float = 85.0
     threshold_alert: float = 75.0
     threshold_audit: float = 60.0
-    # Similitud mínima para aceptar un skill-hint difuso sin pasar por el LLM.
     threshold_hint_fuzzy: float = 92.0
-    # Similitud mínima del fallback puramente matemático (sin juicio del LLM).
     threshold_fuzzy_fallback: float = 92.0
 
     # --- API ---------------------------------------------------------
@@ -64,13 +55,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # --- Rutas -------------------------------------------------------
-    skills_dir: Path = Path("./skills")
-    docs_dir: Path = Path("./generated_docs")
-
-    # --- Integraciones opcionales ------------------------------------
-    gdrive_enabled: bool = False
-    gdrive_credentials_path: Path | None = None
-    gdrive_folder_id: str | None = None
+    skills_dir: Path = RAIZ / "skills"
+    docs_dir: Path = RAIZ / "generated_docs"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -78,34 +64,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
-
-    @property
-    def snomed_description_path(self) -> Path:
-        return self.snomed_dir / self.snomed_descriptions
-
-    @property
-    def snomed_map_path(self) -> Path | None:
-        return self.snomed_dir / self.snomed_map if self.snomed_map else None
-
-    @property
-    def snomed_relationship_path(self) -> Path | None:
-        return (
-            self.snomed_dir / self.snomed_relationships
-            if self.snomed_relationships
-            else None
-        )
-
-    @property
-    def snomed_cache_path(self) -> Path:
-        return self.snomed_dir / "snomed_cache.pkl"
-
-    def resolve_snomed_backend(self) -> str:
-        """Decide el backend real cuando la configuración dice 'auto'."""
-        if self.snomed_backend != "auto":
-            return self.snomed_backend
-        if self.snomed_cache_path.exists() or self.snomed_description_path.exists():
-            return "local"
-        return "arango"
 
 
 @lru_cache

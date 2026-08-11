@@ -1,8 +1,8 @@
 """Contenedor de dependencias de la aplicación.
 
-Los componentes caros (el índice SNOMED puede ocupar cientos de MB) se
-construyen una sola vez al arrancar y se comparten. Las rutas los reciben
-por inyección, lo que permite sustituirlos por dobles en los tests.
+Los componentes se construyen una sola vez al arrancar y se comparten. Las
+rutas los reciben por inyección, lo que permite sustituirlos por dobles en
+los tests.
 """
 
 import logging
@@ -14,11 +14,12 @@ from ..core import (
     AntigenPresentingCell,
     ClinicalVerifier,
     CrystallizationPipeline,
+    OntologyValidator,
     SkillManager,
-    SnomedValidator,
-    construir_index,
+    TerminologyIndex,
+    VocabularyLoader,
 )
-from ..db import CitaRepo, Database, PacienteRepo, TicRepo
+from ..db import CitaRepo, Database, GraphRepo, PacienteRepo, TicRepo
 from ..llm import OllamaClient
 from ..services import PrescriptionService, SchedulingService
 
@@ -32,16 +33,18 @@ class AppContext:
         self.settings = settings or get_settings()
 
         self.llm = OllamaClient(self.settings)
-        self.database = Database(self.settings)
-        self.database.conectar()
+        self.database = Database(self.settings.db_path)
 
+        self.grafo = GraphRepo(self.database)
         self.pacientes = PacienteRepo(self.database)
-        self.tics = TicRepo(self.database)
+        self.tics = TicRepo(self.database, self.grafo)
         self.citas = CitaRepo(self.database)
 
+        self.terminologia = TerminologyIndex(self.database, self.grafo)
+        self._preparar_vocabulario()
+
         self.skills = SkillManager(self.settings)
-        self.snomed_index = construir_index(self.settings, self.database.db)
-        self.validador = SnomedValidator(self.snomed_index, self.llm, self.settings)
+        self.validador = OntologyValidator(self.terminologia, self.llm, self.settings)
         self.verificador = ClinicalVerifier(self.llm, self.settings)
 
         self.pipeline = CrystallizationPipeline(
@@ -56,18 +59,41 @@ class AppContext:
         self.recetas = PrescriptionService(self.settings)
         self.agenda = SchedulingService(self.citas)
 
+    def _preparar_vocabulario(self) -> None:
+        """Carga el vocabulario semilla si la base está vacía.
+
+        Que el sistema sea utilizable recién clonado, sin descargas ni
+        licencias, es un requisito y no una comodidad: sin vocabulario el
+        validador no puede rechazar nada, y un validador que lo acepta todo
+        es peor que no tener validador.
+        """
+        if not self.settings.autocargar_semilla:
+            return
+        if self.terminologia.disponible():
+            return
+        try:
+            cargador = VocabularyLoader(self.database)
+            n = cargador.cargar_semilla(self.settings.vocabulario_semilla)
+            if n:
+                logger.info("Vocabulario semilla cargado: %d conceptos", n)
+        except Exception:  # noqa: BLE001 — sin vocabulario se arranca igual
+            logger.exception("No se pudo cargar el vocabulario semilla")
+
     async def cerrar(self) -> None:
         await self.llm.close()
+        self.database.cerrar()
 
     def estado(self) -> dict:
         return {
             "base_datos": {
                 "conectada": self.database.disponible,
+                "ruta": str(self.database.ruta),
                 "error": self.database.error,
+                "estadisticas": self.database.estadisticas(),
             },
-            "snomed": {
-                "backend": type(self.snomed_index).__name__,
-                "disponible": self.snomed_index.disponible(),
+            "vocabulario": {
+                "disponible": self.terminologia.disponible(),
+                "sistemas": self.terminologia.sistemas_cargados(),
             },
             "skills": self.skills.listar(),
         }

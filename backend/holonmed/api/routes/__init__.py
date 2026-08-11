@@ -1,3 +1,3 @@
-from . import chat, clinical, documents, patients
+from . import chat, clinical, documents, graph, patients
 
-__all__ = ["chat", "clinical", "documents", "patients"]
+__all__ = ["chat", "clinical", "documents", "graph", "patients"]
