@@ -15,7 +15,7 @@ type: software
 authors:
   - given-names: Alcy Edmundo
     family-names: Torres Guerrero
-    email: alcyedmundo@gmail.com
+    email: alcy.torres@powersemiotics.com
     orcid: 'https://orcid.org/0000-0002-9742-375X'
 
 repository-code: 'https://github.com/alcyedmundo281/holonmed'
