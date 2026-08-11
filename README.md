@@ -322,9 +322,19 @@ deliberadamente ArangoDB, que desde su versión 3.12 usa BUSL-1.1 y cuya
 Community Edition prohíbe el uso comercial; SQLite es de dominio público y
 no impone ninguna condición aguas abajo.
 
-## Autoría y citación
+## Autoría y contacto
 
 Alcy Edmundo Torres Guerrero — [ORCID 0000-0002-9742-375X](https://orcid.org/0000-0002-9742-375X)
+
+Para pull requests, propuestas de colaboración o dudas sobre el uso del
+sistema: **alcy.torres@powersemiotics.com**
+
+Las contribuciones son bienvenidas por la vía habitual: abre un issue para
+discutir el cambio antes de invertir tiempo en él, sobre todo si toca los
+umbrales del validador o las guardas de colisión, que son parámetros de
+seguridad clínica.
+
+## Citación
 
 Si usas HolonMed en un trabajo académico, cítalo con los metadatos de
 [CITATION.cff](CITATION.cff). Ver [docs/PUBLICAR.md](docs/PUBLICAR.md) para
