@@ -1,5 +1,10 @@
 # Publicar y obtener un DOI
 
+> **Estado: hecho.** El repositorio es público y v0.2.0 está archivado en
+> Zenodo con DOI de concepto
+> [10.5281/zenodo.21881233](https://doi.org/10.5281/zenodo.21881233).
+> Lo que sigue documenta el proceso para las versiones futuras.
+
 ## Antes de publicar
 
 Repasa esta lista. Un repositorio público no se puede despublicar de
@@ -24,12 +29,34 @@ cd holonmed && gh repo create holonmed --public --source=. --push
 ## Obtener el DOI de Zenodo
 
 Zenodo es un repositorio de datos del CERN. Acuña DOIs gratis y de forma
-permanente, y se integra con GitHub: cada release que publiques queda
-archivado con su propio DOI.
+permanente.
+
+Hay dos caminos. **v0.2.0 se publicó por el manual**, porque la integración
+automática no llegó a listar el repositorio recién creado.
+
+### Camino manual (el que se usó)
+
+1. Crea el release en GitHub.
+2. Descarga el `.zip` que genera automáticamente en la página del release.
+3. En [zenodo.org/uploads/new](https://zenodo.org/uploads/new), súbelo y
+   rellena los metadatos desde [.zenodo.json](../.zenodo.json).
+4. En el campo *Digital Object Identifier*, marca **«No, I need one»**.
+   Marcarlo al revés es el error fácil: le dice a Zenodo que no acuñe DOI.
+5. Publica.
+
+Nota sobre el orden: el `.zip` archivado de v0.2.0 no contiene su propio
+DOI en `CITATION.cff`, porque el DOI no existe hasta publicar. Se añadió al
+repositorio justo después, así que las versiones siguientes ya lo llevarán
+dentro.
+
+### Camino automático (para las próximas)
 
 **1. Conecta tu cuenta.** Entra en [zenodo.org](https://zenodo.org) e
-inicia sesión con GitHub. Ve a *Settings → GitHub* y activa el interruptor
-del repositorio `holonmed`.
+inicia sesión con GitHub. Ve a
+[zenodo.org/account/settings/github](https://zenodo.org/account/settings/github/)
+y activa el interruptor del repositorio `holonmed`. Si no aparece en la
+lista, pulsa **«Sync now»**: Zenodo cachea los repositorios y tarda en ver
+los recién creados.
 
 Hazlo **antes** de crear el release. Zenodo sólo archiva releases
 publicados después de activar el interruptor: si lo haces al revés, tienes

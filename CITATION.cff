@@ -19,6 +19,17 @@ authors:
     orcid: 'https://orcid.org/0000-0002-9742-375X'
     affiliation: Power Semiotics
 
+# DOI de concepto: resuelve siempre a la última versión publicada.
+doi: 10.5281/zenodo.21881233
+
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21881233
+    description: DOI de concepto, apunta a todas las versiones
+  - type: doi
+    value: 10.5281/zenodo.21881234
+    description: DOI de la versión v0.2.0
+
 repository-code: 'https://github.com/alcyedmundo281/holonmed'
 url: 'https://github.com/alcyedmundo281/holonmed'
 license: AGPL-3.0-or-later
