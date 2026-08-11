@@ -1,10 +1,9 @@
 # Metadatos de citación. GitHub los lee y muestra un botón "Cite this
 # repository"; Zenodo los usa para rellenar el registro del DOI.
 #
-# ANTES DE PUBLICAR: sustituye los valores marcados con TODO por tus datos
-# reales. El nombre que quede aquí es el que aparecerá en la cita formal y
-# en el registro DataCite, y corregirlo después de acuñar el DOI es
-# engorroso.
+# Al publicar un release, añade aquí el campo `doi:` con el DOI de
+# concepto que devuelva Zenodo (el que apunta siempre a la última
+# versión). Ver docs/PUBLICAR.md.
 
 cff-version: 1.2.0
 title: >-
@@ -14,13 +13,10 @@ message: Si usas este software en un trabajo académico, por favor cítalo.
 type: software
 
 authors:
-  - given-names: TODO
-    family-names: TODO
-    email: TODO
-    # Consíguelo gratis en https://orcid.org — vincula el DOI a tu
-    # identidad de investigador de forma permanente.
-    orcid: 'https://orcid.org/0000-0000-0000-0000'
-    affiliation: TODO
+  - given-names: Alcy Edmundo
+    family-names: Torres Guerrero
+    email: alcyedmundo@gmail.com
+    orcid: 'https://orcid.org/0000-0002-9742-375X'
 
 repository-code: 'https://github.com/alcyedmundo281/holonmed'
 url: 'https://github.com/alcyedmundo281/holonmed'

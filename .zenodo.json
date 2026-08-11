@@ -3,9 +3,6 @@
     "Metadatos para Zenodo. Se leen automáticamente al crear un release en",
     "GitHub y tienen prioridad sobre lo que Zenodo deduzca por su cuenta.",
     "",
-    "ANTES DE PUBLICAR: rellena los campos marcados con TODO. El nombre y el",
-    "ORCID quedan en el registro DataCite del DOI de forma permanente.",
-    "",
     "Zenodo ignora las claves que no reconoce, así que este comentario no",
     "rompe nada."
   ],
@@ -21,9 +18,8 @@
 
   "creators": [
     {
-      "name": "TODO Apellido, TODO Nombre",
-      "affiliation": "TODO",
-      "orcid": "0000-0000-0000-0000"
+      "name": "Torres Guerrero, Alcy Edmundo",
+      "orcid": "0000-0002-9742-375X"
     }
   ],
 

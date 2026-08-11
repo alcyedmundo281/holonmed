@@ -5,7 +5,7 @@
 Repasa esta lista. Un repositorio público no se puede despublicar de
 verdad: quedan forks, cachés y el índice de los buscadores.
 
-- [ ] `CITATION.cff` y `.zenodo.json` tienen tus datos reales, sin `TODO`
+- [x] `CITATION.cff` y `.zenodo.json` tienen los datos reales del autor
 - [ ] No hay credenciales versionadas (la CI lo comprueba, pero míralo)
 - [ ] No hay datos de paciente reales en `backend/data/holonmed.db`
 - [ ] Ninguna terminología con licencia está versionada

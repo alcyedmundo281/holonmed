@@ -322,8 +322,10 @@ deliberadamente ArangoDB, que desde su versión 3.12 usa BUSL-1.1 y cuya
 Community Edition prohíbe el uso comercial; SQLite es de dominio público y
 no impone ninguna condición aguas abajo.
 
-## Citación
+## Autoría y citación
+
+Alcy Edmundo Torres Guerrero — [ORCID 0000-0002-9742-375X](https://orcid.org/0000-0002-9742-375X)
 
 Si usas HolonMed en un trabajo académico, cítalo con los metadatos de
 [CITATION.cff](CITATION.cff). Ver [docs/PUBLICAR.md](docs/PUBLICAR.md) para
-obtener un DOI de Zenodo.
+obtener un DOI de Zenodo y añadir aquí la insignia.
