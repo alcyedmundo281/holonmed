@@ -5,8 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "holonmed"
 version = "0.1.0"
-description = "Apoyo a la decisión clínica con validación ontológica sobre SNOMED CT"
-readme = "../README.md"
+description = "Apoyo a la decisión clínica con validación ontológica y razonamiento bayesiano explicable"
+# Sin campo `readme`: setuptools no admite rutas fuera del directorio del
+# paquete, y el README vive en la raíz del monorepo. Duplicarlo aquí sólo
+# crearía una copia que se quedaría obsoleta.
 requires-python = ">=3.10"
 license = { text = "AGPL-3.0-or-later" }
 keywords = ["snomed", "clinical-nlp", "bayesian", "medical-informatics", "llm"]
