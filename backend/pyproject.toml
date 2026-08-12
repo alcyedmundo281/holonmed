@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "holonmed"
-version = "0.1.0"
+# La versión vive en holonmed/__init__.py y se lee de ahí: tenerla en
+# dos sitios garantiza que un día dejen de coincidir.
+dynamic = ["version"]
 description = "Apoyo a la decisión clínica con validación ontológica y razonamiento bayesiano explicable"
 # Sin campo `readme`: setuptools no admite rutas fuera del directorio del
 # paquete, y el README vive en la raíz del monorepo. Duplicarlo aquí sólo
@@ -35,6 +37,9 @@ dev = [
 
 [project.scripts]
 holonmed = "holonmed.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "holonmed.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["holonmed*"]

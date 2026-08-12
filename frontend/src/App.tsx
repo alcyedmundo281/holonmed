@@ -114,7 +114,7 @@ export default function App() {
           <header className="px-3 py-3 border-b border-slate-700 flex items-center gap-2">
             <Activity size={17} className="text-emerald-400" aria-hidden />
             <span className="font-bold text-slate-100 text-sm">HolonMed</span>
-            <span className="text-[10px] text-slate-500 ml-auto font-mono">v0.2.0</span>
+            <span className="text-[10px] text-slate-500 ml-auto font-mono">v{__APP_VERSION__}</span>
           </header>
 
           <PatientList

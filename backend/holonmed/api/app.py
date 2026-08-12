@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .. import __version__
 from ..config import Settings, get_settings
 from .deps import AppContext
 from .routes import chat, clinical, documents, graph, patients
@@ -50,7 +51,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="HolonMed",
         description=DESCRIPCION,
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
 

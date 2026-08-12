@@ -1,8 +1,12 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { version } from './package.json';
 
 export default defineConfig({
   plugins: [react()],
+  // La versión se inyecta desde package.json: escribirla también en el
+  // componente sería una copia condenada a desincronizarse.
+  define: { __APP_VERSION__: JSON.stringify(version) },
   server: {
     port: 5173,
     proxy: {
