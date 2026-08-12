@@ -38,21 +38,25 @@ identifiers:
 repository-code: 'https://github.com/alcyedmundo281/holonmed'
 url: 'https://github.com/alcyedmundo281/holonmed'
 license: AGPL-3.0-or-later
-version: 0.2.1
+version: 0.3.0
 date-released: '2026-08-11'
 
 abstract: >-
   HolonMed convierte narrativa clínica libre en hallazgos estructurados y
   auditados. Un modelo de lenguaje local propone hallazgos; un validador de
-  tres capas decide cuáles son ciertos, anclándolos a un vocabulario
-  controlado, comprobando la evidencia numérica contra el protocolo activo
-  y bloqueando emparejamientos clínicamente prohibidos que un motor de
-  similitud confundiría. El veredicto tiene tres estados — validado, en
-  alerta y descartado — y los descartes se muestran con su motivo, de forma
-  que el comportamiento del validador sea auditable. Sobre la evidencia
-  validada corre un motor bayesiano que devuelve la traza completa del
-  razonamiento en lugar de una probabilidad opaca. Todo el procesamiento
-  ocurre en local, sin enviar datos de paciente a servicios externos.
+  cuatro capas decide cuáles son ciertos, anclándolos a un vocabulario
+  controlado, pidiendo al modelo que actúe como auditor de terminología
+  pudiendo responder «ninguno», comprobando la evidencia contra el
+  protocolo activo, y bloqueando emparejamientos clínicamente prohibidos
+  que un motor de similitud confundiría. El veredicto tiene tres estados —
+  validado, en alerta y descartado — y los descartes se muestran con su
+  motivo, de forma que el comportamiento del validador sea auditable.
+  Sobre la evidencia validada corre un motor bayesiano que devuelve la
+  traza completa del razonamiento en lugar de una probabilidad opaca. El
+  conocimiento clínico vive en protocolos declarativos verificables contra
+  el vocabulario, y cada registro declara qué actor del entorno clínico lo
+  produjo: consulta, laboratorio o farmacia. Todo el procesamiento ocurre
+  en local, sin enviar datos de paciente a servicios externos.
 
 keywords:
   - clinical decision support
