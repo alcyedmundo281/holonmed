@@ -1,6 +1,6 @@
 # HolonMed
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21881233.svg)](https://doi.org/10.5281/zenodo.21881233)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21896525.svg)](https://doi.org/10.5281/zenodo.21896525)
 [![CI](https://github.com/alcyedmundo281/holonmed/actions/workflows/ci.yml/badge.svg)](https://github.com/alcyedmundo281/holonmed/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
@@ -343,8 +343,8 @@ seguridad clínica.
 El software está archivado en Zenodo con DOI permanente:
 
 > Torres Guerrero, A. E. (2026). *HolonMed: apoyo a la decisión clínica con
-> validación ontológica y razonamiento bayesiano explicable* (v0.2.0).
-> Zenodo. https://doi.org/10.5281/zenodo.21881233
+> validación ontológica y razonamiento bayesiano explicable* (v0.2.1).
+> Zenodo. https://doi.org/10.5281/zenodo.21896525
 
 ```bibtex
 @software{torres_guerrero_holonmed_2026,
@@ -353,9 +353,9 @@ El software está archivado en Zenodo con DOI permanente:
                ontológica y razonamiento bayesiano explicable},
   year      = {2026},
   publisher = {Zenodo},
-  version   = {v0.2.0},
-  doi       = {10.5281/zenodo.21881233},
-  url       = {https://doi.org/10.5281/zenodo.21881233}
+  version   = {v0.2.1},
+  doi       = {10.5281/zenodo.21896525},
+  url       = {https://doi.org/10.5281/zenodo.21896525}
 }
 ```
 
@@ -363,8 +363,8 @@ Hay dos DOI y conviene distinguirlos:
 
 | DOI | Qué identifica | Cuándo usarlo |
 |-----|----------------|---------------|
-| [`10.5281/zenodo.21881233`](https://doi.org/10.5281/zenodo.21881233) | Todas las versiones | Por defecto. Resuelve siempre a la última |
-| [`10.5281/zenodo.21881234`](https://doi.org/10.5281/zenodo.21881234) | Sólo v0.2.0 | Cuando importe reproducir esta versión exacta |
+| [`10.5281/zenodo.21896525`](https://doi.org/10.5281/zenodo.21896525) | Todas las versiones | Por defecto. Resuelve siempre a la última |
+| [`10.5281/zenodo.21896526`](https://doi.org/10.5281/zenodo.21896526) | Sólo v0.2.1 | Cuando importe reproducir esta versión exacta |
 
 GitHub también genera la cita automáticamente desde
 [CITATION.cff](CITATION.cff) con el botón *Cite this repository*.

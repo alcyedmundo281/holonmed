@@ -1,9 +1,12 @@
 # Publicar y obtener un DOI
 
-> **Estado: hecho.** El repositorio es público y v0.2.0 está archivado en
-> Zenodo con DOI de concepto
-> [10.5281/zenodo.21881233](https://doi.org/10.5281/zenodo.21881233).
-> Lo que sigue documenta el proceso para las versiones futuras.
+> **Estado: hecho y automatizado.** El repositorio es público y la
+> integración con Zenodo está activa: cada release nuevo se archiva solo.
+> DOI de concepto:
+> [10.5281/zenodo.21896525](https://doi.org/10.5281/zenodo.21896525).
+>
+> Para publicar una versión basta con `gh release create vX.Y.Z`. El resto
+> lo hace Zenodo, y DataCite lo empuja al perfil de ORCID.
 
 ## Antes de publicar
 
@@ -31,8 +34,18 @@ cd holonmed && gh repo create holonmed --public --source=. --push
 Zenodo es un repositorio de datos del CERN. Acuña DOIs gratis y de forma
 permanente.
 
-Hay dos caminos. **v0.2.0 se publicó por el manual**, porque la integración
-automática no llegó a listar el repositorio recién creado.
+Hay dos caminos. **v0.2.0 se depositó a mano** porque la integración no
+llegó a listar el repositorio recién creado; **desde v0.2.1 va automático**.
+
+Esa secuencia dejó una cicatriz que conviene entender: el depósito manual y
+la integración son linajes de DOI distintos, y Zenodo no permite fusionarlos
+ni retirar un registro publicado. El registro manual de v0.2.0
+([10.5281/zenodo.21881233](https://doi.org/10.5281/zenodo.21881233)) sigue
+existiendo y se conserva declarado en `CITATION.cff`.
+
+La lección para el futuro: **enciende el interruptor antes del primer
+release**. Rehacerlo costó una versión y un DOI huérfano; con descargas o
+citas de por medio habría costado bastante más.
 
 ### Camino manual (el que se usó)
 

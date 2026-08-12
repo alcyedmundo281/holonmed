@@ -20,15 +20,20 @@ authors:
     affiliation: Power Semiotics
 
 # DOI de concepto: resuelve siempre a la última versión publicada.
-doi: 10.5281/zenodo.21881233
+doi: 10.5281/zenodo.21896525
 
 identifiers:
   - type: doi
-    value: 10.5281/zenodo.21881233
+    value: 10.5281/zenodo.21896525
     description: DOI de concepto, apunta a todas las versiones
   - type: doi
-    value: 10.5281/zenodo.21881234
-    description: DOI de la versión v0.2.0
+    value: 10.5281/zenodo.21896526
+    description: DOI de la versión v0.2.1
+  - type: doi
+    value: 10.5281/zenodo.21881233
+    description: >-
+      Depósito manual de v0.2.0, anterior a la integración con GitHub.
+      Se conserva porque Zenodo no permite retirar registros publicados.
 
 repository-code: 'https://github.com/alcyedmundo281/holonmed'
 url: 'https://github.com/alcyedmundo281/holonmed'
