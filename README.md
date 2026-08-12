@@ -1,6 +1,6 @@
 # HolonMed
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21896525.svg)](https://doi.org/10.5281/zenodo.21896525)
+[![DOI](https://zenodo.org/badge/1330400632.svg)](https://doi.org/10.5281/zenodo.21896525)
 [![CI](https://github.com/alcyedmundo281/holonmed/actions/workflows/ci.yml/badge.svg)](https://github.com/alcyedmundo281/holonmed/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
