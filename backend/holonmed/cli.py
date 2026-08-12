@@ -16,6 +16,20 @@ import sys
 from .config import get_settings
 
 
+def _consola_utf8() -> None:
+    """Fuerza UTF-8 en la salida estándar.
+
+    La consola de Windows usa cp1252, que no sabe codificar ni flechas ni
+    la mitad de los caracteres de una nota clínica en español. Sin esto,
+    imprimir el resultado lanza UnicodeEncodeError y se pierde todo el
+    trabajo del pipeline por un problema de presentación.
+    """
+    for flujo in (sys.stdout, sys.stderr):
+        reconfigurar = getattr(flujo, "reconfigure", None)
+        if reconfigurar is not None:
+            reconfigurar(encoding="utf-8", errors="replace")
+
+
 def _cmd_serve(args) -> int:
     import uvicorn
 
@@ -101,7 +115,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
         cie = f" · CIE-10 {infon.cie10_code}" if infon.cie10_code else ""
         print(f"  [{infon.estado.value:9}] {infon.termino}")
         print(f"              {codigo}{cie} · confianza {infon.confianza}%")
-        print(f"              {infon.razon_auditoria[:100]}")
+        print(f"              {infon.razon_auditoria}")
 
     if resultado.inferencia:
         inf = resultado.inferencia
@@ -117,6 +131,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
 
 
 def main(argv=None) -> int:
+    _consola_utf8()
     parser = argparse.ArgumentParser(prog="holonmed", description=__doc__)
     sub = parser.add_subparsers(dest="comando", required=True)
 

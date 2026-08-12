@@ -130,7 +130,7 @@ class CrystallizationPipeline:
         # --- ETAPA 4: INFERENCIA ABDUCTIVA ----------------------------
         try:
             resultado.inferencia = self.bayes.calcular(
-                holon.metadatos_para_bayes(),
+                holon.metadatos_para_bayes(texto),
                 skill.json_principal,
                 resultado.infones,
             )

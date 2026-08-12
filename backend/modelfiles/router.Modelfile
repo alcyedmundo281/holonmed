@@ -1,0 +1,12 @@
+# Modelo rápido de HolonMed: triaje de protocolo, clasificación de
+# intención y re-ranking de candidatos terminológicos.
+#
+# Son tareas de conjunto cerrado: el valor está en responder una opción
+# válida, no en redactar bien. Por eso va un modelo más pequeño y con
+# temperatura 0.
+
+FROM E:/ollama/models/dolphin-2.9-llama3-8b-Q4_K_M.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096

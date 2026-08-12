@@ -110,3 +110,50 @@ def test_veredicto_por_umbrales():
         [infon("Hiperlipasemia (>3x)"), infon("Dolor epigástrico")],
     )
     assert alta.veredicto in {"PROBABLE", "HIPOTESIS_CONFIRMADA"}
+
+
+def test_los_factores_de_riesgo_de_la_nota_actual_cuentan():
+    """En una primera consulta la ficha está vacía y el riesgo sólo está
+    en el texto que el clínico acaba de escribir. Ignorarlo hacía que la
+    probabilidad previa fuese siempre la poblacional."""
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="nuevo")  # sin antecedentes registrados
+    nota = "Varón de 45 años con litiasis biliar conocida."
+
+    sin_nota = AntigenPresentingCell().calcular(holon.metadatos_para_bayes(), SKILL, [])
+    con_nota = AntigenPresentingCell().calcular(
+        holon.metadatos_para_bayes(nota), SKILL, []
+    )
+
+    assert sin_nota.probabilidad_previa == 5.0
+    assert con_nota.probabilidad_previa > sin_nota.probabilidad_previa
+    assert "litiasis" in " ".join(con_nota.traza_logica)
+
+
+def test_los_factores_se_emparejan_por_subcadena_literal():
+    """Documenta una limitación real, detectada en la primera ejecución
+    con un modelo de verdad.
+
+    El protocolo declara el factor 'alcoholismo', pero un clínico escribe
+    'bebedor de riesgo'. No comparten ninguna subcadena, así que el factor
+    no se aplica y la probabilidad previa se queda corta.
+
+    No es un fallo del código sino del protocolo: la solución es declarar
+    las variantes que la gente usa de verdad. Este test existe para que
+    quien escriba una skill nueva sepa que el emparejamiento es literal.
+    """
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="nuevo")
+    motor = AntigenPresentingCell()
+
+    literal = motor.calcular(
+        holon.metadatos_para_bayes("paciente con alcoholismo crónico"), SKILL, []
+    )
+    coloquial = motor.calcular(
+        holon.metadatos_para_bayes("paciente bebedor de riesgo"), SKILL, []
+    )
+
+    assert "alcoholismo" in " ".join(literal.traza_logica)
+    assert coloquial.probabilidad_previa == 5.0  # el factor no se detecta

@@ -1,0 +1,21 @@
+# Modelo de razonamiento clínico de HolonMed.
+#
+# Diferencias deliberadas respecto a un Modelfile de uso general:
+#
+#   temperature 0   En clínica no se sube. Dos ejecuciones sobre la misma
+#                   nota deben producir el mismo resultado, o la auditoría
+#                   posterior no significa nada.
+#
+#   sin SYSTEM      Cada capa del pipeline inyecta el suyo (extractor,
+#                   auditor de terminología, auditor lógico) y son
+#                   incompatibles entre sí. Un SYSTEM fijo los contaminaría.
+#
+#   El sistema depende de que el modelo se atreva a responder "ninguno" y
+#   "no válido". Un prompt de tipo "cumple siempre y responde del todo"
+#   sesga justo hacia el falso positivo que esto intenta evitar.
+
+FROM E:/LLM/lmstudio-community/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192

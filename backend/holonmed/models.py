@@ -134,13 +134,31 @@ class HolonPaciente(BaseModel):
         """El crecimiento del holón: sólo se integra lo que fue validado."""
         self.linea_tiempo.extend(i for i in nuevos if i.es_valido)
 
-    def metadatos_para_bayes(self) -> dict[str, Any]:
-        """Contexto demográfico que alimenta la probabilidad a priori."""
+    def metadatos_para_bayes(self, texto_actual: str = "") -> dict[str, Any]:
+        """Contexto que alimenta la probabilidad a priori.
+
+        Se consideran tres fuentes: los antecedentes registrados en la
+        ficha, los hallazgos validados de visitas anteriores, y **la
+        narrativa de hoy**.
+
+        Incluir la narrativa actual no es opcional: en una primera
+        consulta la ficha está vacía y los factores de riesgo sólo
+        aparecen en el texto que el clínico acaba de escribir. Sin ella,
+        un «bebedor de riesgo con litiasis biliar» arrancaría con la
+        prevalencia de la población general.
+
+        Limitación conocida: el emparejamiento de factores es por
+        subcadena, así que no entiende negaciones. Una nota que diga «no
+        consume alcohol» activaría igualmente un factor «alcohol». Es el
+        precio de no meter otra llamada al modelo en el camino, y por eso
+        la traza muestra siempre qué factor se aplicó y con qué peso.
+        """
         historicos = " ".join(i.termino for i in self.linea_tiempo)
+        contexto = f"{self.antecedentes} {historicos} {texto_actual}"
         return {
             "edad": self.edad,
             "sexo": self.sexo,
-            "antecedentes": f"{self.antecedentes} {historicos}".lower().strip(),
+            "antecedentes": contexto.lower().strip(),
         }
 
 

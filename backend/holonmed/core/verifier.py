@@ -33,10 +33,11 @@ class Auditoria:
 
 PROMPT_AUDITOR = """Actúa como un Auditor Médico de Seguridad y Calidad (Senior).
 
-REGLA DE ORO: un hallazgo es VÁLIDO sólo si la evidencia lo sustenta de
-forma unívoca.
+REGLA DE ORO: un hallazgo es VÁLIDO si la evidencia del texto lo sustenta.
+Tu única pregunta es «¿dice el texto esto?», no «¿es importante?» ni
+«¿aparece en el protocolo?».
 
-PROTOCOLO ACTIVO (incluye los criterios de laboratorio):
+PROTOCOLO ACTIVO (referencia para los valores de laboratorio):
 ================================================================
 {protocolo}
 ================================================================
@@ -47,21 +48,38 @@ EVIDENCIA (texto original del paciente):
 HALLAZGO A AUDITAR:
 "{hallazgo}"
 
-TAREA — anclaje matemático explícito:
-1. Localiza en el texto el valor numérico correspondiente al hallazgo.
-2. Compara ese valor contra el corte del protocolo, mostrando la operación.
-   Ejemplo: hallazgo "Hipocalcemia", valor 6.8, corte "< 8.5".
-   Razonamiento: ¿6.8 es menor que 8.5? Sí -> VÁLIDO.
-3. Verifica la DIRECCIÓN del desvío: que el término diga ALTO cuando el
-   valor está por encima, y BAJO cuando está por debajo. Invertirlo es un
-   error grave.
-4. Si no hay evidencia numérica ni descripción explícita, o el valor está
-   en rango normal, el hallazgo es FALSO.
+Hay DOS tipos de evidencia y ambos son válidos. Identifica cuál aplica:
 
-No infieras lo que no está escrito. Ante la duda, marca inválido.
+A) EVIDENCIA NUMÉRICA — el hallazgo se deduce de una cifra.
+   1. Localiza el valor en el texto.
+   2. Compáralo con el corte, mostrando la operación.
+      Ejemplo: "Hipocalcemia", valor 6.8, corte < 8.5.
+      ¿6.8 es menor que 8.5? Sí -> VÁLIDO.
+   3. Verifica la DIRECCIÓN: el término debe decir ALTO cuando el valor
+      está por encima y BAJO cuando está por debajo. Invertirlo es grave.
+   4. Si el protocolo no declara un corte para ese parámetro, usa los
+      rangos de referencia habituales en adultos. Que el protocolo no lo
+      mencione NO invalida el hallazgo.
 
-Responde en JSON:
-{{"valido": true/false, "analisis": "razonamiento paso a paso", "confianza": 0-100}}"""
+B) EVIDENCIA TEXTUAL — el hallazgo es cualitativo y el texto lo afirma.
+   Síntomas, signos exploratorios y antecedentes no tienen número, y no
+   por eso son falsos. "Vómitos repetidos" sustenta "Vómitos"; "abdomen
+   con defensa" sustenta "Irritación peritoneal".
+   Basta con que el texto lo afirme de forma reconocible, aunque use
+   otras palabras.
+
+Es INVÁLIDO cuando:
+  - El texto NIEGA el hallazgo ("no refiere fiebre" -> Fiebre es falso).
+  - El valor está dentro del rango normal.
+  - El hallazgo no aparece en el texto ni puede deducirse de él.
+  - La dirección del desvío está invertida.
+
+No infieras lo que no está escrito, pero tampoco exijas un número donde
+la clínica no lo tiene. Ante la duda real, marca inválido.
+
+Responde en JSON, con el análisis en UNA sola frase de menos de 200
+caracteres. No uses markdown ni listas dentro del JSON:
+{{"valido": true, "analisis": "6.8 < 8.5, calcio por debajo del corte", "confianza": 95}}"""
 
 
 class ClinicalVerifier:
@@ -87,13 +105,16 @@ class ClinicalVerifier:
             res = await self.llm.generar_json(
                 prompt,
                 model=self.settings.model_clinical,
-                timeout=self.settings.llm_timeout_fast,
+                timeout=self.settings.llm_timeout_slow,
             )
         except LLMUnavailable as exc:
             logger.warning("Auditoría no disponible: %s", exc)
             return Auditoria.no_evaluado(f"Auditoría no disponible: {exc}")
 
         if not res:
+            logger.warning(
+                "Auditoría ilegible para '%s'; se marca como no evaluada", hallazgo[:60]
+            )
             return Auditoria.no_evaluado("El auditor no devolvió JSON interpretable")
 
         # Los modelos locales varían las claves entre ejecuciones; se aceptan

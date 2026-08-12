@@ -17,10 +17,20 @@ BASE DE CONOCIMIENTO (JSON-LD Context):
 
     "modelo_bayesiano": {
         "probabilidad_base": 0.05, 
+        "_nota_factores": "El emparejamiento es por subcadena literal, así que hay que declarar las variantes que un clínico escribe de verdad. 'bebedor de riesgo' no contiene 'alcohol'.",
         "factores_riesgo_a_priori": {
+            "alcohol": 2.8,
             "alcoholismo": 2.8,
+            "enolismo": 2.8,
+            "bebedor": 2.8,
+            "etilismo": 2.8,
             "litiasis": 3.2,
-            "alcohol": 2.8
+            "colelitiasis": 3.2,
+            "coledocolitiasis": 3.2,
+            "cálculos biliares": 3.2,
+            "calculos biliares": 3.2,
+            "hipertrigliceridemia": 2.2,
+            "cpre": 2.5
         }
     },
 
