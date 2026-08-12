@@ -88,24 +88,32 @@ datos suficientes (ej. Htct)» cuando la nota incluye «hematocrito 48».
 
 ### Lo que sigue fallando
 
-Con 9 de 10 validados, Los tres restantes
-apuntan al mismo sitio: **el auditor es inconsistente con un modelo de
-esta escala**.
+El problema de fondo no se arregla con más prompt: **el auditor es
+inconsistente con un modelo de esta escala**.
 
 - **Se contradice.** Para «Hipotensión» con TA 100/60 razonó *«no es
   estrictamente menor que el corte de 100»* y aun así devolvió
-  `valido: true`. El booleano y la prosa discrepan. Es un falso positivo.
+  `valido: true`. El booleano y la prosa discrepan. Acertó por casualidad,
+  no por criterio.
 
-- **Es arbitrariamente estricto.** «Dolor epigástrico» quedó en ALERTA
-  con el motivo de que, aun estando en el texto, *«es más seguro marcarlo
-  como inválido sin una conexión directa con un parámetro medible»*.
-  Igual con «Hemoconcentración», derivada correctamente de Hto 48 > 44
-  pero rechazada por no estar «explícitamente mencionada».
+- **Inventa los cortes que no encuentra.** Al validar «Hiperlipasemia»
+  escribió *«>3x el límite normal (aprox. 250-300)»*, cuando el protocolo
+  declara 60. El veredicto fue correcto, pero el razonamiento que se le
+  muestra al clínico como justificación es falso.
+
+- **Ignora datos que están en el texto.** Hemoconcentración quedó en
+  ALERTA porque *«el texto no proporciona datos suficientes (ej. Htct)»*,
+  con «hematocrito 48» escrito en la nota.
 
 - **Devuelve JSON ilegible de vez en cuando.** Un caso de nueve en la
   primera ejecución, por truncamiento de razonamientos largos en
   markdown. Mitigado pidiendo respuestas de una frase y ampliando el
   timeout, pero no eliminado.
+
+El patrón: los veredictos han mejorado mucho, pero **los razonamientos que
+los acompañan no son fiables**. En un sistema cuyo argumento de venta es la
+trazabilidad, eso importa tanto como el acierto. Un clínico que lea
+«corte aprox. 250-300» y sepa que son 60 dejará de creerse el resto.
 
 ## Lo que hace falta
 
