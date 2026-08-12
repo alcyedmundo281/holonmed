@@ -27,6 +27,9 @@ identifiers:
     value: 10.5281/zenodo.21896525
     description: DOI de concepto, apunta a todas las versiones
   - type: doi
+    value: 10.5281/zenodo.21896953
+    description: DOI de la versión v0.3.0
+  - type: doi
     value: 10.5281/zenodo.21896526
     description: DOI de la versión v0.2.1
   - type: doi
