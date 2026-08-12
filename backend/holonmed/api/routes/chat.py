@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from ...llm import LLMUnavailable
-from ...models import ChatRequest
+from ...models import ChatRequest, OrigenTic, ResultadoTic
 from ..deps import AppContext, get_context
 
 logger = logging.getLogger(__name__)
@@ -117,6 +117,7 @@ async def chat(req: ChatRequest, ctx: AppContext = Depends(get_context)) -> dict
     if intencion == "cristalizar":
         holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
         resultado = await ctx.pipeline.ejecutar(req.mensaje, holon)
+        resultado.origen = OrigenTic.CONSULTA
         resultado.tic_id = ctx.tics.guardar(resultado)
         return {"tipo": "tic", "datos": resultado}
 
@@ -151,11 +152,37 @@ async def _generar_receta(ctx: AppContext, holon, peticion: str) -> dict[str, An
     if not ruta:
         return {"tipo": "error", "mensaje": "No se pudo generar el PDF."}
 
+    # La receta entra en la historia como un tic de origen `farmacia`.
+    # Antes sólo se generaba el PDF: el fármaco prescrito no dejaba rastro
+    # y desaparecía en cuanto se cerraba la ventana. Un fármaco prescrito
+    # es parte del registro clínico, y su ausencia rompe la conciliación
+    # de la medicación en la visita siguiente.
+    resumen = ", ".join(
+        f"{i.get('farmaco') or i.get('drug', '?')} {i.get('concentracion', '')}".strip()
+        for i in items
+    )
+    tic = ResultadoTic(
+        paciente_id=holon.paciente_id,
+        texto_original=peticion,
+        origen=OrigenTic.FARMACIA,
+        skill_activa="receta",
+        resumen=f"Receta: {resumen}",
+    )
+    tic.tic_id = ctx.tics.guardar(tic)
+    ctx.documentos.registrar(
+        holon.paciente_id,
+        tipo="receta",
+        archivo=ruta.name,
+        datos={"items": items, "indicaciones": datos.get("indicaciones_generales", "")},
+        tic_id=tic.tic_id,
+    )
+
     return {
         "tipo": "receta",
         "datos": {
             "url": f"/api/documentos/{ruta.name}",
             "items": items,
+            "tic_id": tic.tic_id,
             "aviso": "Borrador sin validez hasta que lo revises y lo firmes.",
         },
     }
@@ -166,7 +193,7 @@ async def _consulta_medica(ctx: AppContext, holon, mensaje: str) -> dict[str, An
     infones = ctx.tics.linea_tiempo(holon.paciente_id, limite=15)
     contexto = (
         "HALLAZGOS VALIDADOS PREVIOS: "
-        + "; ".join(f"{i.termino_snomed}" for i in infones)
+        + "; ".join(i.termino for i in infones)
         if infones
         else "Sin hallazgos previos registrados."
     )

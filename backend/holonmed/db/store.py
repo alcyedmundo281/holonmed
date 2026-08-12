@@ -56,11 +56,40 @@ class Database:
         try:
             self.ruta.parent.mkdir(parents=True, exist_ok=True)
             with self.conexion() as cx:
+                # La migración va ANTES del esquema: éste crea índices sobre
+                # columnas nuevas, y sobre una tabla antigua que aún no las
+                # tiene el script entero falla.
+                self._migrar(cx)
                 cx.executescript(ESQUEMA.read_text(encoding="utf-8"))
             logger.info("Base de datos lista: %s", self.ruta)
         except (OSError, sqlite3.Error) as exc:
             self.error = str(exc)
             logger.error("No se pudo inicializar la base de datos: %s", exc)
+
+    # Columnas añadidas después de la primera versión del esquema. Como
+    # `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, hay que
+    # añadirlas explícitamente o una base creada antes se queda coja.
+    MIGRACIONES: tuple[tuple[str, str, str], ...] = (
+        ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
+        ("tic", "actor", "TEXT"),
+    )
+
+    def _migrar(self, cx: sqlite3.Connection) -> None:
+        """Añade columnas nuevas a bases creadas con un esquema anterior.
+
+        Se prefiere esto a versionar el esquema con números: son pocas
+        columnas, la comprobación es barata y no hay forma de que una base
+        quede a medio migrar.
+        """
+        for tabla, columna, definicion in self.MIGRACIONES:
+            existentes = {
+                fila[1] for fila in cx.execute(f"PRAGMA table_info({tabla})")
+            }
+            if not existentes:  # la tabla aún no existe
+                continue
+            if columna not in existentes:
+                cx.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {definicion}")
+                logger.info("Migración: %s.%s añadida", tabla, columna)
 
     def conexion(self) -> sqlite3.Connection:
         cx = getattr(self._local, "cx", None)
@@ -378,11 +407,14 @@ class TicRepo:
                     (resultado.paciente_id, resultado.paciente_id, _ahora()),
                 )
                 cursor = cx.execute(
-                    """INSERT INTO tic (paciente_id, timestamp, skill, texto_original, resumen, inferencia)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    """INSERT INTO tic (paciente_id, timestamp, origen, actor,
+                                        skill, texto_original, resumen, inferencia)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
+                        resultado.origen.value,
+                        resultado.actor,
                         resultado.skill_activa,
                         resultado.texto_original,
                         resultado.resumen,
@@ -439,16 +471,32 @@ class TicRepo:
 
         return str(tic_id)
 
-    def historial(self, paciente_id: str, limite: int = 50) -> list[dict[str, Any]]:
-        filas = self._db.conexion().execute(
-            """SELECT t.id, t.timestamp AS fecha, t.skill, t.resumen, t.inferencia,
-                      COUNT(i.id) AS total_infones,
-                      SUM(CASE WHEN i.estado = 'VALIDADO' THEN 1 ELSE 0 END) AS validados
-               FROM tic t LEFT JOIN infon i ON i.tic_id = t.id
-               WHERE t.paciente_id = ?
-               GROUP BY t.id ORDER BY t.timestamp DESC LIMIT ?""",
-            (paciente_id, limite),
-        )
+    def historial(
+        self,
+        paciente_id: str,
+        limite: int = 50,
+        origen: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Línea de tiempo de tics, opcionalmente filtrada por origen.
+
+        Filtrar por origen es lo que permite responder «enséñame sólo lo
+        que vino del laboratorio» sin recorrer toda la historia.
+        """
+        sql = """SELECT t.id, t.timestamp AS fecha, t.origen, t.actor, t.skill,
+                        t.resumen, t.inferencia,
+                        COUNT(i.id) AS total_infones,
+                        SUM(CASE WHEN i.estado = 'VALIDADO' THEN 1 ELSE 0 END) AS validados,
+                        (SELECT COUNT(*) FROM documento d WHERE d.tic_id = t.id) AS documentos
+                 FROM tic t LEFT JOIN infon i ON i.tic_id = t.id
+                 WHERE t.paciente_id = ?"""
+        binds: list[Any] = [paciente_id]
+        if origen:
+            sql += " AND t.origen = ?"
+            binds.append(origen)
+        sql += " GROUP BY t.id ORDER BY t.timestamp DESC LIMIT ?"
+        binds.append(limite)
+
+        filas = self._db.conexion().execute(sql, binds)
         salida = []
         for f in filas:
             registro = dict(f)
@@ -474,6 +522,16 @@ class TicRepo:
         )
         registro["infones"] = [dict(i) for i in infones]
         return registro
+
+    def por_origen(self, paciente_id: str) -> list[dict[str, Any]]:
+        """Cuántos tics ha aportado cada actor del entorno clínico."""
+        filas = self._db.conexion().execute(
+            """SELECT origen, COUNT(*) AS tics, MAX(timestamp) AS ultimo
+               FROM tic WHERE paciente_id = ?
+               GROUP BY origen ORDER BY tics DESC""",
+            (paciente_id,),
+        )
+        return [dict(f) for f in filas]
 
     def linea_tiempo(self, paciente_id: str, limite: int = 200) -> list[Infon]:
         filas = self._db.conexion().execute(
@@ -504,6 +562,71 @@ class TicRepo:
             (paciente_id,),
         )
         return [dict(f) for f in filas]
+
+
+class DocumentoRepo:
+    """Documentos emitidos, colgados del tic que los originó.
+
+    Antes una receta sólo producía un PDF: el fármaco prescrito no dejaba
+    rastro en la historia y desaparecía al cerrar la ventana. Un fármaco
+    prescrito es parte del registro clínico.
+    """
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    def registrar(
+        self,
+        paciente_id: str,
+        tipo: str,
+        archivo: str | None = None,
+        datos: Any = None,
+        tic_id: str | None = None,
+    ) -> str | None:
+        try:
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cursor = cx.execute(
+                    """INSERT INTO documento (tic_id, paciente_id, tipo, archivo, datos, creado)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        int(tic_id) if tic_id else None,
+                        paciente_id,
+                        tipo,
+                        archivo,
+                        json.dumps(datos, ensure_ascii=False) if datos is not None else None,
+                        _ahora(),
+                    ),
+                )
+                cx.commit()
+                return str(cursor.lastrowid)
+        except sqlite3.Error as exc:
+            logger.error("Error registrando el documento: %s", exc)
+            return None
+
+    def listar(self, paciente_id: str, tipo: str | None = None) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM documento WHERE paciente_id = ?"
+        binds: list[Any] = [paciente_id]
+        if tipo:
+            sql += " AND tipo = ?"
+            binds.append(tipo)
+        sql += " ORDER BY creado DESC"
+        try:
+            filas = self._db.conexion().execute(sql, binds).fetchall()
+        except sqlite3.Error:
+            return []
+
+        salida = []
+        for f in filas:
+            registro = dict(f)
+            registro["id"] = str(registro["id"])
+            if registro.get("datos"):
+                try:
+                    registro["datos"] = json.loads(registro["datos"])
+                except json.JSONDecodeError:
+                    registro["datos"] = None
+            salida.append(registro)
+        return salida
 
 
 class CitaRepo:

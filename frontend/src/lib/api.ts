@@ -1,5 +1,6 @@
 import type {
   EntradaHistorial,
+  Documento,
   Infon,
   EstadoSistema,
   Grafo,
@@ -7,6 +8,7 @@ import type {
   Problema,
   RespuestaChat,
   ResultadoTic,
+  ResumenOrigen,
   Skill,
 } from './types';
 
@@ -81,8 +83,16 @@ export const api = {
       body: JSON.stringify(datos),
     }),
 
-  historial: (pacienteId: string) =>
-    pedir<EntradaHistorial[]>(`/api/pacientes/${q(pacienteId)}/historial`),
+  historial: (pacienteId: string, origen?: string) =>
+    pedir<EntradaHistorial[]>(
+      `/api/pacientes/${q(pacienteId)}/historial${origen ? `?origen=${q(origen)}` : ''}`,
+    ),
+
+  origenes: (pacienteId: string) =>
+    pedir<ResumenOrigen[]>(`/api/pacientes/${q(pacienteId)}/origenes`),
+
+  documentos: (pacienteId: string) =>
+    pedir<Documento[]>(`/api/pacientes/${q(pacienteId)}/documentos`),
 
   problemas: (pacienteId: string) =>
     pedir<Problema[]>(`/api/pacientes/${q(pacienteId)}/problemas`),

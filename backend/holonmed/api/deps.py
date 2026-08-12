@@ -19,7 +19,14 @@ from ..core import (
     TerminologyIndex,
     VocabularyLoader,
 )
-from ..db import CitaRepo, Database, GraphRepo, PacienteRepo, TicRepo
+from ..db import (
+    CitaRepo,
+    Database,
+    DocumentoRepo,
+    GraphRepo,
+    PacienteRepo,
+    TicRepo,
+)
 from ..llm import OllamaClient
 from ..services import PrescriptionService, SchedulingService
 
@@ -39,6 +46,7 @@ class AppContext:
         self.pacientes = PacienteRepo(self.database)
         self.tics = TicRepo(self.database, self.grafo)
         self.citas = CitaRepo(self.database)
+        self.documentos = DocumentoRepo(self.database)
 
         self.terminologia = TerminologyIndex(self.database, self.grafo)
         self._preparar_vocabulario()

@@ -3,6 +3,15 @@
 
 export type EstadoInfon = 'VALIDADO' | 'ALERTA' | 'RUIDO';
 
+/** Qué proceso del entorno clínico produjo un tic. */
+export type OrigenTic =
+  | 'consulta'
+  | 'laboratorio'
+  | 'farmacia'
+  | 'enfermeria'
+  | 'imagen'
+  | 'otro';
+
 export interface Infon {
   timestamp: string;
   texto_origen: string;
@@ -34,6 +43,8 @@ export interface ResultadoTic {
   timestamp: string;
   paciente_id: string;
   texto_original: string;
+  origen: OrigenTic;
+  actor: string | null;
   skill_activa: string;
   resumen: string;
   infones: Infon[];
@@ -54,11 +65,29 @@ export interface Paciente {
 export interface EntradaHistorial {
   id: string;
   fecha: string;
+  origen: OrigenTic;
+  actor: string | null;
   skill: string;
   resumen: string;
   total_infones: number;
   validados: number;
+  documentos: number;
   inferencia: InferenciaBayesiana | null;
+}
+
+export interface ResumenOrigen {
+  origen: OrigenTic;
+  tics: number;
+  ultimo: string;
+}
+
+export interface Documento {
+  id: string;
+  tic_id: string | null;
+  tipo: string;
+  archivo: string | null;
+  datos: { items?: { farmaco?: string; concentracion?: string }[] } | null;
+  creado: string;
 }
 
 export interface Problema {

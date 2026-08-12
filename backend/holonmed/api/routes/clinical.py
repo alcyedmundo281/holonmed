@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
-from ...models import CrystallizeRequest, ResultadoTic
+from ...models import CrystallizeRequest, OrigenTic, ResultadoTic
 from ...services import LabExtractionError, extraer_texto_pdf
 from ..deps import AppContext, get_context
 
@@ -28,6 +28,8 @@ async def cristalizar(
     holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
 
     resultado = await ctx.pipeline.ejecutar(req.texto, holon, skill_forzada=req.skill)
+    resultado.origen = req.origen
+    resultado.actor = req.actor
     resultado.tic_id = ctx.tics.guardar(resultado)
     return resultado
 
@@ -36,9 +38,15 @@ async def cristalizar(
 async def subir_laboratorio(
     paciente_id: str,
     archivo: UploadFile = File(...),
+    actor: str | None = None,
     ctx: AppContext = Depends(get_context),
 ):
-    """Extrae el texto de un informe PDF y lo pasa por el pipeline."""
+    """Extrae el texto de un informe PDF y lo pasa por el pipeline.
+
+    El tic queda marcado con origen `laboratorio`: un informe de
+    laboratorio y una nota dictada alimentan la misma historia, pero no
+    son la misma clase de evidencia y deben poder distinguirse después.
+    """
     if archivo.content_type not in ("application/pdf", "application/octet-stream"):
         raise HTTPException(415, "Sólo se aceptan archivos PDF")
 
@@ -52,7 +60,15 @@ async def subir_laboratorio(
     holon.linea_tiempo = ctx.tics.linea_tiempo(paciente_id)
 
     resultado = await ctx.pipeline.ejecutar(texto, holon)
+    resultado.origen = OrigenTic.LABORATORIO
+    resultado.actor = actor
     resultado.tic_id = ctx.tics.guardar(resultado)
+    ctx.documentos.registrar(
+        paciente_id,
+        tipo="informe_laboratorio",
+        archivo=archivo.filename,
+        tic_id=resultado.tic_id,
+    )
 
     return {
         "archivo": archivo.filename,
@@ -62,9 +78,33 @@ async def subir_laboratorio(
 
 
 @router.get("/pacientes/{paciente_id}/historial")
-async def historial(paciente_id: str, ctx: AppContext = Depends(get_context)):
-    """Registro de auditoría: cada tic procesado para este paciente."""
-    return ctx.tics.historial(paciente_id)
+async def historial(
+    paciente_id: str,
+    origen: OrigenTic | None = None,
+    ctx: AppContext = Depends(get_context),
+):
+    """Registro de auditoría: cada tic procesado para este paciente.
+
+    Se puede filtrar por origen para ver sólo lo que aportó un actor
+    concreto del entorno clínico.
+    """
+    return ctx.tics.historial(paciente_id, origen=origen.value if origen else None)
+
+
+@router.get("/pacientes/{paciente_id}/origenes")
+async def origenes(paciente_id: str, ctx: AppContext = Depends(get_context)):
+    """Qué actores han aportado información sobre este paciente."""
+    return ctx.tics.por_origen(paciente_id)
+
+
+@router.get("/pacientes/{paciente_id}/documentos")
+async def documentos(
+    paciente_id: str,
+    tipo: str | None = None,
+    ctx: AppContext = Depends(get_context),
+):
+    """Recetas e informes emitidos, con su contenido estructurado."""
+    return ctx.documentos.listar(paciente_id, tipo)
 
 
 @router.get("/pacientes/{paciente_id}/holon")

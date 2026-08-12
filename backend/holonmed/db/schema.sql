@@ -123,10 +123,21 @@ CREATE TABLE IF NOT EXISTS paciente (
 CREATE INDEX IF NOT EXISTS idx_paciente_nombre ON paciente(nombre);
 
 -- Un tic es un ciclo completo de procesamiento.
+--
+-- `origen` distingue qué proceso lo produjo: la consulta, el laboratorio,
+-- la farmacia. Los tres alimentan la misma historia pero no valen lo
+-- mismo, y sin el campo un informe de laboratorio y una nota dictada son
+-- indistinguibles a posteriori.
+--
+-- `actor` es quién lo asertó. Hoy es informativo porque no hay
+-- autenticación; existe desde ahora para que añadirla después no obligue
+-- a migrar registros clínicos ya escritos.
 CREATE TABLE IF NOT EXISTS tic (
     id             INTEGER PRIMARY KEY,
     paciente_id    TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
     timestamp      TEXT NOT NULL,
+    origen         TEXT NOT NULL DEFAULT 'consulta',
+    actor          TEXT,
     skill          TEXT NOT NULL,
     texto_original TEXT NOT NULL,
     resumen        TEXT NOT NULL DEFAULT '',
@@ -134,6 +145,24 @@ CREATE TABLE IF NOT EXISTS tic (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tic_paciente ON tic(paciente_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_tic_origen ON tic(paciente_id, origen, timestamp DESC);
+
+-- Documentos emitidos: recetas, informes.
+--
+-- Van colgados de un tic para que aparezcan en la historia. Antes una
+-- receta sólo generaba un PDF y no dejaba rastro: el fármaco prescrito
+-- desaparecía del registro en cuanto se cerraba la ventana.
+CREATE TABLE IF NOT EXISTS documento (
+    id          INTEGER PRIMARY KEY,
+    tic_id      INTEGER REFERENCES tic(id) ON DELETE CASCADE,
+    paciente_id TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    tipo        TEXT NOT NULL,   -- receta | informe | …
+    archivo     TEXT,            -- nombre del PDF en el directorio de documentos
+    datos       TEXT,            -- JSON con el contenido estructurado
+    creado      TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_documento_paciente ON documento(paciente_id, creado DESC);
 
 -- Se guardan TODOS los infones, incluidos los descartados: es lo que
 -- permite auditar después si el validador está rechazando de más.

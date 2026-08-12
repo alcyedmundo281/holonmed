@@ -22,6 +22,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class OrigenTic(str, Enum):
+    """Qué proceso produjo un tic.
+
+    En un entorno clínico real la información no llega de un solo sitio: la
+    consulta dicta una narrativa, el laboratorio devuelve un informe, la
+    farmacia dispensa. Los tres alimentan la misma historia, pero no valen
+    lo mismo ni se auditan igual, así que el origen tiene que quedar
+    registrado en el dato y no deducirse del contexto.
+
+    Es además la pieza sobre la que se apoyará el multiusuario: cuando haya
+    autenticación, el origen saldrá del rol de quien escribe.
+    """
+
+    CONSULTA = "consulta"
+    LABORATORIO = "laboratorio"
+    FARMACIA = "farmacia"
+    ENFERMERIA = "enfermeria"
+    IMAGEN = "imagen"
+    OTRO = "otro"
+
+
 class EstadoInfon(str, Enum):
     """Veredicto del validador de tres capas."""
 
@@ -103,6 +124,12 @@ class ResultadoTic(BaseModel):
     paciente_id: str
     texto_original: str
 
+    origen: OrigenTic = OrigenTic.CONSULTA
+    actor: str | None = Field(
+        default=None,
+        description="Quién asertó estos datos. Sin autenticación es informativo.",
+    )
+
     skill_activa: str
     resumen: str = ""
     infones: list[Infon] = Field(default_factory=list)
@@ -171,6 +198,8 @@ class CrystallizeRequest(BaseModel):
     skill: str | None = Field(
         default=None, description="Fuerza una skill y salta el triaje automático"
     )
+    origen: OrigenTic = OrigenTic.CONSULTA
+    actor: str | None = None
 
 
 class ChatRequest(BaseModel):

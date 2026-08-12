@@ -165,9 +165,53 @@ modo WAL las lecturas no se bloquean.
 | Tabla | Contenido |
 |-------|-----------|
 | `paciente` | Datos demográficos y antecedentes |
-| `tic` | Cada ciclo completo, con su texto original |
+| `tic` | Cada ciclo completo, con su texto original y su **origen** |
 | `infon` | **Todos** los infones, incluidos los descartados |
+| `documento` | Recetas e informes, colgados del tic que los originó |
 | `cita` | Agenda |
+
+## Actores del entorno clínico
+
+La información clínica no llega de un solo sitio. Cada tic declara de
+dónde viene:
+
+| Origen | Qué aporta |
+|--------|-----------|
+| `consulta` | Narrativa dictada por el clínico |
+| `laboratorio` | Informes de laboratorio, normalmente por PDF |
+| `farmacia` | Prescripciones emitidas |
+| `enfermeria` | Constantes, evolución de planta |
+| `imagen` | Informes radiológicos |
+
+Los tres primeros existían ya en el sistema original como un campo `type`
+en cada nota (`ClinicalHolon`, `LabResult`, `Prescription`) y se perdieron
+en la fusión. Recuperarlo destapó que **las recetas no se guardaban en
+ninguna parte**: se generaba el PDF y el fármaco prescrito desaparecía del
+registro, rompiendo la conciliación de la medicación en la visita
+siguiente.
+
+El origen no es una etiqueta decorativa:
+
+- Un informe de laboratorio y una nota dictada no son la misma clase de
+  evidencia, y a posteriori tienen que poder distinguirse.
+- La consulta de historial se filtra por origen sin recorrer todo.
+- `actor` registra quién asertó el dato. Hoy es informativo porque no hay
+  autenticación, pero existe desde ahora para que añadirla después no
+  obligue a migrar registros clínicos ya escritos.
+
+Los infones **heredan** el origen de su tic por join. Duplicarlo en cada
+infón permitiría que ambos valores se contradijeran.
+
+### Migraciones
+
+`CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, así que las
+columnas nuevas se añaden explícitamente en `Database._migrar`, que corre
+**antes** del script de esquema: éste crea índices sobre columnas nuevas y
+sobre una tabla antigua fallaría entero.
+
+No hay número de versión de esquema: son pocas columnas, comprobar
+`PRAGMA table_info` es barato, y así no hay forma de que una base quede a
+medio migrar.
 
 Se guardan también los descartados: es lo que permite auditar después si el
 validador está rechazando de más. La línea de tiempo consultable filtra por

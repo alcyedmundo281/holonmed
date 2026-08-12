@@ -271,3 +271,118 @@ def test_solo_se_actualizan_campos_de_la_lista_blanca(entorno):
     assert repo.actualizar("p1", "id", "otro") is False
     assert repo.actualizar("p1", "creado", "2020") is False
     assert repo.obtener("p1").nombre == "Nuevo"
+
+
+# --- Origen: interconexión entre actores del entorno clínico -----------
+
+
+def _tic(paciente="p1", origen=None, resumen="", actor=None):
+    from holonmed.models import OrigenTic
+
+    r = ResultadoTic(
+        paciente_id=paciente,
+        texto_original="…",
+        skill_activa="prueba",
+        origen=origen or OrigenTic.CONSULTA,
+        actor=actor,
+        resumen=resumen,
+    )
+    return r
+
+
+def test_el_origen_por_defecto_es_la_consulta(entorno):
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tics.guardar(_tic())
+    assert tics.historial("p1")[0]["origen"] == "consulta"
+
+
+def test_cada_actor_queda_registrado_en_su_tic(entorno):
+    """Un informe de laboratorio y una nota dictada alimentan la misma
+    historia, pero no son la misma clase de evidencia."""
+    from holonmed.models import OrigenTic
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tics.guardar(_tic(origen=OrigenTic.CONSULTA))
+    tics.guardar(_tic(origen=OrigenTic.LABORATORIO, actor="lab-central"))
+    tics.guardar(_tic(origen=OrigenTic.FARMACIA, resumen="Receta: Paracetamol"))
+
+    origenes = {f["origen"]: f["tics"] for f in tics.por_origen("p1")}
+    assert origenes == {"consulta": 1, "laboratorio": 1, "farmacia": 1}
+
+
+def test_el_historial_se_filtra_por_origen(entorno):
+    from holonmed.models import OrigenTic
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tics.guardar(_tic(origen=OrigenTic.CONSULTA))
+    tics.guardar(_tic(origen=OrigenTic.LABORATORIO, actor="lab-central"))
+
+    solo_lab = tics.historial("p1", origen="laboratorio")
+    assert len(solo_lab) == 1
+    assert solo_lab[0]["actor"] == "lab-central"
+    assert len(tics.historial("p1")) == 2
+
+
+def test_una_receta_queda_en_la_historia(entorno):
+    """Antes una receta sólo producía un PDF y el fármaco prescrito
+    desaparecía del registro."""
+    from holonmed.db import DocumentoRepo
+    from holonmed.models import OrigenTic
+
+    db, grafo, _ = entorno
+    tics, docs = TicRepo(db, grafo), DocumentoRepo(db)
+
+    tic_id = tics.guardar(_tic(origen=OrigenTic.FARMACIA, resumen="Receta: Amoxicilina 500 mg"))
+    docs.registrar(
+        "p1",
+        tipo="receta",
+        archivo="receta_p1.pdf",
+        datos={"items": [{"farmaco": "Amoxicilina", "concentracion": "500 mg"}]},
+        tic_id=tic_id,
+    )
+
+    recetas = docs.listar("p1", tipo="receta")
+    assert len(recetas) == 1
+    assert recetas[0]["datos"]["items"][0]["farmaco"] == "Amoxicilina"
+    # Y aparece en la línea de tiempo, no sólo como archivo suelto.
+    entrada = tics.historial("p1", origen="farmacia")[0]
+    assert entrada["documentos"] == 1
+    assert "Amoxicilina" in entrada["resumen"]
+
+
+def test_una_base_anterior_se_migra_sin_perder_datos(tmp_path):
+    """`CREATE TABLE IF NOT EXISTS` no toca una tabla existente, así que
+    las columnas nuevas hay que añadirlas explícitamente."""
+    import sqlite3
+
+    ruta = tmp_path / "antigua.db"
+    cx = sqlite3.connect(ruta)
+    cx.executescript(
+        """
+        CREATE TABLE paciente (id TEXT PRIMARY KEY, nombre TEXT NOT NULL,
+            edad INTEGER, sexo TEXT, telefono TEXT,
+            antecedentes TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL);
+        CREATE TABLE tic (id INTEGER PRIMARY KEY, paciente_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL, skill TEXT NOT NULL,
+            texto_original TEXT NOT NULL, resumen TEXT NOT NULL DEFAULT '',
+            inferencia TEXT);
+        INSERT INTO paciente VALUES ('p1','Antiguo',NULL,NULL,NULL,'','2026-01-01');
+        INSERT INTO tic VALUES (1,'p1','2026-01-01','vieja','texto','resumen',NULL);
+        """
+    )
+    cx.commit()
+    cx.close()
+
+    db = Database(ruta)
+    assert db.disponible
+
+    columnas = {f[1] for f in db.conexion().execute("PRAGMA table_info(tic)")}
+    assert {"origen", "actor"} <= columnas
+
+    # El tic anterior sigue ahí y adopta el origen por defecto.
+    fila = db.conexion().execute("SELECT origen, resumen FROM tic WHERE id = 1").fetchone()
+    assert fila["origen"] == "consulta"
+    assert fila["resumen"] == "resumen"
