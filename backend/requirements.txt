@@ -25,5 +25,9 @@ rapidfuzz>=3.10
 reportlab>=4.2
 pypdf>=5.1
 
+# --- Protocolos clínicos ---
+# El frontmatter de las skills es YAML.
+pyyaml>=6.0
+
 # --- Utilidades ---
 dateparser>=1.2

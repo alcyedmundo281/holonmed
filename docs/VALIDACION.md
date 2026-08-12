@@ -66,9 +66,29 @@ defensa abdominal, amilasa 1200, lipasa 890, calcio 6.8, leucocitos
    contiene «alcohol». Se añadieron variantes (`enolismo`, `bebedor`,
    `etilismo`, `colelitiasis`…) y un test que documenta la limitación.
 
+### Progresión sobre la misma nota
+
+| Ejecución | Validados | Cambio |
+|---|---|---|
+| 1ª | 4 / 9 | punto de partida |
+| 2ª | 6 / 9 | auditor acepta evidencia textual |
+| 3ª | 7 / 10 | factores de riesgo de la nota actual |
+| 4ª | **9 / 10** | hints resueltos contra el vocabulario |
+
+El salto de la cuarta vino de migrar los protocolos a frontmatter YAML y
+añadir `holonmed skills --validar`. La validación destapó que los hints
+`Hiperlipasemia (>3x)` e `Hiperamilasemia (>3x)` no existían en el
+vocabulario, que sólo conocía los términos sin el cualificador. Los infones
+salían con `sistema: skill` y sin linaje ni mapeo a CIE-10 — degradación
+silenciosa que ninguna ejecución delataba a simple vista.
+
+El único hallazgo que sigue sin validar es Hemoconcentración, y el motivo
+es un fallo del modelo, no del sistema: dice que «el texto no proporciona
+datos suficientes (ej. Htct)» cuando la nota incluye «hematocrito 48».
+
 ### Lo que sigue fallando
 
-Tras las correcciones, 7 de 10 hallazgos validados. Los tres restantes
+Con 9 de 10 validados, Los tres restantes
 apuntan al mismo sitio: **el auditor es inconsistente con un modelo de
 esta escala**.
 

@@ -149,6 +149,11 @@ def main(argv=None) -> int:
 
     p_skill = sub.add_parser("skills", help="Inspecciona los protocolos")
     p_skill.add_argument("--nombre", default=None)
+    p_skill.add_argument(
+        "--validar",
+        action="store_true",
+        help="Comprueba los protocolos contra el vocabulario cargado",
+    )
 
     args = parser.parse_args(argv)
 
@@ -159,21 +164,73 @@ def main(argv=None) -> int:
     if args.comando == "tic":
         return asyncio.run(_tic(args.texto, args.paciente, args.skill))
     if args.comando == "skills":
-        from .core import SkillManager
-
-        gestor = SkillManager()
-        if args.nombre:
-            skill = gestor.cargar(args.nombre)
-            if not skill:
-                print(f"No existe la skill '{args.nombre}'", file=sys.stderr)
-                return 1
-            print(json.dumps(skill.hints_snomed(), indent=2, ensure_ascii=False))
-        else:
-            for nombre in gestor.listar():
-                skill = gestor.cargar(nombre)
-                print(f"{nombre}: {skill.descripcion} ({len(skill.hints_snomed())} hints)")
-        return 0
+        return _skills(args)
     return 1
+
+
+def _skills(args) -> int:
+    from .config import get_settings
+    from .core import SkillManager, TerminologyIndex
+    from .db import Database, GraphRepo
+
+    gestor = SkillManager()
+
+    index = None
+    if args.validar:
+        db = Database(get_settings().db_path)
+        index = TerminologyIndex(db, GraphRepo(db))
+        if not index.disponible():
+            print("Sin vocabulario cargado: los códigos no se comprobarán.")
+            index = None
+
+    nombres = [args.nombre] if args.nombre else gestor.listar()
+    problemas_totales = 0
+
+    for nombre in nombres:
+        skill = gestor.cargar(nombre)
+        if not skill:
+            print(f"No existe la skill '{nombre}'", file=sys.stderr)
+            return 1
+
+        print()
+        print(f"{skill.nombre}  —  {skill.titulo}  (v{skill.version})")
+        print(f"  {skill.descripcion}")
+        print(
+            f"  {len(skill.signos)} signos · {len(skill.laboratorio)} criterios · "
+            f"{len(skill.hints())} hints"
+        )
+        if skill.ambito_grafo:
+            print(f"  ámbito de grafo: {', '.join(skill.ambito_grafo)}")
+        if skill.bayes.declarado:
+            print(
+                f"  bayes: base {skill.bayes.probabilidad_base:.1%}, "
+                f"{len(skill.bayes.factores_riesgo)} factores de riesgo"
+            )
+
+        if args.nombre and not args.validar:
+            print("  hints:")
+            print(json.dumps(skill.hints(), indent=4, ensure_ascii=False))
+
+        if args.validar:
+            fallos = skill.problemas(index)
+            problemas_totales += len(fallos)
+            if fallos:
+                print(f"  {len(fallos)} problema(s):")
+                for f in fallos:
+                    print(f"    - {f}")
+            else:
+                print("  sin problemas")
+
+    if args.validar:
+        print()
+        print(
+            f"{problemas_totales} problema(s) en total."
+            if problemas_totales
+            else "Todos los protocolos son válidos."
+        )
+        return 1 if problemas_totales else 0
+    print()
+    return 0
 
 
 if __name__ == "__main__":

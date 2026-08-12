@@ -25,6 +25,7 @@ dependencies = [
     "rapidfuzz>=3.10",
     "reportlab>=4.2",
     "pypdf>=5.1",
+    "pyyaml>=6.0",
     "dateparser>=1.2",
 ]
 

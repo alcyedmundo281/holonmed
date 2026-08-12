@@ -1,4 +1,18 @@
-# SKILL: RECETA MÉDICA
+---
+titulo: Receta médica
+descripcion: >-
+  Estructura una petición de prescripción. No decide el tratamiento ni
+  extrae hallazgos clínicos.
+version: "2.0.0"
+
+# Este protocolo no participa en la cristalización: no declara signos,
+# criterios ni modelo bayesiano porque no extrae hallazgos. Lo usa el
+# router conversacional para dar formato a una receta.
+tipo: documento
+ambito_grafo: []
+---
+
+# RECETA MÉDICA
 
 Extrae la información de una petición de prescripción y devuélvela
 estructurada. **No decides el tratamiento**: sólo estructuras lo que el

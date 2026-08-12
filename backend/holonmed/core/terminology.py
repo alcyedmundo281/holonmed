@@ -86,6 +86,23 @@ class TerminologyIndex:
             return None
         return Candidato(fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0)
 
+    def buscar_codigo(self, codigo: str, sistema: str | None = None) -> Candidato | None:
+        """Localiza un concepto por su código. Se usa para validar skills."""
+        if sistema:
+            sql = """SELECT id, codigo, sistema, termino FROM concepto
+                     WHERE codigo = ? AND sistema = ? LIMIT 1"""
+            args = (codigo, sistema)
+        else:
+            sql = "SELECT id, codigo, sistema, termino FROM concepto WHERE codigo = ? LIMIT 1"
+            args = (codigo,)
+        try:
+            fila = self._db.conexion().execute(sql, args).fetchone()
+        except sqlite3.Error:
+            return None
+        if not fila:
+            return None
+        return Candidato(fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0)
+
     def buscar_candidatos(self, texto: str, limite: int = 15) -> list[Candidato]:
         """Recuperación amplia: FTS5 primero, puntuado difuso después."""
         exacto = self.buscar_exacto(texto)

@@ -1,15 +1,54 @@
-"""Tests del parseo de skills y la extracción de skill-hints."""
+"""Tests del parseo de protocolos y la extracción de skill-hints."""
+
+from pathlib import Path
+
+import pytest
 
 from holonmed.core.skills import Skill, SkillManager
 
-SKILL_DEMO = """# SKILL: PRUEBA
+SKILL_YAML = """---
+titulo: Condición de prueba
+descripcion: Protocolo sintético para los tests
+version: "1.0.0"
 
-BASE DE CONOCIMIENTO:
+condicion:
+  nombre: Condición de prueba
+  codigos: { snomed: "111111" }
+
+ambito_grafo: [HM:0730]
+
+modelo_bayesiano:
+  probabilidad_base: 0.05
+  factores_riesgo:
+    tabaquismo: 2.0
+
+signos:
+  - nombre: Dolor epigástrico
+    codigos: { holonmed: "HM:0202", snomed: "79922009" }
+    lr: 2.1
+    fuente: Estudio de prueba
+  - nombre: Vómitos
+    codigos: { snomed: "422400008" }
+    lr: 1.6
+    fuente: Estudio de prueba
+
+laboratorio:
+  - parametro: Calcio
+    corte_inferior: 8.5
+    termino_si_bajo: Hipocalcemia
+    codigos: { holonmed: "HM:0721", snomed: "5291005" }
+---
+
+# PROTOCOLO DE PRUEBA
+
+INSTRUCCIONES: extrae hallazgos.
+"""
+
+# Formato anterior al frontmatter, que debe seguir funcionando.
+SKILL_ANTIGUO = """# SKILL: PRUEBA ANTIGUA
 
 {
-    "@context": "https://schema.org",
-    "@type": "MedicalCondition",
-    "name": "Condición de prueba",
+    "name": "Condición antigua",
     "snomed_id": "111111",
     "modelo_bayesiano": {
         "probabilidad_base": 0.05,
@@ -17,12 +56,8 @@ BASE DE CONOCIMIENTO:
     },
     "criterios_laboratorio": {
         "reglas": [
-            {
-                "parametro": "Calcio",
-                "corte_inferior": 8.5,
-                "termino_si_bajo": "Hipocalcemia",
-                "snomed_id": "5291005"
-            }
+            {"parametro": "Calcio", "corte_inferior": 8.5,
+             "termino_si_bajo": "Hipocalcemia", "snomed_id": "5291005"}
         ]
     },
     "signDetected": [
@@ -35,65 +70,152 @@ INSTRUCCIONES: extrae hallazgos.
 """
 
 
-def test_la_descripcion_sale_de_la_primera_linea():
-    assert Skill("prueba", SKILL_DEMO).descripcion == "SKILL: PRUEBA"
+# --- Frontmatter ------------------------------------------------------
 
 
-def test_se_parsea_el_bloque_json_embebido():
-    skill = Skill("prueba", SKILL_DEMO)
-    assert skill.json_principal["name"] == "Condición de prueba"
-    assert skill.json_principal["modelo_bayesiano"]["probabilidad_base"] == 0.05
+def test_la_descripcion_sale_del_frontmatter():
+    assert Skill("p", SKILL_YAML).descripcion == "Protocolo sintético para los tests"
+
+
+def test_el_frontmatter_no_entra_en_el_prompt():
+    """El modelo recibe la prosa; el YAML es para el código.
+
+    Colarlo en el prompt gastaría contexto en sintaxis que el modelo no
+    tiene que interpretar, y le daría los códigos que precisamente debe
+    deducir el validador.
+    """
+    contenido = Skill("p", SKILL_YAML).contenido
+    assert "PROTOCOLO DE PRUEBA" in contenido
+    assert "ambito_grafo" not in contenido
+    assert "modelo_bayesiano" not in contenido
+
+
+def test_se_parsean_signos_y_laboratorio():
+    skill = Skill("p", SKILL_YAML)
+    assert len(skill.signos) == 2
+    assert len(skill.laboratorio) == 1
+    assert skill.signos[0].lr == 2.1
+    assert skill.laboratorio[0].corte_inferior == 8.5
+
+
+def test_el_ambito_de_grafo_queda_disponible():
+    assert Skill("p", SKILL_YAML).ambito_grafo == ["HM:0730"]
 
 
 def test_los_hints_salen_de_signos_y_de_laboratorio():
-    hints = Skill("prueba", SKILL_DEMO).hints_snomed()
-    assert hints["dolor epigástrico"] == "79922009"
-    assert hints["vómitos"] == "422400008"  # forma anidada code.codeValue
-    assert hints["hipocalcemia"] == "5291005"  # derivado de criterios_laboratorio
+    hints = Skill("p", SKILL_YAML).hints()
+    assert hints["dolor epigástrico"] == "HM:0202"  # prioriza holonmed
+    assert hints["vómitos"] == "422400008"  # sólo hay snomed
+    assert hints["hipocalcemia"] == "HM:0721"  # derivado del laboratorio
 
 
 def test_las_claves_de_los_hints_se_normalizan_a_minusculas():
-    assert all(k == k.lower() for k in Skill("p", SKILL_DEMO).hints_snomed())
+    assert all(k == k.lower() for k in Skill("p", SKILL_YAML).hints())
 
 
 def test_el_vocabulario_preferido_no_tiene_duplicados():
-    vocabulario = Skill("prueba", SKILL_DEMO).vocabulario_preferido()
+    vocabulario = Skill("p", SKILL_YAML).vocabulario_preferido()
     assert len(vocabulario) == len(set(vocabulario))
     assert "Dolor epigástrico" in vocabulario
 
 
-def test_un_skill_sin_json_no_revienta():
-    skill = Skill("plano", "# Sólo texto\nSin JSON aquí.")
-    assert skill.hints_snomed() == {}
-    assert skill.json_principal == {}
+def test_la_estructura_para_bayes_conserva_los_lr():
+    bayes = Skill("p", SKILL_YAML).para_bayes()
+    assert bayes["modelo_bayesiano"]["probabilidad_base"] == 0.05
+    assert {s["name"]: s["bayes_lr"] for s in bayes["signDetected"]} == {
+        "Dolor epigástrico": 2.1,
+        "Vómitos": 1.6,
+    }
+
+
+def test_un_frontmatter_roto_no_revienta(caplog):
+    """Debe fallar de forma ruidosa, no silenciosa: un protocolo sin
+    códigos ni cortes seguiría cargándose y usándose."""
+    roto = "---\ntitulo: [sin cerrar\n---\n\n# Cuerpo\n"
+    skill = Skill("roto", roto)
+    assert skill.hints() == {}
+    assert "Cuerpo" in skill.contenido
+    assert any("Frontmatter inválido" in r.message for r in caplog.records)
+
+
+# --- Compatibilidad con el formato antiguo ----------------------------
+
+
+def test_el_formato_antiguo_sigue_funcionando():
+    skill = Skill("antiguo", SKILL_ANTIGUO)
+    hints = skill.hints()
+    assert hints["dolor epigástrico"] == "79922009"
+    assert hints["vómitos"] == "422400008"  # forma anidada code.codeValue
+    assert hints["hipocalcemia"] == "5291005"
+    assert skill.para_bayes()["modelo_bayesiano"]["probabilidad_base"] == 0.05
 
 
 def test_se_tolera_la_basura_de_copiar_y_pegar():
-    """Espacios no separables y escapes de Markdown no deben romper el parseo."""
-    sucio = SKILL_DEMO.replace(" ", "\xa0", 5).replace('"name"', '\\"name\\"', 1)
-    assert Skill("sucio", sucio).hints_snomed()
+    """Espacios no separables y escapes de Markdown en el formato antiguo."""
+    sucio = SKILL_ANTIGUO.replace(" ", "\xa0", 5).replace('"name"', '\\"name\\"', 1)
+    assert Skill("sucio", sucio).hints()
 
 
-def test_los_skills_del_repositorio_son_validos(tmp_path):
-    """Los protocolos que se distribuyen deben parsear sin errores."""
-    from pathlib import Path
+def test_un_skill_sin_estructura_no_revienta():
+    skill = Skill("plano", "# Sólo texto\nSin nada estructurado.")
+    assert skill.hints() == {}
+    assert skill.signos == []
+    assert not skill.bayes.declarado
 
-    directorio = Path(__file__).resolve().parents[1] / "skills"
-    archivos = list(directorio.glob("*.md"))
-    assert archivos, "No hay skills en el repositorio"
 
-    for ruta in archivos:
+# --- Los protocolos del repositorio -----------------------------------
+
+
+DIRECTORIO_SKILLS = Path(__file__).resolve().parents[1] / "skills"
+
+
+def _skills_del_repo():
+    return sorted(DIRECTORIO_SKILLS.glob("*.md"))
+
+
+def test_hay_protocolos_en_el_repositorio():
+    assert _skills_del_repo()
+
+
+@pytest.mark.parametrize("ruta", _skills_del_repo(), ids=lambda p: p.stem)
+def test_los_protocolos_del_repositorio_son_validos(ruta):
+    """Cada protocolo distribuido debe parsear y pasar su propia revisión.
+
+    Sin índice terminológico, así que no comprueba que los códigos
+    existan; para eso está `holonmed skills --validar`, que necesita el
+    vocabulario cargado.
+    """
+    skill = Skill(ruta.stem, ruta.read_text(encoding="utf-8"))
+    assert skill.descripcion
+    assert skill.problemas() == []
+
+
+@pytest.mark.parametrize("ruta", _skills_del_repo(), ids=lambda p: p.stem)
+def test_los_protocolos_clinicos_aportan_hints(ruta):
+    skill = Skill(ruta.stem, ruta.read_text(encoding="utf-8"))
+    if skill.tipo != "clinico":
+        pytest.skip("las skills de documento no extraen hallazgos")
+    assert skill.hints(), f"{ruta.name} no aporta hints"
+
+
+def test_todo_lr_declarado_cita_su_fuente():
+    """Un likelihood ratio sin procedencia es un número inventado con
+    formato científico, y mueve la probabilidad que ve un clínico."""
+    for ruta in _skills_del_repo():
         skill = Skill(ruta.stem, ruta.read_text(encoding="utf-8"))
-        assert skill.descripcion
-        if ruta.stem != "receta":  # la receta no declara terminología
-            assert skill.hints_snomed(), f"{ruta.name} no aporta hints SNOMED"
+        for signo in skill.signos:
+            if signo.lr is not None and signo.lr != 1.0:
+                assert signo.fuente, f"{ruta.name}: '{signo.nombre}' sin fuente"
+
+
+# --- Carga segura -----------------------------------------------------
 
 
 class TestCargaSegura:
     def _gestor(self, tmp_path):
         from holonmed.config import Settings
 
-        (tmp_path / "valida.md").write_text(SKILL_DEMO, encoding="utf-8")
+        (tmp_path / "valida.md").write_text(SKILL_YAML, encoding="utf-8")
         return SkillManager(Settings(skills_dir=tmp_path))
 
     def test_carga_una_skill_existente(self, tmp_path):
@@ -103,10 +225,17 @@ class TestCargaSegura:
         assert self._gestor(tmp_path).cargar("valida.md") is not None
 
     def test_rechaza_el_recorrido_de_directorios(self, tmp_path):
-        """El nombre puede venir de un LLM: no debe poder escapar del directorio."""
+        """El nombre puede venir de un LLM: no debe escapar del directorio."""
         gestor = self._gestor(tmp_path)
         for malicioso in ("../../../etc/passwd", "..\\..\\windows\\win.ini", "/etc/hosts"):
             assert gestor.cargar(malicioso) is None
 
     def test_siempre_hay_una_skill_por_defecto(self, tmp_path):
         assert self._gestor(tmp_path).cargar_o_defecto("inexistente") is not None
+
+    def test_se_localizan_protocolos_por_ambito_de_grafo(self, tmp_path):
+        """Permite preguntar qué protocolos aplican a un paciente a partir
+        de los conceptos que ya tiene, sin depender del texto de hoy."""
+        gestor = self._gestor(tmp_path)
+        assert [s.nombre for s in gestor.para_concepto({"HM:0730"})] == ["valida"]
+        assert gestor.para_concepto({"HM:9999"}) == []
