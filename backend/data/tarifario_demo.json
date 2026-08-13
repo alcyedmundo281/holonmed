@@ -1,0 +1,109 @@
+{
+  "$comentario": [
+    "Tarifario de DEMOSTRACIÓN. Los importes son inventados y no",
+    "corresponden a ningún catálogo real.",
+    "",
+    "Existe para que el circuito orden → ejecución → cargo funcione recién",
+    "clonado el repositorio, sin depender de ningún tarifario con licencia.",
+    "",
+    "Para usar uno real —el tarifario nacional de tu país, el de una",
+    "aseguradora, CPT si tienes licencia de la AMA— se carga igual, con su",
+    "propio `sistema`, y no hay que tocar código:",
+    "",
+    "  python scripts/importar_tarifario.py --json mi_tarifario.json",
+    "  python scripts/importar_tarifario.py --csv tarifas.csv --sistema iess",
+    "",
+    "`equivale_a` enlaza cada prestación con conceptos del vocabulario",
+    "clínico. Es lo que permite que una orden de «preparación de",
+    "citostáticos» encuentre su precio sin que nadie escriba esa",
+    "correspondencia en el código."
+  ],
+
+  "sistema": "demo",
+  "vigente_desde": "2026-01-01",
+  "moneda": "USD",
+
+  "prestaciones": [
+    {
+      "codigo": "FARM-001",
+      "descripcion": "Preparación de citostáticos en cabina de seguridad biológica",
+      "unidad": "preparación",
+      "importe": 48.5,
+      "equivale_a": ["HM:2101"],
+      "$nota": "De las prestaciones que más se dejan de facturar: el personal la ejecuta y no la registra porque está atendiendo."
+    },
+    {
+      "codigo": "FARM-002",
+      "descripcion": "Preparación de nutrición parenteral individualizada",
+      "unidad": "bolsa",
+      "importe": 62.0,
+      "equivale_a": ["HM:2102"]
+    },
+    {
+      "codigo": "FARM-003",
+      "descripcion": "Preparación de mezcla intravenosa",
+      "unidad": "preparación",
+      "importe": 9.75,
+      "equivale_a": ["HM:2103"]
+    },
+
+    {
+      "codigo": "ENF-001",
+      "descripcion": "Administración de quimioterapia intravenosa",
+      "unidad": "sesión",
+      "importe": 85.0,
+      "equivale_a": ["HM:2201"]
+    },
+    {
+      "codigo": "ENF-002",
+      "descripcion": "Administración de medicación intravenosa",
+      "unidad": "administración",
+      "importe": 12.0,
+      "equivale_a": ["HM:2202"]
+    },
+    {
+      "codigo": "ENF-003",
+      "descripcion": "Administración de nutrición parenteral",
+      "unidad": "sesión",
+      "importe": 28.0,
+      "equivale_a": ["HM:2203"]
+    },
+
+    {
+      "codigo": "IMG-001",
+      "descripcion": "Ecografía abdominal",
+      "unidad": "estudio",
+      "importe": 55.0,
+      "equivale_a": ["HM:2301"]
+    },
+    {
+      "codigo": "IMG-002",
+      "descripcion": "Tomografía de abdomen con contraste",
+      "unidad": "estudio",
+      "importe": 210.0,
+      "equivale_a": ["HM:2302"]
+    },
+    {
+      "codigo": "IMG-003",
+      "descripcion": "Ecografía a pie de cama (POCUS)",
+      "unidad": "estudio",
+      "importe": 30.0,
+      "equivale_a": ["HM:2305"]
+    },
+
+    {
+      "codigo": "LAB-001",
+      "descripcion": "Determinación de lipasa sérica",
+      "unidad": "determinación",
+      "importe": 14.5,
+      "equivale_a": ["HM:2303"]
+    },
+    {
+      "codigo": "LAB-002",
+      "descripcion": "Determinación de amilasa sérica",
+      "unidad": "determinación",
+      "importe": 12.5,
+      "equivale_a": ["HM:2304"]
+    }
+  ]
+}

@@ -246,3 +246,88 @@ Tres superficies reciben datos derivados de la salida de un LLM:
 
 Los nombres de documento en `/api/documentos/{nombre}` se resuelven y se
 comprueba la contención antes de servirlos.
+
+
+## Facturación
+
+La cadena es deliberada y no se puede saltar ningún eslabón:
+
+```
+nota médica (P) ──► ORDEN ──► ejecución por un actor ──► cargo
+                      ↑                 ↑
+                  autoriza       confirma que se hizo
+```
+
+Una orden no describe: **autoriza**. Es un acto de habla que crea una
+obligación, y por eso es la fuente de verdad para facturar. La ejecución
+confirma que alguien la cumplió. El cargo sólo existe donde coinciden.
+
+Eso convierte la propiedad antifraude en algo **estructural**: `cargo`
+referencia siempre una `orden`. Sin autorización no hay cargo, no porque
+se lo pidamos amablemente a un modelo sino porque no existe la fila.
+
+### El descuadre vale más como seguridad que como dinero
+
+De los tres resultados de la conciliación, sólo uno es de facturación:
+
+| Situación | Qué significa |
+|-----------|---------------|
+| Orden sin ejecución | El paciente no recibió lo prescrito |
+| Ejecución sin orden | Administración no autorizada |
+| Orden + ejecución | Facturable |
+
+Los dos primeros son incidentes clínicos que hoy se detectan tarde o
+nunca. El mismo mecanismo que cuadra la cuenta cuadra la medicación, y de
+las dos cosas la segunda importa más.
+
+Por eso el módulo se llama `conciliacion` y no `facturador`: factura como
+efecto secundario de comprobar que lo ordenado se cumplió.
+
+### Tarifarios: un vocabulario más
+
+Un catálogo de precios se carga con su propio `sistema`, igual que SNOMED
+o CIE-10, y el enlace entre concepto clínico y código facturable usa la
+misma tabla `mapeo`. No hay mecanismo nuevo: cada hospital o aseguradora
+carga el suyo y el resto del sistema no se entera.
+
+```bash
+python scripts/importar_tarifario.py --json tarifario_iess.json
+python scripts/importar_tarifario.py --csv tarifas.csv --sistema privado
+```
+
+La clave de `tarifa` incluye la fecha de vigencia y nunca se sobrescribe
+una entrada antigua: una cuenta de hace un año debe poder reconstruirse
+con los precios de entonces, no con los de hoy.
+
+Mismo principio de licencias que con la terminología: el código que lee
+los catálogos es libre; los catálogos los aporta quien tenga derecho a
+usarlos. El repositorio incluye uno de demostración con importes
+inventados.
+
+### Salvaguardas contra el sobrecódigo
+
+Un sistema que propone códigos facturables leyendo la narrativa es, con
+dos ajustes, una máquina de facturar de más. Las reglas son duras y están
+en los tests:
+
+1. **Sin orden no hay cargo.** Estructural.
+2. **Todo cargo nace propuesto.** Facturar exige que una persona lo
+   confirme; cobrarle a un paciente por algo que dedujo un modelo sin que
+   nadie lo revisara sería indefendible.
+3. **Sin código tarifario no se factura.** Un hueco de catálogo no
+   justifica aproximar un precio.
+4. **El modelo no ve importes durante la extracción.** Si no sabe qué
+   paga más, no puede optimizar por ello.
+
+Queda un riesgo que ninguna regla técnica evita: si documentar de cierta
+forma factura más, el clínico puede acabar describiendo la factura en vez
+del paciente. Por eso las sugerencias del sistema son reactivas —señalan
+lo que falta— y nunca proponen añadir prestaciones.
+
+### La cuenta como proyección
+
+El problema de las seis horas de espera al alta no es de velocidad de
+proceso: es que la cuenta se calcula en bloque al final. Aquí los cargos
+se acumulan según se concilian y `cuenta()` sólo proyecta lo acumulado.
+Al alta no hay nada que calcular, sólo que cerrar — y `cerrable` dice si
+queda algo sin resolver.

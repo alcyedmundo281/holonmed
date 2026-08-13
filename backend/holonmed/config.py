@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # extracción.
     formato_protocolo: str = "prosa"
 
+    # --- Facturación --------------------------------------------------
+    # Qué catálogo de precios se usa. Cada hospital o aseguradora carga el
+    # suyo con scripts/importar_tarifario.py; 'demo' trae importes
+    # inventados para que el circuito funcione recién clonado.
+    sistema_tarifario: str = "demo"
+    tarifario_demo: Path = RAIZ / "data" / "tarifario_demo.json"
+    autocargar_tarifario: bool = True
+
     # --- Umbrales del validador (seguridad clínica) ------------------
     threshold_validated: float = 85.0
     threshold_alert: float = 75.0

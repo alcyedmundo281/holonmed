@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .. import __version__
 from ..config import Settings, get_settings
 from .deps import AppContext
-from .routes import chat, clinical, documents, graph, patients
+from .routes import chat, clinical, documents, facturacion, graph, patients
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,6 +68,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(patients.router)
     app.include_router(documents.router)
     app.include_router(graph.router)
+    app.include_router(facturacion.router)
 
     @app.get("/health", tags=["sistema"])
     async def health():

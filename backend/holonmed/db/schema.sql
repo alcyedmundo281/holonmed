@@ -206,3 +206,90 @@ CREATE TABLE IF NOT EXISTS cita (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cita_paciente ON cita(paciente_id, fecha);
+
+-- =====================================================================
+-- FACTURACIÓN
+-- =====================================================================
+--
+-- La cadena es orden -> ejecución -> cargo, y no se puede saltar ningún
+-- eslabón: `cargo` referencia siempre una orden. Sin orden no hay cargo,
+-- no porque se lo pidamos amablemente a un modelo sino porque no existe
+-- la fila. La propiedad antifraude es estructural.
+
+-- Lo que el profesional autorizó. La fuente de verdad.
+CREATE TABLE IF NOT EXISTS orden (
+    id           INTEGER PRIMARY KEY,
+    paciente_id  TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    tic_id       INTEGER REFERENCES tic(id) ON DELETE SET NULL,
+    timestamp    TEXT NOT NULL,
+    termino      TEXT NOT NULL,
+    codigo       TEXT,
+    sistema      TEXT,
+    concepto_id  INTEGER REFERENCES concepto(id) ON DELETE SET NULL,
+    texto_origen TEXT NOT NULL DEFAULT '',   -- cita de la nota
+    prescriptor  TEXT,
+    detalle      TEXT,                        -- JSON: dosis, vía, frecuencia
+    estado       TEXT NOT NULL DEFAULT 'pendiente'
+);
+
+CREATE INDEX IF NOT EXISTS idx_orden_paciente ON orden(paciente_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_orden_estado ON orden(paciente_id, estado);
+
+-- Lo que un actor hizo. `orden_id` nulo mientras no se concilie, o si
+-- nunca hubo orden — que es un incidente, no un hueco.
+CREATE TABLE IF NOT EXISTS ejecucion (
+    id           INTEGER PRIMARY KEY,
+    paciente_id  TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    orden_id     INTEGER REFERENCES orden(id) ON DELETE SET NULL,
+    tic_id       INTEGER REFERENCES tic(id) ON DELETE SET NULL,
+    timestamp    TEXT NOT NULL,
+    termino      TEXT NOT NULL,
+    codigo       TEXT,
+    sistema      TEXT,
+    actor        TEXT,
+    origen       TEXT NOT NULL DEFAULT 'farmacia',
+    texto_origen TEXT NOT NULL DEFAULT '',
+    detalle      TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ejecucion_paciente ON ejecucion(paciente_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_ejecucion_orden ON ejecucion(orden_id);
+
+-- Tarifario. Un catálogo de precios es un vocabulario más, con su
+-- `sistema`: cada hospital o aseguradora carga el suyo sin tocar código.
+-- El enlace concepto clínico -> código tarifario usa la tabla `mapeo` que
+-- ya existía para CIE-10; no hace falta un mecanismo nuevo.
+--
+-- Los precios cambian, así que la clave incluye la fecha de vigencia y
+-- nunca se sobrescribe una tarifa antigua: una cuenta de hace un año debe
+-- poder reconstruirse con los precios de entonces.
+CREATE TABLE IF NOT EXISTS tarifa (
+    sistema       TEXT NOT NULL,
+    codigo        TEXT NOT NULL,
+    descripcion   TEXT NOT NULL,
+    unidad        TEXT,
+    importe       REAL NOT NULL,
+    moneda        TEXT NOT NULL DEFAULT 'USD',
+    vigente_desde TEXT NOT NULL,
+    PRIMARY KEY (sistema, codigo, vigente_desde)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tarifa_sistema ON tarifa(sistema, codigo);
+
+-- Un cargo nace propuesto: facturar exige que una persona lo confirme.
+CREATE TABLE IF NOT EXISTS cargo (
+    id                INTEGER PRIMARY KEY,
+    paciente_id       TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    orden_id          INTEGER NOT NULL REFERENCES orden(id) ON DELETE CASCADE,
+    ejecucion_id      INTEGER REFERENCES ejecucion(id) ON DELETE SET NULL,
+    creado            TEXT NOT NULL,
+    codigo_tarifario  TEXT NOT NULL,
+    sistema_tarifario TEXT NOT NULL,
+    descripcion       TEXT NOT NULL,
+    cantidad          REAL NOT NULL DEFAULT 1,
+    importe_unitario  REAL NOT NULL DEFAULT 0,
+    estado            TEXT NOT NULL DEFAULT 'propuesto',
+    UNIQUE (orden_id, ejecucion_id, codigo_tarifario)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cargo_paciente ON cargo(paciente_id, estado);

@@ -27,6 +27,14 @@ from ..db import (
     PacienteRepo,
     TicRepo,
 )
+from ..facturacion import (
+    CargoRepo,
+    Conciliador,
+    EjecucionRepo,
+    OrdenRepo,
+    Tarifario,
+    TarifarioRepo,
+)
 from ..llm import OllamaClient
 from ..services import PrescriptionService, SchedulingService
 
@@ -47,6 +55,20 @@ class AppContext:
         self.tics = TicRepo(self.database, self.grafo)
         self.citas = CitaRepo(self.database)
         self.documentos = DocumentoRepo(self.database)
+
+        # --- Facturación ---
+        self.ordenes = OrdenRepo(self.database)
+        self.ejecuciones = EjecucionRepo(self.database)
+        self.cargos = CargoRepo(self.database)
+        self.tarifas = TarifarioRepo(self.database)
+        self.conciliador = Conciliador(
+            self.ordenes,
+            self.ejecuciones,
+            self.cargos,
+            self.tarifas,
+            sistema_tarifario=self.settings.sistema_tarifario,
+        )
+        self._preparar_tarifario()
 
         self.terminologia = TerminologyIndex(self.database, self.grafo)
         self._preparar_vocabulario()
@@ -87,6 +109,20 @@ class AppContext:
         except Exception:  # noqa: BLE001 — sin vocabulario se arranca igual
             logger.exception("No se pudo cargar el vocabulario semilla")
 
+    def _preparar_tarifario(self) -> None:
+        """Carga el tarifario de demostración si no hay ninguno.
+
+        Mismo criterio que con el vocabulario semilla: el circuito debe
+        poder recorrerse recién clonado el repositorio. Los importes son
+        inventados y el catálogo real lo aporta cada hospital.
+        """
+        if not self.settings.autocargar_tarifario or self.tarifas.sistemas():
+            return
+        try:
+            Tarifario(self.database).cargar_json(self.settings.tarifario_demo)
+        except Exception:  # noqa: BLE001 — sin tarifario se arranca igual
+            logger.exception("No se pudo cargar el tarifario de demostración")
+
     async def cerrar(self) -> None:
         await self.llm.close()
         self.database.cerrar()
@@ -104,6 +140,7 @@ class AppContext:
                 "sistemas": self.terminologia.sistemas_cargados(),
             },
             "skills": self.skills.listar(),
+            "tarifarios": self.tarifas.sistemas(),
         }
 
 

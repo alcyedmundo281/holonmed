@@ -169,6 +169,14 @@ def main(argv=None) -> int:
     p_tic.add_argument("--paciente", default="demo")
     p_tic.add_argument("--skill", default=None)
 
+    p_cuenta = sub.add_parser("cuenta", help="Cuenta y conciliación de un paciente")
+    p_cuenta.add_argument("paciente")
+    p_cuenta.add_argument(
+        "--calcular",
+        action="store_true",
+        help="Deriva cargos de las parejas conciliadas antes de mostrar",
+    )
+
     p_skill = sub.add_parser("skills", help="Inspecciona los protocolos")
     p_skill.add_argument("--nombre", default=None)
     p_skill.add_argument(
@@ -185,9 +193,65 @@ def main(argv=None) -> int:
         return asyncio.run(_check())
     if args.comando == "tic":
         return asyncio.run(_tic(args.texto, args.paciente, args.skill))
+    if args.comando == "cuenta":
+        return _cuenta(args)
     if args.comando == "skills":
         return _skills(args)
     return 1
+
+
+def _cuenta(args) -> int:
+    from .api.deps import AppContext
+
+    ctx = AppContext()
+    cuenta = (
+        ctx.conciliador.facturar(args.paciente)
+        if args.calcular
+        else ctx.conciliador.cuenta(args.paciente)
+    )
+
+    print()
+    print(f"Cuenta de {args.paciente}   [{ctx.settings.sistema_tarifario}]")
+    print("=" * 66)
+
+    if cuenta.cargos:
+        print()
+        for c in cuenta.cargos:
+            marca = {"propuesto": "?", "confirmado": "+", "anulado": "-"}[c.estado.value]
+            print(f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}")
+            print(f"      {c.sistema_tarifario}:{c.codigo_tarifario}  orden {c.orden_id}")
+    else:
+        print("\n  Sin cargos.")
+
+    print()
+    print(f"  Confirmado           {cuenta.total_confirmado:>9.2f} {cuenta.moneda}")
+    print(f"  Pendiente de revisar {cuenta.total_propuesto:>9.2f} {cuenta.moneda}")
+
+    if cuenta.descuadres:
+        # Estos no son problemas de facturación. Una orden sin ejecutar
+        # significa que el paciente no recibió lo prescrito.
+        print(f"\n  DESCUADRES ({len(cuenta.descuadres)}) — revisar antes del alta:")
+        for d in cuenta.descuadres:
+            etiqueta = (
+                "orden sin ejecutar"
+                if d.tipo.value == "orden_sin_ejecutar"
+                else "ejecución sin orden"
+            )
+            print(f"    ! [{etiqueta:19}] {d.termino}")
+            print(f"      {d.detalle}")
+
+    print()
+    if cuenta.cerrable:
+        print("  Cuenta cerrable: nada pendiente.")
+    else:
+        pend = []
+        if cuenta.propuestos:
+            pend.append(f"{len(cuenta.propuestos)} cargo(s) por confirmar")
+        if cuenta.descuadres:
+            pend.append(f"{len(cuenta.descuadres)} descuadre(s)")
+        print(f"  NO cerrable: {', '.join(pend)}.")
+    print()
+    return 0
 
 
 def _skills(args) -> int:

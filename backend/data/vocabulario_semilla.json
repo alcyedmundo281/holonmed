@@ -13,7 +13,7 @@
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help"
   ],
-  "version": "1.2.0",
+  "version": "1.3.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1172,6 +1172,143 @@
         "PA"
       ],
       "icd10": "K85.9"
+    },
+    {
+      "codigo": "HM:2000",
+      "termino": "Procedimiento",
+      "semantica": "raiz"
+    },
+    {
+      "codigo": "HM:2100",
+      "termino": "Preparación farmacéutica",
+      "semantica": "agrupacion",
+      "padre": "HM:2000"
+    },
+    {
+      "codigo": "HM:2101",
+      "termino": "Preparación de citostáticos",
+      "semantica": "procedimiento",
+      "padre": "HM:2100",
+      "sinonimos": [
+        "preparación de quimioterapia",
+        "elaboración de citostáticos",
+        "reconstitución de citostáticos",
+        "mezcla de quimioterapia"
+      ]
+    },
+    {
+      "codigo": "HM:2102",
+      "termino": "Preparación de nutrición parenteral",
+      "semantica": "procedimiento",
+      "padre": "HM:2100",
+      "sinonimos": [
+        "elaboración de NPT",
+        "preparación de NPT",
+        "nutrición parenteral total",
+        "mezcla de nutrición parenteral"
+      ]
+    },
+    {
+      "codigo": "HM:2103",
+      "termino": "Preparación de mezcla intravenosa",
+      "semantica": "procedimiento",
+      "padre": "HM:2100",
+      "sinonimos": [
+        "dilución intravenosa",
+        "preparación de suero"
+      ]
+    },
+    {
+      "codigo": "HM:2200",
+      "termino": "Administración de medicación",
+      "semantica": "agrupacion",
+      "padre": "HM:2000"
+    },
+    {
+      "codigo": "HM:2201",
+      "termino": "Administración de quimioterapia",
+      "semantica": "procedimiento",
+      "padre": "HM:2200",
+      "sinonimos": [
+        "infusión de citostáticos",
+        "administración de citostáticos"
+      ]
+    },
+    {
+      "codigo": "HM:2202",
+      "termino": "Administración intravenosa",
+      "semantica": "procedimiento",
+      "padre": "HM:2200",
+      "sinonimos": [
+        "perfusión intravenosa",
+        "administración IV"
+      ]
+    },
+    {
+      "codigo": "HM:2203",
+      "termino": "Administración de nutrición parenteral",
+      "semantica": "procedimiento",
+      "padre": "HM:2200",
+      "sinonimos": [
+        "infusión de NPT",
+        "administración de NPT"
+      ]
+    },
+    {
+      "codigo": "HM:2300",
+      "termino": "Procedimiento diagnóstico",
+      "semantica": "agrupacion",
+      "padre": "HM:2000"
+    },
+    {
+      "codigo": "HM:2301",
+      "termino": "Ecografía abdominal",
+      "semantica": "procedimiento",
+      "padre": "HM:2300",
+      "sinonimos": [
+        "eco abdominal",
+        "ultrasonido abdominal"
+      ]
+    },
+    {
+      "codigo": "HM:2302",
+      "termino": "Tomografía abdominal con contraste",
+      "semantica": "procedimiento",
+      "padre": "HM:2300",
+      "sinonimos": [
+        "TC abdominal",
+        "TAC de abdomen",
+        "tomografía de abdomen"
+      ]
+    },
+    {
+      "codigo": "HM:2303",
+      "termino": "Determinación de lipasa sérica",
+      "semantica": "procedimiento",
+      "padre": "HM:2300",
+      "sinonimos": [
+        "lipasa"
+      ]
+    },
+    {
+      "codigo": "HM:2304",
+      "termino": "Determinación de amilasa sérica",
+      "semantica": "procedimiento",
+      "padre": "HM:2300",
+      "sinonimos": [
+        "amilasa"
+      ]
+    },
+    {
+      "codigo": "HM:2305",
+      "termino": "Ecografía a pie de cama (POCUS)",
+      "semantica": "procedimiento",
+      "padre": "HM:2300",
+      "sinonimos": [
+        "POCUS",
+        "ecografía clínica",
+        "ecoscopia"
+      ]
     }
   ]
 }
