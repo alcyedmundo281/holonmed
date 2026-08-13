@@ -422,7 +422,7 @@ Hay dos DOI y conviene distinguirlos:
 | DOI | Qué identifica | Cuándo usarlo |
 |-----|----------------|---------------|
 | [`10.5281/zenodo.21896525`](https://doi.org/10.5281/zenodo.21896525) | Todas las versiones | Por defecto. Resuelve siempre a la última |
-| [`10.5281/zenodo.21896953`](https://doi.org/10.5281/zenodo.21896953) | Sólo v0.3.0 | Cuando importe reproducir esta versión exacta |
+| [`10.5281/zenodo.21911667`](https://doi.org/10.5281/zenodo.21911667) | Sólo v0.4.0 | Cuando importe reproducir esta versión exacta |
 
 GitHub también genera la cita automáticamente desde
 [CITATION.cff](CITATION.cff) con el botón *Cite this repository*.
