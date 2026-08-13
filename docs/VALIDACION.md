@@ -115,6 +115,83 @@ los acompañan no son fiables**. En un sistema cuyo argumento de venta es la
 trazabilidad, eso importa tanto como el acierto. Un clínico que lea
 «corte aprox. 250-300» y sepa que son 60 dejará de creerse el resto.
 
+## Experimento: cómo presentar el protocolo al modelo (12/08/2026)
+
+### El fallo que lo motivó
+
+Al migrar los protocolos a frontmatter YAML se excluyó el conocimiento
+estructurado del prompt, con el razonamiento de que «es para el código, el
+modelo no necesita esa sintaxis».
+
+Eso dejó al auditor sin los puntos de corte. Su prompt dice literalmente
+«PROTOCOLO ACTIVO (referencia para los valores de laboratorio)» y le pasaba
+un cuerpo en prosa donde no aparecía ni el corte de la amilasa (110), ni el
+de la lipasa (60), ni el del hematocrito (44).
+
+Le pedíamos comparar contra un número que nunca le dimos. De ahí el
+«>3x el límite normal (aprox. 250-300)»: **se lo inventó porque no tenía
+otro**.
+
+### Las tres variantes
+
+| | Qué recibe el modelo |
+|---|---|
+| `minimo` | Sólo la prosa. Ningún corte. |
+| `prosa` | Los cortes redactados como texto corrido. |
+| `etiquetas` | Los cortes delimitados en atributos, estilo XML. |
+
+La hipótesis de partida era que las etiquetas ayudarían: localizar «el
+corte de la lipasa» debería ser más fácil sobre atributos delimitados que
+sobre prosa, donde hay que leer y deducir.
+
+### Resultado, 3 ejecuciones por variante
+
+```
+formato       validados   alertas   ruido  corte real  inventado  sin cifra
+minimo          27/33           6       0           3          9          3
+prosa           24/27           3       0          12          0          0
+etiquetas       21/24           3       0          12          0          0
+```
+
+Las tres últimas columnas cuentan sólo los hallazgos derivados de un
+criterio de laboratorio, que son los que tienen un corte que citar.
+
+### Qué dice
+
+**Dar los cortes es decisivo.** Las invenciones pasan de 9 a 0, y las citas
+correctas de 3 sobre 15 a 12 sobre 12.
+
+**El formato no importa.** `prosa` y `etiquetas` son indistinguibles:
+12/0/0 las dos. La hipótesis de las etiquetas **queda refutada** con este
+modelo y esta nota. La evidencia habitual a favor de las etiquetas XML
+viene de la documentación de Anthropic para Claude, que se entrenó con ese
+formato; no transfiere a gemma.
+
+**Ojo con la métrica fácil.** `minimo` es el que más hallazgos valida en
+términos absolutos (27 frente a 24 y 21) y es el peor de los tres. Si sólo
+se mirara el recuento de validados, se elegiría la variante que fabrica sus
+justificaciones. Es el argumento de por qué medir la calidad del
+razonamiento y no sólo el veredicto.
+
+### Un efecto secundario que no esperábamos
+
+Más contexto, menos extracciones: 11 hallazgos por ejecución con `minimo`,
+9 con `prosa`, 8 con `etiquetas`. Se cambiaron unas 3 extracciones por
+ejecución a cambio de razonamientos fiables.
+
+**No sabemos si esas extracciones perdidas eran correctas.** Sin conjunto
+de referencia no hay forma de distinguir «el modelo dejó de inventar
+hallazgos» de «el modelo dejó de encontrar hallazgos reales». Es
+exactamente la ceguera a los falsos negativos descrita más abajo, y aquí se
+ve por qué importa.
+
+### Decisión
+
+Por defecto `prosa`: misma fiabilidad que `etiquetas`, ~10 % menos de
+contexto, y suprime menos la extracción. Configurable con
+`HOLONMED_FORMATO_PROTOCOLO`; reproducible con
+`python scripts/comparar_formatos.py --repeticiones 3`.
+
 ## Lo que hace falta
 
 Seguir ajustando el prompt mirando ejecuciones sueltas tiene rendimientos

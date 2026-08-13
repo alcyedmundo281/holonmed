@@ -266,8 +266,101 @@ class Skill:
 
     @property
     def contenido(self) -> str:
-        """Lo que se le entrega al modelo: prosa, sin el frontmatter."""
+        """Sólo la prosa, sin el frontmatter."""
         return self.cuerpo.strip() or self.contenido_completo
+
+    # --- Proyección al prompt ------------------------------------------
+    #
+    # El frontmatter es la fuente de verdad y lo consume el código, pero el
+    # modelo también necesita parte de ese conocimiento: no puede comparar
+    # un valor contra un corte que nadie le ha dicho.
+    #
+    # Excluirlo del prompt fue un error concreto y medible: al auditar
+    # "lipasa 890" el modelo escribió ">3x el límite normal (aprox.
+    # 250-300)" cuando el protocolo declara 60. Se lo inventó porque no
+    # tenía otro número.
+    #
+    # De ahí que haya varios formatos: cómo se presenta la misma
+    # información cambia si el modelo la encuentra o la fabrica.
+
+    FORMATOS = ("minimo", "prosa", "etiquetas")
+
+    def para_prompt(self, formato: str = "etiquetas") -> str:
+        """Renderiza el protocolo tal como lo verá el modelo."""
+        cuerpo = self.contenido
+        if formato == "minimo":
+            return cuerpo
+        bloque = (
+            self._contexto_etiquetas()
+            if formato == "etiquetas"
+            else self._contexto_prosa()
+        )
+        return "\n\n".join([cuerpo, bloque]) if bloque else cuerpo
+
+    def _contexto_prosa(self) -> str:
+        """El conocimiento estructurado, redactado como texto corrido."""
+        partes: list[str] = []
+
+        if self.laboratorio:
+            lineas = []
+            for c in self.laboratorio:
+                if c.corte_superior is not None and c.termino_si_alto:
+                    umbral = (
+                        f"{c.corte_superior} (y más de {c.multiplicador}x ese valor "
+                        f"para el término con multiplicador)"
+                        if c.multiplicador
+                        else str(c.corte_superior)
+                    )
+                    lineas.append(
+                        f"- {c.parametro}: por encima de {umbral} se extrae "
+                        f"«{c.termino_si_alto}»."
+                    )
+                if c.corte_inferior is not None and c.termino_si_bajo:
+                    lineas.append(
+                        f"- {c.parametro}: por debajo de {c.corte_inferior} se extrae "
+                        f"«{c.termino_si_bajo}»."
+                    )
+            if lineas:
+                encabezado = "VALORES DE REFERENCIA DE ESTE PROTOCOLO:"
+                partes.append(encabezado + "\n" + "\n".join(lineas))
+
+        if self.signos:
+            nombres = ", ".join(f"«{s.nombre}»" for s in self.signos)
+            partes.append(f"TÉRMINOS QUE RECONOCE ESTE PROTOCOLO: {nombres}.")
+
+        return "\n\n".join(partes)
+
+    def _contexto_etiquetas(self) -> str:
+        """El mismo conocimiento, delimitado.
+
+        La hipótesis es que localizar «el corte de la lipasa» es más fácil
+        sobre atributos delimitados que sobre prosa, donde hay que leer y
+        deducir. Ver docs/VALIDACION.md para la comparación medida.
+        """
+        partes: list[str] = []
+
+        if self.laboratorio:
+            filas = []
+            for c in self.laboratorio:
+                attrs = [f'parametro="{c.parametro}"']
+                if c.corte_superior is not None:
+                    attrs.append(f'corte_superior="{c.corte_superior}"')
+                if c.corte_inferior is not None:
+                    attrs.append(f'corte_inferior="{c.corte_inferior}"')
+                if c.multiplicador:
+                    attrs.append(f'multiplicador="{c.multiplicador}"')
+                if c.termino_si_alto:
+                    attrs.append(f'termino_si_alto="{c.termino_si_alto}"')
+                if c.termino_si_bajo:
+                    attrs.append(f'termino_si_bajo="{c.termino_si_bajo}"')
+                filas.append(f"  <criterio {' '.join(attrs)}/>")
+            partes.append(_envolver("valores_de_referencia", filas))
+
+        if self.signos:
+            filas = [f'  <signo nombre="{s.nombre}"/>' for s in self.signos]
+            partes.append(_envolver("terminos_reconocidos", filas))
+
+        return "\n\n".join(partes)
 
     def hints(self) -> dict[str, str]:
         """Diccionario término→código con lo que el protocolo declara.
@@ -479,3 +572,9 @@ def _num(valor: Any) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _envolver(etiqueta: str, filas: list[str]) -> str:
+    """Envuelve unas filas en una etiqueta con su cierre."""
+    interior = "\n".join(filas)
+    return f"<{etiqueta}>\n{interior}\n</{etiqueta}>"

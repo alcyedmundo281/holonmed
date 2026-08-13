@@ -239,3 +239,41 @@ class TestCargaSegura:
         gestor = self._gestor(tmp_path)
         assert [s.nombre for s in gestor.para_concepto({"HM:0730"})] == ["valida"]
         assert gestor.para_concepto({"HM:9999"}) == []
+
+
+# --- Proyección al prompt ---------------------------------------------
+
+
+@pytest.mark.parametrize("formato", ["minimo", "prosa", "etiquetas"])
+def test_todos_los_formatos_conservan_la_prosa(formato):
+    assert "PROTOCOLO DE PRUEBA" in Skill("p", SKILL_YAML).para_prompt(formato)
+
+
+def test_el_formato_minimo_no_expone_los_cortes():
+    """Documenta el fallo que motivó la comparación: sin cortes en el
+    prompt, el auditor se los inventa."""
+    texto = Skill("p", SKILL_YAML).para_prompt("minimo")
+    assert "8.5" not in texto
+
+
+@pytest.mark.parametrize("formato", ["prosa", "etiquetas"])
+def test_los_formatos_con_contexto_exponen_los_cortes(formato):
+    texto = Skill("p", SKILL_YAML).para_prompt(formato)
+    assert "8.5" in texto
+    assert "Hipocalcemia" in texto
+
+
+def test_el_formato_etiquetas_esta_bien_formado():
+    texto = Skill("p", SKILL_YAML).para_prompt("etiquetas")
+    for etiqueta in ("valores_de_referencia", "terminos_reconocidos"):
+        assert texto.count(f"<{etiqueta}>") == texto.count(f"</{etiqueta}>") == 1
+
+
+def test_el_protocolo_de_pancreatitis_expone_sus_cortes():
+    """Regresión del fallo real: el auditor escribió que el límite de la
+    lipasa era «aprox. 250-300» cuando el protocolo declara 60."""
+    ruta = DIRECTORIO_SKILLS / "acute_pancreatitis.md"
+    skill = Skill("acute_pancreatitis", ruta.read_text(encoding="utf-8"))
+    texto = skill.para_prompt("prosa")
+    for corte in ("110", "60", "44", "8.5"):
+        assert corte in texto, f"el corte {corte} no llega al modelo"

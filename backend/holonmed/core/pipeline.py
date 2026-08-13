@@ -147,7 +147,7 @@ class CrystallizationPipeline:
             vocabulario = f"VOCABULARIO PREFERIDO: {preferidos}"
 
         prompt = PROMPT_EXTRACCION.format(
-            protocolo=skill.contenido[:8000],
+            protocolo=skill.para_prompt(self.settings.formato_protocolo)[:8000],
             vocabulario=vocabulario,
         )
 
@@ -196,7 +196,9 @@ class CrystallizationPipeline:
 
         if match.score >= self.settings.threshold_audit:
             auditoria = await self.verificador.auditar(
-                termino, texto_original, skill.contenido
+                termino,
+                texto_original,
+                skill.para_prompt(self.settings.formato_protocolo),
             )
             es_logico = auditoria.es_valido
             razon = auditoria.razon

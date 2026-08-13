@@ -42,6 +42,19 @@ class Settings(BaseSettings):
     vocabulario_semilla: Path = RAIZ / "data" / "vocabulario_semilla.json"
     autocargar_semilla: bool = True
 
+    # --- Presentación del protocolo al modelo ------------------------
+    # Cómo se le renderiza al modelo el conocimiento estructurado:
+    #   minimo    — sólo la prosa. El modelo NO ve los cortes y los inventa.
+    #   prosa     — los cortes redactados como texto corrido.
+    #   etiquetas — los cortes delimitados en atributos.
+    #
+    # Medido sobre 3 ejecuciones (docs/VALIDACION.md): 'minimo' inventó el
+    # corte en 9 de 15 auditorías; 'prosa' y 'etiquetas' acertaron las 12,
+    # sin ninguna invención. Entre esas dos no hubo diferencia medible, así
+    # que gana 'prosa' por gastar menos contexto y suprimir menos la
+    # extracción.
+    formato_protocolo: str = "prosa"
+
     # --- Umbrales del validador (seguridad clínica) ------------------
     threshold_validated: float = 85.0
     threshold_alert: float = 75.0
