@@ -238,6 +238,11 @@ backend/holonmed/
 ├── db/
 │   ├── schema.sql      esquema SQLite, incluido el grafo
 │   └── store.py        repositorios y consultas de grafo
+├── facturacion/
+│   ├── propuesta.py    órdenes propuestas desde el plan (el médico firma)
+│   ├── conciliacion.py orden ⊗ ejecución → cargo, y los descuadres
+│   ├── registro.py     extracción según el protocolo de cada rol
+│   └── exportacion.py  la cuenta en XML/JSON/CSV, con su trazabilidad
 ├── llm/client.py       cliente Ollama async con parseo defensivo
 ├── api/                FastAPI
 └── services/           recetas PDF, agenda, laboratorio
@@ -258,32 +263,85 @@ El proyecto usa nombres deliberados, y merece la pena entenderlos:
 
 ## Protocolos clínicos (*skills*)
 
-Un protocolo es un Markdown con JSON-LD embebido. El texto instruye al
-modelo; el JSON-LD lo consume el código directamente:
+Un protocolo es un Markdown con frontmatter YAML. La prosa instruye al
+modelo; el frontmatter lo consume el código directamente:
 
-```json
-{
-  "name": "Pancreatitis aguda",
-  "modelo_bayesiano": {
-    "probabilidad_base": 0.05,
-    "factores_riesgo_a_priori": { "alcoholismo": 2.8, "litiasis": 3.2 }
-  },
-  "criterios_laboratorio": {
-    "reglas": [
-      { "parametro": "Calcio sérico", "corte_inferior": 8.5,
-        "termino_si_bajo": "Hipocalcemia" }
-    ]
-  },
-  "signDetected": [
-    { "name": "Hiperlipasemia (>3x)", "bayes_lr": 24.0 }
-  ]
-}
+```yaml
+---
+condicion:
+  nombre: Pancreatitis aguda
+  codigos: { snomed: "197456007" }
+
+modelo_bayesiano:
+  probabilidad_base: 0.05
+  factores_riesgo: { alcoholismo: 2.8, litiasis: 3.2 }
+
+signos:
+  - nombre: Hiperlipasemia (>3x)
+    lr: 24.0
+    lr_negativo: 0.15      # lo ausente también informa
+    fuente: "Ann Intern Med 2010;152:342"
+
+criterios_laboratorio:
+  reglas:
+    - parametro: Calcio sérico
+      corte_inferior: 8.5
+      termino_si_bajo: Hipocalcemia
+---
 ```
 
-De ahí salen los skill-hints, los cortes de laboratorio y los likelihood
-ratios. Añadir un protocolo es añadir un archivo: no se toca el código.
+De ahí salen los skill-hints, los cortes de laboratorio, los likelihood
+ratios y los criterios de clasificación. Añadir un protocolo es añadir un
+archivo: no se toca el código.
+
+Hay un segundo tipo, `operativo`: los protocolos de rol —enfermería,
+farmacia— declaran qué campos exige el registro de cada actor. No
+interpretan una narrativa; estructuran lo que ese actor asienta y, sobre
+todo, **señalan lo que falta** mientras todavía se puede corregir.
 
 Guía completa en [docs/SKILLS.md](docs/SKILLS.md).
+
+---
+
+## Órdenes y facturación
+
+La cadena no se puede saltar ningún eslabón:
+
+```
+plan de la nota ──► ORDEN ──► ejecución del actor ──► cargo
+                      ↑                 ↑
+                  autoriza       confirma que se hizo
+```
+
+Una orden no describe: **autoriza**. `cargo` referencia siempre una
+`orden`, así que sin autorización no hay cargo — no porque se lo pidamos
+a un modelo, sino porque no existe la fila.
+
+El sistema lee el plan y **propone** órdenes; el médico firma con un
+botón. Son dos endpoints a propósito, y entre ellos está la firma:
+
+```
+POST /api/facturacion/ordenes/proponer    devuelve borradores, no escribe
+POST /api/facturacion/ordenes/autorizar   crea las órdenes reales
+```
+
+El borrador se edita antes de firmar. Lo que el plan no especifica sale
+como hueco vacío, nunca relleno a ojo; y si el modelo devuelve una
+categoría («Medicamento») donde debía ir el fármaco, la propuesta se marca
+y no se corrige sola.
+
+De la conciliación entre órdenes y ejecuciones sólo un resultado es de
+facturación; los otros dos importan más:
+
+| Situación | Qué significa |
+|-----------|---------------|
+| Orden sin ejecución | El paciente no recibió lo prescrito |
+| Ejecución sin orden | Administración no autorizada |
+| Orden + ejecución | Facturable |
+
+Los tarifarios se cargan como un vocabulario más, con su `sistema` y su
+fecha de vigencia, y la cuenta se exporta en XML, JSON o CSV con la orden
+y la ejecución dentro de cada línea.
 
 ---
 

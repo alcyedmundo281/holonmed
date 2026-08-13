@@ -158,11 +158,41 @@ Lista de códigos que delimitan la rama del grafo que cubre el protocolo.
 Permite la consulta inversa: dado un paciente con ciertos hallazgos, qué
 protocolos le aplican.
 
-### `tipo` — clínico o documento
+### `tipo` — clínico, documento u operativo
 
 Por defecto `clinico`: el protocolo extrae hallazgos. Con `tipo: documento`
 —como `receta`— el validador no le exige signos ni criterios, porque su
 función es dar formato a algo que el profesional ya decidió.
+
+`tipo: operativo` es el protocolo de un **rol**: enfermería, farmacia. No
+interpreta una narrativa clínica; estructura lo que ese actor asienta al
+cumplir una orden. Declara su `rol` y sus `campos`:
+
+```yaml
+tipo: operativo
+rol: enfermeria
+
+campos:
+  - nombre: paciente
+    etiqueta: Nombre del paciente
+    requerido: true
+  - nombre: horario_indicado
+    etiqueta: Horario indicado
+    requerido: true
+    descripcion: La pauta que consta en la orden, no la hora del reloj
+  - nombre: horario_administrado
+    etiqueta: Horario de administración
+    requerido: true
+```
+
+Lo valioso de un protocolo operativo no es lo que extrae sino **lo que
+señala que falta**. Un registro a medias es una causa real de que un
+procedimiento no llegue a facturarse, y aquí se detecta mientras todavía
+se puede corregir: la respuesta trae `completo: false` y la lista de
+campos ausentes, con la etiqueta que entiende quien tiene que rellenarlos.
+
+Los protocolos operativos no aparecen en `/api/skills` —no son una opción
+para leer una nota— sino en `/api/facturacion/roles`.
 
 ## Escribir el cuerpo en prosa
 
