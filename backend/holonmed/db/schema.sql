@@ -229,7 +229,8 @@ CREATE TABLE IF NOT EXISTS orden (
     texto_origen TEXT NOT NULL DEFAULT '',   -- cita de la nota
     prescriptor  TEXT,
     detalle      TEXT,                        -- JSON: dosis, vía, frecuencia
-    estado       TEXT NOT NULL DEFAULT 'pendiente'
+    estado       TEXT NOT NULL DEFAULT 'pendiente',
+    referencias  TEXT                         -- JSON: ids en sistemas del centro
 );
 
 CREATE INDEX IF NOT EXISTS idx_orden_paciente ON orden(paciente_id, timestamp DESC);
@@ -249,7 +250,9 @@ CREATE TABLE IF NOT EXISTS ejecucion (
     actor        TEXT,
     origen       TEXT NOT NULL DEFAULT 'farmacia',
     texto_origen TEXT NOT NULL DEFAULT '',
-    detalle      TEXT
+    detalle      TEXT,
+    referencias  TEXT,
+    campos_faltantes TEXT                     -- JSON: lo que el rol exigía
 );
 
 CREATE INDEX IF NOT EXISTS idx_ejecucion_paciente ON ejecucion(paciente_id, timestamp DESC);

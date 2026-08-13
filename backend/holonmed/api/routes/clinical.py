@@ -117,11 +117,17 @@ async def holon_completo(paciente_id: str, ctx: AppContext = Depends(get_context
 
 @router.get("/skills")
 async def listar_skills(ctx: AppContext = Depends(get_context)):
-    """Protocolos disponibles y el conocimiento estructurado que aportan."""
+    """Protocolos clínicos disponibles y el conocimiento que aportan.
+
+    Los protocolos operativos —enfermería, farmacia— quedan fuera: no
+    interpretan una narrativa clínica, estructuran el registro de un actor.
+    Ofrecerlos donde se elige con qué leer una nota sólo confunde; viven en
+    `/api/facturacion/roles`.
+    """
     salida = []
     for nombre in ctx.skills.listar():
         skill = ctx.skills.cargar(nombre)
-        if not skill:
+        if not skill or skill.tipo == "operativo":
             continue
         salida.append(
             {

@@ -108,6 +108,30 @@ class Criterio:
 
 
 @dataclass
+class CampoOperativo:
+    """Un dato que el registro de un rol debe contener.
+
+    Cada actor documenta cosas distintas: enfermería necesita el horario
+    indicado y el administrado; farmacia, el lote y las condiciones de
+    elaboración. En vez de codificar esas diferencias, cada rol las declara
+    en su propio protocolo.
+
+    Un registro al que le falte un campo obligatorio no se puede facturar,
+    y ésa es una causa real de que los procedimientos se queden sin cobrar:
+    no es que no se hagan, es que se documentan a medias.
+    """
+
+    nombre: str
+    etiqueta: str = ""
+    requerido: bool = False
+    descripcion: str = ""
+
+    @property
+    def titulo(self) -> str:
+        return self.etiqueta or self.nombre.replace("_", " ").capitalize()
+
+
+@dataclass
 class Clasificacion:
     """Criterios publicados que convierten hallazgos en un trastorno.
 
@@ -169,6 +193,11 @@ class Skill:
         self.laboratorio = self._parsear_laboratorio()
         self.bayes = self._parsear_bayes()
         self.clasificacion = self._parsear_clasificacion()
+        # Un protocolo operativo pertenece a un rol y declara qué debe
+        # contener su registro. Se busca por este campo y no por el nombre
+        # del archivo: cada centro nombra sus protocolos como quiera.
+        self.rol: str = str(meta.get("rol", ""))
+        self.campos = self._parsear_campos()
 
     # --- Parseo -------------------------------------------------------
 
@@ -274,6 +303,28 @@ class Skill:
                 )
             )
         return salida
+
+    def _parsear_campos(self) -> list[CampoOperativo]:
+        salida = []
+        for c in self.meta.get("campos") or []:
+            if isinstance(c, str):
+                salida.append(CampoOperativo(nombre=c))
+                continue
+            if not isinstance(c, dict) or not c.get("nombre"):
+                continue
+            salida.append(
+                CampoOperativo(
+                    nombre=str(c["nombre"]),
+                    etiqueta=str(c.get("etiqueta", "")),
+                    requerido=bool(c.get("requerido", False)),
+                    descripcion=str(c.get("descripcion", "")),
+                )
+            )
+        return salida
+
+    @property
+    def campos_requeridos(self) -> list[CampoOperativo]:
+        return [c for c in self.campos if c.requerido]
 
     def _parsear_clasificacion(self) -> Clasificacion:
         bloque = self.meta.get("clasificacion")
@@ -524,6 +575,14 @@ class Skill:
         # hallazgos, así que exigirle signos sería un falso positivo.
         if self.tipo == "clinico" and not self.signos and not self.laboratorio:
             fallos.append("no declara signos ni criterios de laboratorio")
+
+        if self.tipo == "operativo":
+            if not self.rol:
+                fallos.append("es operativo pero no declara `rol`")
+            if not self.campos:
+                fallos.append("es operativo pero no declara campos que registrar")
+            elif not self.campos_requeridos:
+                fallos.append("ningún campo es obligatorio: nada podría faltar")
 
         for signo in self.signos:
             if signo.lr is not None and signo.lr <= 0:

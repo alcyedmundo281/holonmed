@@ -1,5 +1,6 @@
 import {
   Activity,
+  ClipboardCheck,
   ClipboardList,
   History,
   MessageSquare,
@@ -14,6 +15,7 @@ import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
 import { InfonCard } from './components/InfonCard';
 import { PatientList } from './components/PatientList';
+import { PlanOrders } from './components/PlanOrders';
 import { ProblemList } from './components/ProblemList';
 import { SystemStatus } from './components/SystemStatus';
 import { TicComposer } from './components/TicComposer';
@@ -28,10 +30,11 @@ import type {
   Skill,
 } from './lib/types';
 
-type Vista = 'consulta' | 'problemas' | 'historia' | 'grafo';
+type Vista = 'consulta' | 'plan' | 'problemas' | 'historia' | 'grafo';
 
 const PESTANAS: { id: Vista; etiqueta: string; Icono: typeof Stethoscope }[] = [
   { id: 'consulta', etiqueta: 'Consulta', Icono: Stethoscope },
+  { id: 'plan', etiqueta: 'Plan', Icono: ClipboardCheck },
   { id: 'problemas', etiqueta: 'Problemas', Icono: ClipboardList },
   { id: 'historia', etiqueta: 'Historia', Icono: History },
   { id: 'grafo', etiqueta: 'Grafo', Icono: Network },
@@ -270,6 +273,8 @@ export default function App() {
                   </>
                 )}
               </div>
+            ) : vista === 'plan' ? (
+              <PlanOrders pacienteId={paciente.id} />
             ) : vista === 'problemas' ? (
               <ProblemList problemas={problemas} />
             ) : vista === 'historia' ? (

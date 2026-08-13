@@ -82,6 +82,19 @@ class Orden(BaseModel):
     )
     estado: EstadoOrden = EstadoOrden.PENDIENTE
 
+    # HolonMed no sustituye al sistema de gestión del centro: lo alimenta.
+    # Casi siempre existe un identificador oficial —lo emite el sistema de
+    # recetas, el de facturación electrónica o el de historia clínica— y sin
+    # guardarlo la conciliación con ese sistema hay que hacerla a mano.
+    #
+    # El diccionario es libre a propósito: cada centro usa los suyos y
+    # HolonMed no tiene por qué conocer ninguno. Las claves las decide quien
+    # despliega, igual que el tarifario o el vocabulario.
+    referencias: dict[str, str] = Field(
+        default_factory=dict,
+        description="Identificadores en sistemas externos, con las claves del centro",
+    )
+
 
 class Ejecucion(BaseModel):
     """Lo que un actor hizo. Farmacia dispensa, enfermería administra."""
@@ -103,6 +116,17 @@ class Ejecucion(BaseModel):
     origen: str = "farmacia"
     texto_origen: str = ""
     detalle: dict = Field(default_factory=dict)
+    referencias: dict[str, str] = Field(default_factory=dict)
+
+    # Campos que el protocolo del rol exige y no constan. Un registro
+    # incompleto no se puede facturar, y esa es una de las causas reales
+    # de que los procedimientos se queden sin cobrar: no es que no se
+    # hagan, es que se registran a medias.
+    campos_faltantes: list[str] = Field(default_factory=list)
+
+    @property
+    def completo(self) -> bool:
+        return not self.campos_faltantes
 
 
 class Cargo(BaseModel):

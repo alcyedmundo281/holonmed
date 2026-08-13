@@ -6,8 +6,18 @@ una orden con su ejecución.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel, Field
 
-from ...facturacion import Cuenta, Ejecucion, EstadoOrden, Orden
+from ...facturacion import (
+    FORMATOS,
+    Cuenta,
+    Ejecucion,
+    EstadoOrden,
+    Orden,
+    OrdenPropuesta,
+    exportar,
+)
 from ..deps import AppContext, get_context
 
 router = APIRouter(prefix="/api/facturacion", tags=["facturación"])
@@ -132,3 +142,184 @@ async def tarifarios(ctx: AppContext = Depends(get_context)):
         "activo": ctx.settings.sistema_tarifario,
         "cargados": ctx.tarifas.sistemas(),
     }
+
+
+class RegistroCrudo(BaseModel):
+    """Un registro asistencial en texto libre, tal como lo escribe el actor."""
+
+    paciente_id: str
+    rol: str = Field(description="enfermeria, farmacia… según los protocolos")
+    texto: str = Field(min_length=1)
+    termino: str | None = Field(
+        default=None, description="Qué se ejecutó, si ya se sabe"
+    )
+    actor: str | None = None
+    referencias: dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/registros", status_code=201)
+async def registrar_operativo(
+    registro: RegistroCrudo, ctx: AppContext = Depends(get_context)
+):
+    """Estructura un registro según el protocolo del rol que lo firma.
+
+    Cada rol declara en su propio protocolo qué campos exige. Lo valioso
+    no es lo que extrae sino **lo que señala que falta**: un registro a
+    medias es una causa real de que un procedimiento no se facture, y aquí
+    se detecta cuando todavía se puede corregir.
+    """
+    extraido = await ctx.registros.extraer(registro.texto, registro.rol)
+
+    ejecucion = Ejecucion(
+        paciente_id=registro.paciente_id,
+        termino=registro.termino
+        or extraido.campos.get("medicamento")
+        or extraido.campos.get("preparacion")
+        or "",
+        origen=registro.rol,
+        actor=registro.actor or extraido.campos.get("responsable"),
+        texto_origen=registro.texto,
+        detalle=extraido.campos,
+        referencias=registro.referencias,
+        campos_faltantes=extraido.faltantes,
+    )
+
+    if not ejecucion.termino:
+        raise HTTPException(
+            422, "No se pudo determinar qué se ejecutó; indícalo en `termino`"
+        )
+
+    concepto = ctx.terminologia.buscar_exacto(ejecucion.termino)
+    if concepto:
+        ejecucion.codigo, ejecucion.sistema = concepto.codigo, concepto.sistema
+
+    ejecucion.id = ctx.ejecuciones.registrar(ejecucion)
+    return {
+        "ejecucion": ejecucion,
+        "completo": extraido.completo,
+        "faltantes": extraido.faltantes,
+        "resumen": extraido.resumen(),
+    }
+
+
+@router.get("/roles")
+async def roles(ctx: AppContext = Depends(get_context)):
+    """Protocolos operativos disponibles y qué exige cada uno."""
+    salida = []
+    for nombre in ctx.skills.listar():
+        skill = ctx.skills.cargar(nombre)
+        if not skill or skill.tipo != "operativo":
+            continue
+        salida.append(
+            {
+                "rol": skill.rol,
+                "protocolo": nombre,
+                "titulo": skill.titulo,
+                "campos": [
+                    {"nombre": c.nombre, "titulo": c.titulo, "requerido": c.requerido}
+                    for c in skill.campos
+                ],
+            }
+        )
+    return salida
+
+
+@router.get("/cuenta/{paciente_id}/exportar", response_class=PlainTextResponse)
+async def exportar_cuenta(
+    paciente_id: str,
+    formato: str = "xml",
+    incluir_propuestos: bool = False,
+    emisor: str | None = None,
+    ctx: AppContext = Depends(get_context),
+):
+    """Exporta la cuenta al formato que consuma el sistema de destino.
+
+    XML por defecto porque es lo que suelen exigir los sistemas de
+    facturación y de intercambio sanitario: validan contra un esquema y a
+    veces requieren firma. HolonMed no conoce el esquema de ningún
+    organismo concreto y no debería: entrega la estructura completa y
+    trazable, y el mapeo al esquema de cada sitio es una capa de
+    integración propia de ese despliegue.
+
+    Por defecto sólo salen los cargos confirmados: exportar algo que nadie
+    ha revisado sería mandar a facturar lo que el sistema apenas propuso.
+    """
+    if formato not in FORMATOS:
+        raise HTTPException(400, f"Formato no soportado. Usa uno de: {list(FORMATOS)}")
+
+    cuenta = ctx.conciliador.cuenta(paciente_id)
+    contenido = exportar(
+        cuenta, formato, emisor=emisor, incluir_propuestos=incluir_propuestos
+    ) if formato == "xml" else exportar(cuenta, formato)
+
+    tipos = {"xml": "application/xml", "json": "application/json", "csv": "text/csv"}
+    return PlainTextResponse(contenido, media_type=tipos[formato])
+
+
+class PlanCrudo(BaseModel):
+    """El texto del plan, tal como lo escribe el médico."""
+
+    paciente_id: str
+    texto: str = Field(min_length=1)
+
+
+class Autorizacion(BaseModel):
+    """La firma que convierte un borrador en una orden real."""
+
+    paciente_id: str
+    propuestas: list[OrdenPropuesta]
+    prescriptor: str | None = None
+
+
+@router.post("/ordenes/proponer")
+async def proponer_ordenes(plan: PlanCrudo, ctx: AppContext = Depends(get_context)):
+    """Lee el plan y propone las órdenes que ve. **No crea ninguna.**
+
+    Es el borrador que acompaña al plan, con su botón. Nada queda
+    autorizado hasta que alguien lo firma en `/ordenes/autorizar`, y esa
+    separación es la condición para que el resto se sostenga: toda la
+    cadena de facturación se apoya en que la orden es un acto de una
+    persona.
+    """
+    propuestas = await ctx.proponedor.proponer(plan.texto)
+    return {
+        "paciente_id": plan.paciente_id,
+        "propuestas": propuestas,
+        "aviso": (
+            "Ninguna de estas órdenes existe todavía. Revisa y autoriza las "
+            "que correspondan."
+        ),
+    }
+
+
+@router.post("/ordenes/autorizar", status_code=201)
+async def autorizar_ordenes(
+    autorizacion: Autorizacion, ctx: AppContext = Depends(get_context)
+):
+    """Convierte en órdenes reales las propuestas que el médico firma.
+
+    Recibe sólo las que autoriza, ya editadas si hizo falta. Las que no
+    envíe simplemente no existen: descartar un borrador no requiere
+    ninguna acción.
+    """
+    creadas = []
+    for propuesta in autorizacion.propuestas:
+        orden = propuesta.a_orden(
+            autorizacion.paciente_id, prescriptor=autorizacion.prescriptor
+        )
+        # El médico pudo corregir el término al revisar, y entonces el
+        # borrador llega sin código. Se resuelve aquí contra el término
+        # final: es el que se ordena y el que habrá que tarifar.
+        if not orden.concepto_id:
+            concepto = ctx.terminologia.buscar_exacto(orden.termino)
+            if concepto:
+                orden.concepto_id = concepto.concepto_id
+                orden.codigo, orden.sistema = concepto.codigo, concepto.sistema
+
+        orden.id = ctx.ordenes.crear(orden)
+        if orden.id:
+            creadas.append(orden)
+
+    if not creadas:
+        raise HTTPException(500, "No se pudo registrar ninguna orden")
+    return {"creadas": len(creadas), "ordenes": creadas}

@@ -45,8 +45,8 @@ class OrdenRepo:
                 cursor = cx.execute(
                     """INSERT INTO orden (paciente_id, tic_id, timestamp, termino,
                                           codigo, sistema, concepto_id, texto_origen,
-                                          prescriptor, detalle, estado)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                          prescriptor, detalle, estado, referencias)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         orden.paciente_id,
                         int(orden.tic_id) if orden.tic_id else None,
@@ -59,6 +59,7 @@ class OrdenRepo:
                         orden.prescriptor,
                         _json(orden.detalle),
                         orden.estado.value,
+                        _json(orden.referencias),
                     ),
                 )
                 cx.commit()
@@ -111,8 +112,9 @@ class EjecucionRepo:
                 cursor = cx.execute(
                     """INSERT INTO ejecucion (paciente_id, orden_id, tic_id, timestamp,
                                               termino, codigo, sistema, actor, origen,
-                                              texto_origen, detalle)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                              texto_origen, detalle, referencias,
+                                              campos_faltantes)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         ejecucion.paciente_id,
                         int(ejecucion.orden_id) if ejecucion.orden_id else None,
@@ -125,6 +127,10 @@ class EjecucionRepo:
                         ejecucion.origen,
                         ejecucion.texto_origen,
                         _json(ejecucion.detalle),
+                        _json(ejecucion.referencias),
+                        json.dumps(ejecucion.campos_faltantes, ensure_ascii=False)
+                        if ejecucion.campos_faltantes
+                        else None,
                     ),
                 )
                 cx.commit()
@@ -344,6 +350,7 @@ def _a_orden(f: sqlite3.Row) -> Orden:
         prescriptor=f["prescriptor"],
         detalle=_desde_json(f["detalle"]),
         estado=EstadoOrden(f["estado"]),
+        referencias=_desde_json(_col(f, "referencias")),
     )
 
 
@@ -361,7 +368,24 @@ def _a_ejecucion(f: sqlite3.Row) -> Ejecucion:
         origen=f["origen"],
         texto_origen=f["texto_origen"] or "",
         detalle=_desde_json(f["detalle"]),
+        referencias=_desde_json(_col(f, "referencias")),
+        campos_faltantes=_lista(_col(f, "campos_faltantes")),
     )
+
+
+def _col(fila: sqlite3.Row, nombre: str):
+    """Lee una columna que puede no existir en una base sin migrar."""
+    return fila[nombre] if nombre in fila.keys() else None
+
+
+def _lista(valor) -> list[str]:
+    if not valor:
+        return []
+    try:
+        cargado = json.loads(valor)
+        return cargado if isinstance(cargado, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 
 def _a_cargo(f: sqlite3.Row) -> Cargo:

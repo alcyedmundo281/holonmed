@@ -4,6 +4,8 @@ import type {
   Infon,
   EstadoSistema,
   Grafo,
+  Orden,
+  OrdenPropuesta,
   Paciente,
   Problema,
   RespuestaChat,
@@ -106,6 +108,33 @@ export const api = {
     pedir<{ pacientes: { id: string; nombre: string; hallazgos: number }[]; total: number }>(
       `/api/grafo/cohorte?codigo=${q(codigo)}&sistema=${q(sistema)}`,
     ),
+
+  // --- Órdenes: proponer no es autorizar ---------------------------------
+  // Son dos llamadas y no una a propósito. Entre ambas está la firma del
+  // médico, que es lo único que convierte un texto sugerido por un modelo
+  // en algo que obliga a otros a actuar.
+
+  proponerOrdenes: (pacienteId: string, texto: string) =>
+    pedir<{ propuestas: OrdenPropuesta[]; aviso: string }>(
+      '/api/facturacion/ordenes/proponer',
+      {
+        method: 'POST',
+        body: JSON.stringify({ paciente_id: pacienteId, texto }),
+      },
+    ),
+
+  autorizarOrdenes: (pacienteId: string, propuestas: OrdenPropuesta[], prescriptor?: string) =>
+    pedir<{ creadas: number; ordenes: Orden[] }>('/api/facturacion/ordenes/autorizar', {
+      method: 'POST',
+      body: JSON.stringify({
+        paciente_id: pacienteId,
+        propuestas,
+        prescriptor: prescriptor ?? null,
+      }),
+    }),
+
+  ordenes: (pacienteId: string) =>
+    pedir<Orden[]>(`/api/facturacion/ordenes/${q(pacienteId)}`),
 
   subirLaboratorio: async (pacienteId: string, archivo: File) => {
     const cuerpo = new FormData();

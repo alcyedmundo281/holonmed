@@ -266,6 +266,41 @@ Eso convierte la propiedad antifraude en algo **estructural**: `cargo`
 referencia siempre una `orden`. Sin autorización no hay cargo, no porque
 se lo pidamos amablemente a un modelo sino porque no existe la fila.
 
+### Del plan a la orden: proponer no es autorizar
+
+El primer eslabón es el que más trabajo cuesta en la vida real: pasar de lo
+que el médico escribe en el plan a una orden estructurada. HolonMed lee el
+plan y **propone**; el médico firma.
+
+```
+        plan (texto)
+             │
+             ▼
+    OrdenPropuesta ──[el médico pulsa el botón]──► ORDEN
+      (borrador,                                (autorizada,
+       no existe                                 ya factura)
+       en la base)
+```
+
+`POST /api/facturacion/ordenes/proponer` no escribe nada. Devuelve
+borradores con la cita del plan de la que sale cada uno, y sólo
+`/ordenes/autorizar` crea filas. Son dos llamadas y no una a propósito:
+entre ambas está la firma, que es lo único que convierte un texto sugerido
+por un modelo en algo que obliga a otros a actuar.
+
+El borrador se muestra distinto de la orden —otra caja, borde discontinuo—
+y es editable antes de firmar, porque un modelo local se equivoca de
+maneras que un clínico corrige en un segundo:
+
+* Lo que el plan no especifica se muestra **como hueco vacío**, nunca
+  relleno a ojo. Un hueco visible se corrige; uno inventado se firma sin
+  mirar y acaba administrándose.
+* Si el modelo devuelve una categoría («Medicamento») donde debía ir el
+  fármaco, la propuesta se marca en rojo y no se corrige sola: adivinar
+  cuál era es exactamente lo que no debe hacer.
+* Cambiar el término borra el código: un código que ya no corresponde al
+  término factura otra cosa.
+
 ### El descuadre vale más como seguridad que como dinero
 
 De los tres resultados de la conciliación, sólo uno es de facturación:

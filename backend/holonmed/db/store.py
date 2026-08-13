@@ -75,6 +75,9 @@ class Database:
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
+        ("orden", "referencias", "TEXT"),
+        ("ejecucion", "referencias", "TEXT"),
+        ("ejecucion", "campos_faltantes", "TEXT"),
     )
 
     def _migrar(self, cx: sqlite3.Connection) -> None:

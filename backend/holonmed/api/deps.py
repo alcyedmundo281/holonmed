@@ -31,7 +31,9 @@ from ..facturacion import (
     CargoRepo,
     Conciliador,
     EjecucionRepo,
+    ExtractorOperativo,
     OrdenRepo,
+    ProponedorOrdenes,
     Tarifario,
     TarifarioRepo,
 )
@@ -74,6 +76,12 @@ class AppContext:
         self._preparar_vocabulario()
 
         self.skills = SkillManager(self.settings)
+        # Depende de los protocolos, así que va después de cargarlos: cada
+        # rol declara en el suyo qué campos exige su registro.
+        self.registros = ExtractorOperativo(self.skills, self.llm, self.settings)
+        self.proponedor = ProponedorOrdenes(
+            self.skills, self.llm, self.terminologia, self.settings
+        )
         self.validador = OntologyValidator(self.terminologia, self.llm, self.settings)
         self.verificador = ClinicalVerifier(self.llm, self.settings)
 

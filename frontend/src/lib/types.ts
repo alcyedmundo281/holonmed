@@ -124,6 +124,39 @@ export interface Skill {
   tiene_modelo_bayesiano: boolean;
 }
 
+/**
+ * Un borrador de orden salido del plan. No existe en la base: mientras
+ * sea esto, no obliga a nadie a nada ni puede generar ningún cargo.
+ */
+export interface OrdenPropuesta {
+  termino: string;
+  texto_origen: string;
+  detalle: Record<string, string>;
+  codigo: string | null;
+  sistema: string | null;
+  concepto_id: number | null;
+  /** El sistema encontró el término en el vocabulario y podrá tarifarlo. */
+  reconocida: boolean;
+  /** Campos que el plan no especificaba. Se muestran, no se rellenan. */
+  faltantes: string[];
+  /** El modelo devolvió una categoría en vez del fármaco. Hay que corregirlo. */
+  generico: boolean;
+}
+
+/** Una orden ya firmada. A partir de aquí la cadena puede facturar. */
+export interface Orden {
+  id: string | null;
+  paciente_id: string;
+  timestamp: string;
+  termino: string;
+  codigo: string | null;
+  sistema: string | null;
+  texto_origen: string;
+  prescriptor: string | null;
+  detalle: Record<string, string>;
+  estado: 'pendiente' | 'cumplida' | 'anulada';
+}
+
 export interface EstadoSistema {
   operativo: boolean;
   base_datos: {
