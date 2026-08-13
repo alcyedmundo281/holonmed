@@ -13,7 +13,7 @@
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help"
   ],
-  "version": "1.1.0",
+  "version": "1.2.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1112,6 +1112,66 @@
         "contractura abdominal",
         "vientre en tabla"
       ]
+    },
+    {
+      "codigo": "HM:0900",
+      "termino": "Hallazgo de imagen",
+      "semantica": "agrupacion",
+      "padre": "HM:0001"
+    },
+    {
+      "codigo": "HM:0901",
+      "termino": "Hallazgos de imagen compatibles con pancreatitis",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "páncreas edematoso",
+        "aumento de tamaño pancreático",
+        "trabeculación de la grasa peripancreática",
+        "colecciones peripancreáticas"
+      ]
+    },
+    {
+      "codigo": "HM:0902",
+      "termino": "Líquido libre abdominal en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "líquido libre en Morrison",
+        "FAST positivo"
+      ]
+    },
+    {
+      "codigo": "HM:0903",
+      "termino": "Litiasis biliar en imagen",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "cálculos en vesícula",
+        "colelitiasis ecográfica"
+      ]
+    },
+    {
+      "codigo": "HM:1000",
+      "termino": "Trastorno",
+      "semantica": "raiz"
+    },
+    {
+      "codigo": "HM:1001",
+      "termino": "Enfermedad del páncreas",
+      "semantica": "agrupacion",
+      "padre": "HM:1000"
+    },
+    {
+      "codigo": "HM:1002",
+      "termino": "Pancreatitis aguda",
+      "semantica": "trastorno",
+      "padre": "HM:1001",
+      "sinonimos": [
+        "pancreatitis",
+        "PA"
+      ],
+      "icd10": "K85.9"
     }
   ]
 }

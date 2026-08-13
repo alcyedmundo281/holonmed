@@ -82,6 +82,49 @@ caracteres. No uses markdown ni listas dentro del JSON:
 {{"valido": true, "analisis": "6.8 < 8.5, calcio por debajo del corte", "confianza": 95}}"""
 
 
+PROMPT_AUDITOR_AUSENCIA = """Actúa como un Auditor Médico de Seguridad y Calidad (Senior).
+
+PROTOCOLO ACTIVO (referencia para los valores de laboratorio):
+================================================================
+{protocolo}
+================================================================
+
+EVIDENCIA (texto original del paciente):
+"{evidencia}"
+
+AFIRMACIÓN A AUDITAR:
+«El texto documenta que "{hallazgo}" NO está presente.»
+
+No te preguntamos si "{hallazgo}" es cierto —damos por hecho que no—.
+Te preguntamos si **la negación** está respaldada por el texto.
+
+PROCEDIMIENTO. Sigue estos pasos en orden y para en el primero que aplique:
+
+PASO 1 — ¿Hay una CIFRA medida del parámetro en el texto?
+   Si la hay, NO es un silencio: alguien lo midió. Compárala con el corte.
+     · Valor dentro del rango normal  -> ausencia CONFIRMADA.
+       «lipasa 45» con corte en 60 confirma que no hay hiperlipasemia.
+       No hace falta ninguna frase que lo niegue: la cifra lo dice.
+     · Valor fuera del rango          -> ausencia NO confirmada
+       (el hallazgo sí está presente).
+
+PASO 2 — ¿Hay una NEGACIÓN explícita?
+   «no refiere fiebre», «niega disnea», «sin dolor torácico»,
+   «abdomen blando, sin defensa»  -> ausencia CONFIRMADA.
+
+PASO 3 — ¿El parámetro no aparece por ningún lado?
+   Entonces sí es un silencio -> ausencia NO confirmada.
+   Que no se hable de algo no significa que no esté: significa que no se
+   sabe. Sólo aquí aplica esta regla.
+
+Un dato medido nunca cae en el paso 3.
+
+Responde en JSON. El campo se llama `ausencia_confirmada` para que no
+quepa duda de qué se pregunta. Indica también qué paso aplicaste.
+Análisis en UNA frase de menos de 200 caracteres:
+{{"ausencia_confirmada": true, "paso": 1, "analisis": "lipasa 45 < 60, dentro de rango", "confianza": 95}}"""
+
+
 class ClinicalVerifier:
     """Valida hallazgos contra los criterios del protocolo activo."""
 
@@ -94,8 +137,17 @@ class ClinicalVerifier:
         hallazgo: str,
         texto_original: str,
         contenido_skill: str,
+        ausente: bool = False,
     ) -> Auditoria:
-        prompt = PROMPT_AUDITOR.format(
+        """Comprueba que la evidencia sostiene el hallazgo.
+
+        Con `ausente=True` la pregunta cambia: ya no es «¿dice el texto
+        que esto está?» sino «¿dice el texto que esto NO está?». Son
+        preguntas distintas y el prompt también, porque el error a evitar
+        es distinto: aquí lo grave es tomar un silencio por una negación.
+        """
+        plantilla = PROMPT_AUDITOR_AUSENCIA if ausente else PROMPT_AUDITOR
+        prompt = plantilla.format(
             protocolo=contenido_skill[:6000],
             evidencia=texto_original,
             hallazgo=hallazgo,
@@ -119,7 +171,10 @@ class ClinicalVerifier:
 
         # Los modelos locales varían las claves entre ejecuciones; se aceptan
         # las variantes conocidas antes de rendirse.
-        valido = _leer_booleano(res, ("valido", "es_valido", "es_logicamente_valido"))
+        valido = _leer_booleano(
+            res,
+            ("ausencia_confirmada", "valido", "es_valido", "es_logicamente_valido"),
+        )
         razon = _leer_texto(res, ("analisis", "razon", "explicacion", "reasoning"))
         certeza = _leer_numero(res, ("confianza", "certeza", "certeza_logica"), 0.0)
 

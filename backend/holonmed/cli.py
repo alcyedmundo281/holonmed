@@ -113,9 +113,31 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     for infon in resultado.infones:
         codigo = f"{infon.sistema}:{infon.codigo}" if infon.codigo else "sin código"
         cie = f" · CIE-10 {infon.cie10_code}" if infon.cie10_code else ""
-        print(f"  [{infon.estado.value:9}] {infon.termino}")
+        # La polaridad se marca porque invierte el sentido del dato: una
+        # ausencia documentada resta en la inferencia en vez de sumar.
+        marca = "" if infon.polaridad.value == "presente" else "  [AUSENTE]"
+        derivado = "  ←derivado" if infon.derivado_de else ""
+        print(f"  [{infon.estado.value:9}] {infon.termino}{marca}{derivado}")
         print(f"              {codigo}{cie} · confianza {infon.confianza}%")
         print(f"              {infon.razon_auditoria}")
+
+    clas = resultado.clasificacion
+    if clas:
+        print(f"\nClasificación: {clas.nombre}")
+        print(f"  {clas.satisfechos} criterios cumplidos de {clas.requiere} exigidos")
+        for linea in clas.desglose():
+            print(f"    · {linea}")
+        if clas.cumple:
+            print(f"  → CUMPLE. Trastorno acuñado: {clas.trastorno.termino}")
+        else:
+            estado = "alcanzable" if clas.alcanzable else "ya no alcanzable"
+            print(f"  → No cumple ({estado})")
+        # Un criterio sin datos no es un criterio negativo: es una
+        # pregunta. Lo que falta es justo lo que hay que pedir.
+        if clas.vacios:
+            print("\n  Falta información sobre:")
+            for v in clas.vacios:
+                print(f"    ? {v.sugerencia}")
 
     if resultado.inferencia:
         inf = resultado.inferencia

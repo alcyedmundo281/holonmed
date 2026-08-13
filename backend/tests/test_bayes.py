@@ -157,3 +157,80 @@ def test_los_factores_se_emparejan_por_subcadena_literal():
 
     assert "alcoholismo" in " ".join(literal.traza_logica)
     assert coloquial.probabilidad_previa == 5.0  # el factor no se detecta
+
+
+# --- Evidencia negativa: lo que resta ---------------------------------
+
+SKILL_CON_LR_NEGATIVO = {
+    "name": "Pancreatitis aguda",
+    "modelo_bayesiano": {"probabilidad_base": 0.5},
+    "signDetected": [
+        {"name": "Hiperlipasemia (>3x)", "bayes_lr": 26.6, "bayes_lr_negativo": 0.1},
+        {"name": "Vómitos", "bayes_lr": 1.6},  # sin LR-: su ausencia no informa
+    ],
+}
+
+
+def infon_ausente(termino: str) -> Infon:
+    from holonmed.models import Polaridad
+
+    return Infon(
+        texto_origen="…",
+        termino_propuesto=termino,
+        termino=termino,
+        polaridad=Polaridad.AUSENTE,
+        estado=EstadoInfon.VALIDADO,
+    )
+
+
+def test_una_prueba_negativa_baja_la_probabilidad():
+    """Una lipasa normal es la evidencia más potente en contra, y hasta
+    ahora el sistema la tiraba: sólo sabía sumar."""
+    motor = AntigenPresentingCell()
+    base = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [])
+    negativo = motor.calcular(
+        {}, SKILL_CON_LR_NEGATIVO, [infon_ausente("Hiperlipasemia (>3x)")]
+    )
+
+    assert base.probabilidad_porcentaje == 50.0
+    assert negativo.probabilidad_porcentaje < 15.0
+    assert "en contra" in " ".join(negativo.evidencia_utilizada)
+    assert "[ausente]" in " ".join(negativo.evidencia_utilizada)
+
+
+def test_la_presencia_y_la_ausencia_van_en_direcciones_opuestas():
+    motor = AntigenPresentingCell()
+    presente = motor.calcular(
+        {}, SKILL_CON_LR_NEGATIVO, [infon("Hiperlipasemia (>3x)")]
+    )
+    ausente = motor.calcular(
+        {}, SKILL_CON_LR_NEGATIVO, [infon_ausente("Hiperlipasemia (>3x)")]
+    )
+    assert presente.probabilidad_porcentaje > 50.0 > ausente.probabilidad_porcentaje
+
+
+def test_una_ausencia_sin_lr_negativo_no_mueve_nada():
+    """Que no haya vómitos no dice gran cosa, y el protocolo lo declara
+    no declarando lr_negativo."""
+    motor = AntigenPresentingCell()
+    base = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [])
+    sin_vomitos = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [infon_ausente("Vómitos")])
+    assert sin_vomitos.probabilidad_porcentaje == base.probabilidad_porcentaje
+
+
+def test_una_ausencia_no_validada_no_descarta_nada():
+    """El error peligroso sería tomar una ausencia dudosa como prueba
+    negativa: descartaría un diagnóstico sin fundamento."""
+    from holonmed.models import Polaridad
+
+    dudosa = Infon(
+        texto_origen="…",
+        termino_propuesto="Hiperlipasemia (>3x)",
+        termino="Hiperlipasemia (>3x)",
+        polaridad=Polaridad.AUSENTE,
+        estado=EstadoInfon.ALERTA,
+    )
+    motor = AntigenPresentingCell()
+    base = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [])
+    con_dudosa = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [dudosa])
+    assert con_dudosa.probabilidad_porcentaje == base.probabilidad_porcentaje

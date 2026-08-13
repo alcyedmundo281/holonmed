@@ -1,4 +1,5 @@
 from .bayes import AntigenPresentingCell
+from .clasificacion import Clasificador, EstadoCriterio, ResultadoClasificacion, Vacio
 from .pipeline import CrystallizationPipeline
 from .skills import Skill, SkillManager
 from .terminology import Candidato, TerminologyIndex, VocabularyLoader
@@ -8,6 +9,10 @@ from .verifier import Auditoria, ClinicalVerifier
 __all__ = [
     "AntigenPresentingCell",
     "Auditoria",
+    "Clasificador",
+    "EstadoCriterio",
+    "ResultadoClasificacion",
+    "Vacio",
     "Candidato",
     "ClinicalVerifier",
     "CrystallizationPipeline",

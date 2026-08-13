@@ -175,6 +175,9 @@ CREATE TABLE IF NOT EXISTS infon (
     texto_origen      TEXT NOT NULL,
     termino_propuesto TEXT NOT NULL,
     termino           TEXT NOT NULL,
+    polaridad         TEXT NOT NULL DEFAULT 'presente',
+    derivado_de       TEXT,            -- JSON: términos que lo satisfacen
+    criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,
     sistema           TEXT,
     cie10             TEXT,

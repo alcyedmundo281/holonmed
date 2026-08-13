@@ -192,6 +192,78 @@ contexto, y suprime menos la extracción. Configurable con
 `HOLONMED_FORMATO_PROTOCOLO`; reproducible con
 `python scripts/comparar_formatos.py --repeticiones 3`.
 
+## Evidencia negativa y criterios de clasificación (12/08/2026)
+
+### El fallo de partida
+
+El motor sólo sabía sumar. El prompt de extracción decía literalmente
+«NEGACIONES: ignora los hallazgos negados», así que una lipasa normal
+—la evidencia más potente **en contra** de una pancreatitis— no llegaba a
+ninguna parte. El sistema únicamente podía subir la probabilidad.
+
+### Lo que cambia
+
+| Caso | Antes | Ahora |
+|---|---|---|
+| Hallazgo presente | LR+ | LR+ |
+| Ausencia documentada | *se descartaba* | **LR−** |
+| No consta | nada | **se pregunta** |
+
+Sobre el mismo paciente, cambiando sólo la lipasa de 890 a 45:
+
+```
+posterior 49.76 %  →  9.01 %
+→ Hiperlipasemia [ausente] → LR 0.1 (en contra)
+```
+
+### El prompt de ausencia necesitó dos intentos
+
+La primera versión enumeraba casos válidos e inválidos, con un aviso muy
+enfático sobre no confundir el silencio con una negación. El modelo aplicó
+ese aviso por encima de todo lo demás:
+
+> «un valor de lipasa (45) por debajo del corte, pero no niega
+> explícitamente su ausencia. Un silencio sobre el hallazgo es inválido.»
+
+Es decir: confundió **una cifra medida** con **un silencio**, que es
+exactamente lo contrario de lo que el aviso pretendía.
+
+La segunda versión no enumera reglas sino un **procedimiento ordenado** —
+¿hay cifra? compárala; ¿hay negación explícita?; ¿no aparece por ningún
+lado? entonces sí es silencio — con una única frase de cierre: «un dato
+medido nunca cae en el paso 3». Con eso acierta.
+
+**Lección general**: un prompt con dos reglas de fuerza parecida produce
+comportamiento inestable, y gana la que esté escrita con más énfasis. Los
+procedimientos ordenados se comportan mejor que las listas de advertencias.
+
+### Pedir lo que ya se hizo
+
+Al principio, una ausencia que no superaba la auditoría caía en «sin
+datos», y el sistema pedía una prueba **ya realizada y normal**. Eso
+erosiona la confianza en dos consultas.
+
+Ahora se distinguen cuatro estados por criterio, porque exigen conductas
+distintas: satisfecho, descartado, sin confirmar —hay dato, revísalo— y
+sin datos, que es el único que genera una petición nueva.
+
+### Criterios de clasificación
+
+Los criterios publicados —Atlanta, Duke, ACR/EULAR— parecen booleanos y
+son bayesianos: la manifestación fija la probabilidad pre-test, la prueba
+sensible descarta si es negativa y la específica confirma si es positiva.
+El «2 de 3» es la abreviatura de que el posterior cruza el umbral.
+
+El sistema los evalúa en Python sobre hallazgos ya validados y acuña un
+**infón de nivel 2**: un trastorno cuya procedencia no es una cita de la
+nota sino la lista de hallazgos que lo satisfacen, con la cita del panel
+que definió los criterios.
+
+Dos salvaguardas: un hallazgo en ALERTA no puede satisfacer un criterio, y
+el trastorno hereda la confianza más baja de la evidencia que lo sostiene.
+Un diagnóstico no puede ser más firme que su hallazgo peor sostenido, por
+mucho que venga con criterios y cita.
+
 ## Lo que hace falta
 
 Seguir ajustando el prompt mirando ejecuciones sueltas tiene rendimientos

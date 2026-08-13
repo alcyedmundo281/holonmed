@@ -77,14 +77,28 @@ class AntigenPresentingCell:
             if not infon.es_valido:
                 continue
 
-            lr, etiqueta = self._buscar_lr(infon.termino, mapa_lr)
+            par, etiqueta = self._buscar_lr(infon.termino, mapa_lr)
+            if par is None:
+                continue
+
+            # La polaridad decide qué LR se aplica. Una prueba sensible
+            # negativa descarta con fuerza, y hasta ahora esa evidencia se
+            # perdía: el sistema sólo sabía sumar.
+            positivo, negativo = par
+            if infon.descarta:
+                lr = negativo
+                sufijo = " [ausente]"
+            else:
+                lr = positivo
+                sufijo = ""
+
             if lr is None or lr == 1.0:
                 continue
 
             odds *= lr
             direccion = "a favor" if lr > 1 else "en contra"
             evidencia.append(
-                f"{infon.termino} → LR {lr} ({direccion}, vía '{etiqueta}')"
+                f"{infon.termino}{sufijo} → LR {lr} ({direccion}, vía '{etiqueta}')"
             )
 
         prob_final = odds / (1 + odds)
@@ -102,26 +116,26 @@ class AntigenPresentingCell:
         )
 
     @staticmethod
-    def _mapa_likelihood_ratios(skill_json: dict[str, Any]) -> dict[str, float]:
-        mapa: dict[str, float] = {}
+    def _mapa_likelihood_ratios(
+        skill_json: dict[str, Any],
+    ) -> dict[str, tuple[float | None, float | None]]:
+        """Término -> (LR+, LR-). Ambos opcionales."""
+        mapa: dict[str, tuple[float | None, float | None]] = {}
         for signo in skill_json.get("signDetected", []) or []:
             if not isinstance(signo, dict):
                 continue
             nombre = signo.get("name")
             if not nombre:
                 continue
-            lr = _a_float(signo.get("bayes_lr"), 1.0)
-            if lr <= 0:
-                logger.warning("LR inválido (%s) para '%s'; ignorado", lr, nombre)
+            positivo = _recortar(signo.get("bayes_lr"), nombre, "LR+")
+            negativo = _recortar(signo.get("bayes_lr_negativo"), nombre, "LR-")
+            if positivo is None and negativo is None:
                 continue
-            if lr > LR_MAXIMO:
-                logger.warning("LR %s para '%s' recortado a %s", lr, nombre, LR_MAXIMO)
-                lr = LR_MAXIMO
-            mapa[str(nombre).lower()] = lr
+            mapa[str(nombre).lower()] = (positivo, negativo)
         return mapa
 
     @staticmethod
-    def _buscar_lr(termino: str, mapa: dict[str, float]):
+    def _buscar_lr(termino: str, mapa: dict[str, tuple[float | None, float | None]]):
         """Empareja el término normalizado con un LR del protocolo."""
         objetivo = termino.lower()
         if objetivo in mapa:
@@ -143,3 +157,17 @@ def _a_float(valor: Any, defecto: float) -> float:
         return float(valor)
     except (TypeError, ValueError):
         return defecto
+
+
+def _recortar(valor: Any, nombre: str, etiqueta: str) -> float | None:
+    """Valida y acota un likelihood ratio declarado en un protocolo."""
+    if not isinstance(valor, (int, float)):
+        return None
+    lr = float(valor)
+    if lr <= 0:
+        logger.warning("%s inválido (%s) para '%s'; ignorado", etiqueta, lr, nombre)
+        return None
+    if lr > LR_MAXIMO:
+        logger.warning("%s %s para '%s' recortado a %s", etiqueta, lr, nombre, LR_MAXIMO)
+        return LR_MAXIMO
+    return lr

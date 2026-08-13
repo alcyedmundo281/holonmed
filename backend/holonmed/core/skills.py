@@ -43,14 +43,30 @@ PRIORIDAD_SISTEMAS = ("holonmed", "snomed", "hpo", "icd10")
 _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 
 
+# Papel de un signo dentro del razonamiento diagnóstico. No es una
+# etiqueta descriptiva: determina en qué dirección mueve la probabilidad.
+#
+#   manifestacion      fija la probabilidad pre-test
+#   prueba_sensible    su LR- descarta cuando es negativa (SnNOut)
+#   prueba_especifica  su LR+ confirma cuando es positiva  (SpPIn)
+#   apoyo              aporta poco por sí solo
+ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imagen")
+
+
 @dataclass
 class Signo:
     """Un signo o síntoma que el protocolo reconoce."""
 
     nombre: str
     codigos: dict[str, str] = field(default_factory=dict)
-    lr: float | None = None
+    rol: str = "apoyo"
+    lr: float | None = None            # LR+ (alias histórico: `lr`)
+    lr_negativo: float | None = None   # LR- cuando consta como ausente
     fuente: str = ""
+
+    @property
+    def lr_positivo(self) -> float | None:
+        return self.lr
 
     def codigo_preferido(self) -> tuple[str, str] | None:
         for sistema in PRIORIDAD_SISTEMAS:
@@ -76,6 +92,45 @@ class CriterioLaboratorio:
 
     def terminos(self) -> list[str]:
         return [t for t in (self.termino_si_alto, self.termino_si_bajo) if t]
+
+
+@dataclass
+class Criterio:
+    """Un criterio de clasificación diagnóstica.
+
+    Se satisface si alguno de sus conceptos aparece entre los hallazgos
+    validados y presentes.
+    """
+
+    nombre: str
+    rol: str = "apoyo"
+    satisface_si: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Clasificacion:
+    """Criterios publicados que convierten hallazgos en un trastorno.
+
+    Es el paso que da el clínico experimentado cuando reúne varios
+    hallazgos anormales y acuña un término nuevo. No es subjetivo: hay
+    criterios de clasificación usados en investigación —Atlanta, Duke,
+    ACR/EULAR, Light— que definen cuándo un caso *cuenta como* la entidad.
+
+    Parecen booleanos y en el fondo son bayesianos: la manifestación fija
+    la probabilidad pre-test, la prueba sensible descarta si es negativa y
+    la específica confirma si es positiva. El «2 de 3» es la abreviatura,
+    acordada por un panel, de que el posterior cruza el umbral.
+    """
+
+    nombre: str = ""
+    fuente: str = ""
+    requiere: int = 0
+    criterios: list[Criterio] = field(default_factory=list)
+    produce: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def declarada(self) -> bool:
+        return bool(self.criterios and self.produce.get("termino"))
 
 
 @dataclass
@@ -113,6 +168,7 @@ class Skill:
         self.signos = self._parsear_signos()
         self.laboratorio = self._parsear_laboratorio()
         self.bayes = self._parsear_bayes()
+        self.clasificacion = self._parsear_clasificacion()
 
     # --- Parseo -------------------------------------------------------
 
@@ -206,16 +262,47 @@ class Skill:
         for s in self.meta.get("signos") or []:
             if not isinstance(s, dict) or not s.get("nombre"):
                 continue
-            lr = s.get("lr")
+            rol = str(s.get("rol", "apoyo"))
             salida.append(
                 Signo(
                     nombre=str(s["nombre"]),
                     codigos={k: str(v) for k, v in (s.get("codigos") or {}).items()},
-                    lr=float(lr) if isinstance(lr, (int, float)) else None,
+                    rol=rol if rol in ROLES else "apoyo",
+                    lr=_num(s.get("lr") if "lr" in s else s.get("lr_positivo")),
+                    lr_negativo=_num(s.get("lr_negativo")),
                     fuente=str(s.get("fuente", "")),
                 )
             )
         return salida
+
+    def _parsear_clasificacion(self) -> Clasificacion:
+        bloque = self.meta.get("clasificacion")
+        if not isinstance(bloque, dict):
+            return Clasificacion()
+
+        criterios = []
+        for c in bloque.get("criterios") or []:
+            if not isinstance(c, dict):
+                continue
+            codigos = [str(x) for x in (c.get("satisface_si") or [])]
+            if not codigos:
+                continue
+            rol = str(c.get("rol", "apoyo"))
+            criterios.append(
+                Criterio(
+                    nombre=str(c.get("nombre") or rol),
+                    rol=rol if rol in ROLES else "apoyo",
+                    satisface_si=codigos,
+                )
+            )
+
+        return Clasificacion(
+            nombre=str(bloque.get("nombre", "")),
+            fuente=str(bloque.get("fuente", "")),
+            requiere=int(bloque.get("requiere", 0) or 0),
+            criterios=criterios,
+            produce=bloque.get("produce") or {},
+        )
 
     def _parsear_laboratorio(self) -> list[CriterioLaboratorio]:
         salida = []
@@ -406,9 +493,13 @@ class Skill:
                 "factores_riesgo_a_priori": self.bayes.factores_riesgo,
             },
             "signDetected": [
-                {"name": s.nombre, "bayes_lr": s.lr}
+                {
+                    "name": s.nombre,
+                    "bayes_lr": s.lr,
+                    "bayes_lr_negativo": s.lr_negativo,
+                }
                 for s in self.signos
-                if s.lr is not None
+                if s.lr is not None or s.lr_negativo is not None
             ],
         }
 

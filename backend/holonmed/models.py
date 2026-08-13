@@ -43,6 +43,25 @@ class OrigenTic(str, Enum):
     OTRO = "otro"
 
 
+class Polaridad(str, Enum):
+    """Si el hallazgo está presente o consta explícitamente como ausente.
+
+    La distinción no es cosmética: en un razonamiento bayesiano una prueba
+    sensible negativa descarta con fuerza, y hasta ahora el sistema tiraba
+    esa evidencia. El prompt de extracción decía literalmente «ignora los
+    hallazgos negados», así que «lipasa normal» —que es la evidencia más
+    potente en contra de una pancreatitis— no llegaba a ninguna parte.
+
+    Hay un tercer caso que NO se representa aquí a propósito: que no conste
+    nada. «No consta» no es «ausente». Tratarlos igual produciría falsos
+    negativos con toda la confianza del mundo, así que la ausencia de
+    mención simplemente no genera infón.
+    """
+
+    PRESENTE = "presente"
+    AUSENTE = "ausente"
+
+
 class EstadoInfon(str, Enum):
     """Veredicto del validador de tres capas."""
 
@@ -64,6 +83,7 @@ class Infon(BaseModel):
     # porque el vocabulario es intercambiable: puede ser el semilla del
     # proyecto, SNOMED CT si tienes licencia, o cualquier otro importado.
     termino: str = Field(description="Término preferente tras la normalización")
+    polaridad: Polaridad = Polaridad.PRESENTE
     codigo: str | None = None
     sistema: str | None = Field(
         default=None, description="'holonmed' | 'snomed' | 'hpo' | …"
@@ -74,6 +94,16 @@ class Infon(BaseModel):
     cie10_code: str | None = None
     linaje_clinico: str | None = Field(
         default=None, description="Concepto padre en la jerarquía del grafo"
+    )
+
+    # Derivación: un infón de nivel 2 no se cita de la narrativa sino que
+    # se deduce de otros infones mediante criterios de clasificación.
+    derivado_de: list[str] = Field(
+        default_factory=list,
+        description="Términos que satisfacen los criterios, si es derivado",
+    )
+    criterio: str | None = Field(
+        default=None, description="Criterio de clasificación que lo produjo"
     )
 
     # Veredicto y trazabilidad
@@ -87,6 +117,16 @@ class Infon(BaseModel):
     @property
     def es_valido(self) -> bool:
         return self.estado == EstadoInfon.VALIDADO
+
+    @property
+    def confirma(self) -> bool:
+        """Un hallazgo validado y presente. El que suma en la inferencia."""
+        return self.es_valido and self.polaridad is Polaridad.PRESENTE
+
+    @property
+    def descarta(self) -> bool:
+        """Una ausencia documentada y validada. La que resta."""
+        return self.es_valido and self.polaridad is Polaridad.AUSENTE
 
     @property
     def es_facturable(self) -> bool:
@@ -133,6 +173,9 @@ class ResultadoTic(BaseModel):
     skill_activa: str
     resumen: str = ""
     infones: list[Infon] = Field(default_factory=list)
+    # `Any` para no importar de core y crear un ciclo; en la práctica es
+    # un ResultadoClasificacion.
+    clasificacion: Any | None = None
     inferencia: InferenciaBayesiana | None = None
 
     @property
@@ -160,6 +203,9 @@ class HolonPaciente(BaseModel):
     def absorber(self, nuevos: list[Infon]) -> None:
         """El crecimiento del holón: sólo se integra lo que fue validado."""
         self.linea_tiempo.extend(i for i in nuevos if i.es_valido)
+
+    def presentes(self) -> list[Infon]:
+        return [i for i in self.linea_tiempo if i.polaridad is Polaridad.PRESENTE]
 
     def metadatos_para_bayes(self, texto_actual: str = "") -> dict[str, Any]:
         """Contexto que alimenta la probabilidad a priori.

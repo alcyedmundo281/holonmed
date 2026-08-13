@@ -25,9 +25,11 @@ from ..models import (
     EstadoInfon,
     HolonPaciente,
     Infon,
+    Polaridad,
     ResultadoTic,
 )
 from .bayes import AntigenPresentingCell
+from .clasificacion import Clasificador
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
 from .verifier import ClinicalVerifier
@@ -65,10 +67,19 @@ REGLAS DE PRECISIÓN:
 4. BIOQUÍMICA: no confundas amilasa con lipasa, ni enzimas con lípidos.
 5. VOCABULARIO: si el protocolo tiene el término exacto, úsalo.
 6. LIMPIEZA: sólo el nombre del hallazgo ("Hiperamilasemia", no "Amilasa 1200").
-7. NEGACIONES: ignora los hallazgos negados ("sin fiebre" no se extrae).
+7. POLARIDAD — esto es importante y tiene tres casos, no dos:
+   - El texto AFIRMA el hallazgo -> "presente": true
+     «vómitos repetidos», «amilasa 1200»
+   - El texto lo NIEGA o lo da por normal -> "presente": false
+     «no refiere fiebre», «sin dolor torácico», «lipasa 45» (normal)
+     Estos NO se descartan: una prueba negativa es evidencia, y de las
+     fuertes. Extráelos con presente=false.
+   - El texto NO DICE NADA del hallazgo -> no lo extraigas en absoluto.
+     No inventes ausencias. Que no se mencione algo no significa que no
+     esté: significa que no se sabe, y eso no es un hallazgo.
 
 FORMATO JSON:
-{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado"}}]}}"""
+{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
 
 
 class CrystallizationPipeline:
@@ -82,12 +93,14 @@ class CrystallizationPipeline:
         verificador: ClinicalVerifier,
         bayes: AntigenPresentingCell | None = None,
         settings: Settings | None = None,
+        clasificador: Clasificador | None = None,
     ):
         self.llm = llm
         self.skills = skills
         self.validador = validador
         self.verificador = verificador
         self.bayes = bayes or AntigenPresentingCell()
+        self.clasificador = clasificador or Clasificador()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -127,7 +140,20 @@ class CrystallizationPipeline:
             if infon:
                 resultado.infones.append(infon)
 
-        # --- ETAPA 4: INFERENCIA ABDUCTIVA ----------------------------
+        # --- ETAPA 4: CLASIFICACIÓN -----------------------------------
+        # De hallazgos a trastorno, por criterios publicados. Es el paso
+        # que acuña un término nuevo, y lo hace Python: es lógica sobre
+        # evidencia validada, no una apreciación del modelo.
+        try:
+            resultado.clasificacion = self.clasificador.evaluar(
+                skill, resultado.infones
+            )
+            if resultado.clasificacion and resultado.clasificacion.trastorno:
+                resultado.infones.append(resultado.clasificacion.trastorno)
+        except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
+            logger.exception("Clasificador falló; el tic conserva sus infones")
+
+        # --- ETAPA 5: INFERENCIA ABDUCTIVA ----------------------------
         try:
             resultado.inferencia = self.bayes.calcular(
                 holon.metadatos_para_bayes(texto),
@@ -185,6 +211,13 @@ class CrystallizationPipeline:
         if not termino:
             return None
 
+        # Por defecto presente: si el modelo no se pronuncia, no vamos a
+        # inventarle una ausencia, que es la dirección peligrosa.
+        presente = crudo.get("presente", True)
+        polaridad = (
+            Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
+        )
+
         # CAPAS 0-1-2: ¿existe este concepto en la ontología?
         match = await self.validador.validar(termino, hints=hints)
 
@@ -199,6 +232,7 @@ class CrystallizationPipeline:
                 termino,
                 texto_original,
                 skill.para_prompt(self.settings.formato_protocolo),
+                ausente=(polaridad is Polaridad.AUSENTE),
             )
             es_logico = auditoria.es_valido
             razon = auditoria.razon
@@ -235,6 +269,7 @@ class CrystallizationPipeline:
             texto_origen=cita or texto_original[:120],
             termino_propuesto=termino,
             termino=termino_final,
+            polaridad=polaridad,
             codigo=codigo,
             sistema=sistema,
             concepto_id=concepto_id,

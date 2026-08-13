@@ -39,44 +39,105 @@ modelo_bayesiano:
     hipertrigliceridemia: 2.2
     cpre: 2.5
 
+# El `rol` no es decorativo: dice en qué dirección mueve la probabilidad.
+#   prueba_especifica  su LR+ confirma cuando es positiva
+#   prueba_sensible    su LR- descarta cuando es negativa
+#   manifestacion      fija la sospecha de partida
+#   apoyo              aporta poco por sí solo
+#
 # Cada LR debe citar su fuente. Un likelihood ratio sin procedencia es un
 # número inventado con formato científico.
+#
+# `lr_negativo` sólo tiene sentido donde la ausencia sea informativa. Que
+# no haya signo de Cullen no dice nada: es raro incluso en la enfermedad.
 signos:
   - nombre: Hiperlipasemia (>3x)
     codigos: { holonmed: "HM:0732", snomed: "10443000" }
+    rol: prueba_especifica
     lr: 26.6
+    lr_negativo: 0.1
     fuente: >-
       JAMA Rational Clinical Examination. Criterio de referencia; el LR más
-      alto de la serie.
+      alto de la serie. Una lipasa normal descarta con fuerza.
 
   - nombre: Hiperamilasemia (>3x)
     codigos: { holonmed: "HM:0731", snomed: "10427000" }
+    rol: prueba_especifica
     lr: 12.5
+    lr_negativo: 0.3
     fuente: >-
       JAMA Rational Clinical Examination. Fuerte, pero menos específica que
-      la lipasa: se eleva también en patología salival y otras causas.
+      la lipasa: se eleva también en patología salival y otras causas, y
+      se normaliza antes.
 
   - nombre: Dolor epigástrico
     codigos: { holonmed: "HM:0202", snomed: "79922009" }
+    rol: manifestacion
     lr: 2.1
-    fuente: GetTheDiagnosis.org. Sensible pero poco específico.
+    lr_negativo: 0.2
+    fuente: >-
+      GetTheDiagnosis.org. Sensible pero poco específico; su ausencia hace
+      la pancreatitis bastante improbable.
 
   - nombre: Vómitos
     codigos: { holonmed: "HM:0302", snomed: "422400008" }
+    rol: apoyo
     lr: 1.6
     fuente: GetTheDiagnosis.org. Síntoma común, aporta poca certeza solo.
 
   - nombre: Irritación peritoneal
     codigos: { holonmed: "HM:0601", snomed: "271956003" }
+    rol: apoyo
     lr: 2.2
     fuente: GetTheDiagnosis.org. Signo de irritación peritoneal (Blumberg).
 
   - nombre: Signo de Cullen
     codigos: { holonmed: "HM:0611", snomed: "45002005" }
+    rol: apoyo
     lr: 8.0
     fuente: >-
       Raro pero específico de pancreatitis necrotizante o hemorrágica. Su
-      ausencia no descarta nada.
+      ausencia no descarta nada, y por eso no declara lr_negativo.
+
+  - nombre: Hallazgos de imagen compatibles con pancreatitis
+    codigos: { holonmed: "HM:0901" }
+    rol: imagen
+    lr: 9.0
+    fuente: >-
+      Tercer criterio de Atlanta. La TC con contraste es la referencia; la
+      ecografía sirve sobre todo para buscar la causa biliar.
+
+# Criterios de clasificación de Atlanta 2012.
+#
+# Parecen booleanos y son bayesianos: la manifestación fija la
+# probabilidad pre-test, la prueba específica la confirma, y el «2 de 3»
+# es la abreviatura de que el posterior cruza el umbral de tratamiento.
+#
+# Un criterio del que no hay información NO es un criterio negativo: es un
+# vacío, y el sistema lo señala para que se pida.
+clasificacion:
+  nombre: Criterios de Atlanta 2012
+  fuente: >-
+    Banks PA, Bollen TL, Dervenis C, et al. Classification of acute
+    pancreatitis 2012. Gut. 2013;62(1):102-111.
+  requiere: 2
+  criterios:
+    - nombre: Dolor abdominal característico
+      rol: manifestacion
+      satisface_si: ["HM:0205", "HM:0202"]
+
+    - nombre: Enzimas pancreáticas más de 3 veces el límite
+      rol: prueba_especifica
+      satisface_si: ["HM:0731", "HM:0732"]
+
+    - nombre: Hallazgos de imagen compatibles
+      rol: imagen
+      satisface_si: ["HM:0901"]
+
+  produce:
+    termino: Pancreatitis aguda
+    codigos: { holonmed: "HM:1002", snomed: "197456007" }
+    semantica: trastorno
 
 laboratorio:
   - parametro: Amilasa

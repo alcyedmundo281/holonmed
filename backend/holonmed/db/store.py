@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..models import EstadoInfon, HolonPaciente, Infon
+from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,9 @@ class Database:
     MIGRACIONES: tuple[tuple[str, str, str], ...] = (
         ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
         ("tic", "actor", "TEXT"),
+        ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
+        ("infon", "derivado_de", "TEXT"),
+        ("infon", "criterio", "TEXT"),
     )
 
     def _migrar(self, cx: sqlite3.Connection) -> None:
@@ -429,10 +432,11 @@ class TicRepo:
                     cx.execute(
                         """INSERT INTO infon (
                                tic_id, paciente_id, concepto_id, timestamp, texto_origen,
-                               termino_propuesto, termino, codigo, sistema, cie10, linaje,
+                               termino_propuesto, termino, polaridad, derivado_de,
+                               criterio, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -441,6 +445,11 @@ class TicRepo:
                             infon.texto_origen,
                             infon.termino_propuesto,
                             infon.termino,
+                            infon.polaridad.value,
+                            json.dumps(infon.derivado_de, ensure_ascii=False)
+                            if infon.derivado_de
+                            else None,
+                            infon.criterio,
                             infon.codigo,
                             infon.sistema,
                             infon.cie10_code,
@@ -677,11 +686,17 @@ class CitaRepo:
 
 
 def _fila_a_infon(fila: sqlite3.Row) -> Infon:
+    derivado = fila["derivado_de"] if "derivado_de" in fila.keys() else None
     return Infon(
         timestamp=fila["timestamp"],
         texto_origen=fila["texto_origen"],
         termino_propuesto=fila["termino_propuesto"],
         termino=fila["termino"],
+        polaridad=Polaridad(fila["polaridad"] or "presente")
+        if "polaridad" in fila.keys()
+        else Polaridad.PRESENTE,
+        derivado_de=json.loads(derivado) if derivado else [],
+        criterio=fila["criterio"] if "criterio" in fila.keys() else None,
         codigo=fila["codigo"],
         sistema=fila["sistema"],
         cie10_code=fila["cie10"],
