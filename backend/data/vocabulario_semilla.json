@@ -11,9 +11,10 @@
     "clonado el repositorio: reconoce y normaliza los hallazgos frecuentes,",
     "y rechaza lo que no reconoce. Para codificar de verdad (facturación,",
     "interoperabilidad) hay que importar una terminología con licencia:",
-    "  python scripts/importar_terminologia.py --help"
+    "  python scripts/importar_terminologia.py --help",
+    "v1.5.0: unifica los conceptos acuñados por medsemiotics-db —el índice compartido— al modelar condiciones con cociente de verosimilitud verificado contra PubMed, y los que trajo el traslado del protocolo de síndrome coronario agudo."
   ],
-  "version": "1.4.0",
+  "version": "1.5.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -629,6 +630,37 @@
       ]
     },
     {
+      "codigo": "HM:0611",
+      "termino": "Signo de Cullen",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "equimosis periumbilical",
+        "hematoma periumbilical"
+      ]
+    },
+    {
+      "codigo": "HM:0612",
+      "termino": "Signo de Grey-Turner",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "equimosis en flancos",
+        "hematoma en flancos"
+      ]
+    },
+    {
+      "codigo": "HM:0613",
+      "termino": "Defensa abdominal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "abdomen en tabla",
+        "contractura abdominal",
+        "vientre en tabla"
+      ]
+    },
+    {
       "codigo": "HM:0700",
       "termino": "Alteración analítica",
       "semantica": "agrupacion",
@@ -1083,37 +1115,6 @@
       ]
     },
     {
-      "codigo": "HM:0611",
-      "termino": "Signo de Cullen",
-      "semantica": "hallazgo",
-      "padre": "HM:0600",
-      "sinonimos": [
-        "equimosis periumbilical",
-        "hematoma periumbilical"
-      ]
-    },
-    {
-      "codigo": "HM:0612",
-      "termino": "Signo de Grey-Turner",
-      "semantica": "hallazgo",
-      "padre": "HM:0600",
-      "sinonimos": [
-        "equimosis en flancos",
-        "hematoma en flancos"
-      ]
-    },
-    {
-      "codigo": "HM:0613",
-      "termino": "Defensa abdominal",
-      "semantica": "hallazgo",
-      "padre": "HM:0600",
-      "sinonimos": [
-        "abdomen en tabla",
-        "contractura abdominal",
-        "vientre en tabla"
-      ]
-    },
-    {
       "codigo": "HM:0900",
       "termino": "Hallazgo de imagen",
       "semantica": "agrupacion",
@@ -1311,6 +1312,136 @@
       ]
     },
     {
+      "codigo": "HM:3001",
+      "termino": "Adenopatía cervical posterior",
+      "semantica": "hallazgo",
+      "padre": "HM:0607",
+      "sinonimos": [
+        "ganglios cervicales posteriores",
+        "adenopatía en cadena cervical posterior"
+      ]
+    },
+    {
+      "codigo": "HM:3002",
+      "termino": "Adenopatía inguinal o axilar",
+      "semantica": "hallazgo",
+      "padre": "HM:0607",
+      "sinonimos": [
+        "adenopatía inguinal",
+        "adenopatía axilar"
+      ]
+    },
+    {
+      "codigo": "HM:3003",
+      "termino": "Petequias en paladar",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "petequias palatinas",
+        "enantema petequial del paladar"
+      ]
+    },
+    {
+      "codigo": "HM:3004",
+      "termino": "Linfocitosis atípica",
+      "semantica": "hallazgo",
+      "padre": "HM:0710",
+      "sinonimos": [
+        "linfocitos atípicos",
+        "células de Downey"
+      ]
+    },
+    {
+      "codigo": "HM:3005",
+      "termino": "Rigidez de nuca",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "rigidez nucal",
+        "nuca rígida",
+        "meningismo"
+      ]
+    },
+    {
+      "codigo": "HM:3006",
+      "termino": "Acentuación de la cefalea con la sacudida cefálica",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "jolt accentuation",
+        "acentuación con sacudida",
+        "signo de la sacudida"
+      ]
+    },
+    {
+      "codigo": "HM:3007",
+      "termino": "Derrame pleural",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "líquido pleural",
+        "colección pleural"
+      ]
+    },
+    {
+      "codigo": "HM:3008",
+      "termino": "Colesterol elevado en líquido pleural",
+      "semantica": "hallazgo",
+      "padre": "HM:0700",
+      "sinonimos": [
+        "colesterol pleural alto"
+      ]
+    },
+    {
+      "codigo": "HM:3009",
+      "termino": "LDH elevada en líquido pleural",
+      "semantica": "hallazgo",
+      "padre": "HM:0730",
+      "sinonimos": [
+        "lactato deshidrogenasa pleural elevada",
+        "LDH pleural alta"
+      ]
+    },
+    {
+      "codigo": "HM:3010",
+      "termino": "Cociente colesterol pleural/sérico elevado",
+      "semantica": "hallazgo",
+      "padre": "HM:0700",
+      "sinonimos": [
+        "ratio colesterol pleura-suero"
+      ]
+    },
+    {
+      "codigo": "HM:3011",
+      "termino": "Criterios de Light",
+      "semantica": "agrupacion",
+      "padre": "HM:0700",
+      "sinonimos": [
+        "criterio de Light"
+      ]
+    },
+    {
+      "codigo": "HM:3012",
+      "termino": "Pulsación aórtica ensanchada a la palpación",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "masa abdominal pulsátil",
+        "pulsación aórtica ampliada",
+        "aorta palpable ensanchada"
+      ]
+    },
+    {
+      "codigo": "HM:3013",
+      "termino": "Obesidad abdominal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "adiposidad abdominal",
+        "perímetro abdominal aumentado"
+      ]
+    },
+    {
       "codigo": "HM:3014",
       "termino": "Dolor torácico irradiado a ambos brazos",
       "semantica": "hallazgo",
@@ -1359,6 +1490,325 @@
         "arteriopatía periférica",
         "claudicación intermitente"
       ]
+    },
+    {
+      "codigo": "HM:3019",
+      "termino": "Mareo postural intenso",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "mareo ortostático severo",
+        "mareo que impide la bipedestación"
+      ]
+    },
+    {
+      "codigo": "HM:3020",
+      "termino": "Incremento postural del pulso",
+      "semantica": "hallazgo",
+      "padre": "HM:0104",
+      "sinonimos": [
+        "aumento ortostático de la frecuencia cardíaca"
+      ]
+    },
+    {
+      "codigo": "HM:3021",
+      "termino": "Axila seca",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "ausencia de sudoración axilar"
+      ]
+    },
+    {
+      "codigo": "HM:3022",
+      "termino": "Mucosas húmedas",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "mucosa oral húmeda"
+      ]
+    },
+    {
+      "codigo": "HM:3023",
+      "termino": "Lengua sin surcos longitudinales",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "lengua lisa",
+        "ausencia de surcos linguales"
+      ]
+    },
+    {
+      "codigo": "HM:3024",
+      "termino": "Relleno capilar prolongado",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "tiempo de relleno capilar alargado"
+      ]
+    },
+    {
+      "codigo": "HM:3025",
+      "termino": "Turgencia cutánea disminuida",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "signo del pliegue",
+        "mala turgencia de la piel"
+      ]
+    },
+    {
+      "codigo": "HM:3026",
+      "termino": "Exudado amigdalino",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "placas amigdalinas",
+        "exudado en amígdalas"
+      ]
+    },
+    {
+      "codigo": "HM:3027",
+      "termino": "Exudado faríngeo",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "exudado en faringe"
+      ]
+    },
+    {
+      "codigo": "HM:3028",
+      "termino": "Exposición reciente a faringitis estreptocócica",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "contacto con caso de estreptococo"
+      ]
+    },
+    {
+      "codigo": "HM:3029",
+      "termino": "Adenopatía cervical anterior dolorosa",
+      "semantica": "hallazgo",
+      "padre": "HM:0607",
+      "sinonimos": [
+        "ganglios cervicales anteriores dolorosos",
+        "adenitis cervical anterior"
+      ]
+    },
+    {
+      "codigo": "HM:3030",
+      "termino": "Hipertrofia amigdalina",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "amígdalas aumentadas de tamaño",
+        "hipertrofia de amígdalas"
+      ]
+    },
+    {
+      "codigo": "HM:3031",
+      "termino": "Primer síncope a los 35 años o más",
+      "semantica": "hallazgo",
+      "padre": "HM:0505",
+      "sinonimos": [
+        "edad de inicio del síncope ≥35 años"
+      ]
+    },
+    {
+      "codigo": "HM:3032",
+      "termino": "Fibrilación o flutter auricular",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "fibrilación auricular",
+        "flutter auricular"
+      ]
+    },
+    {
+      "codigo": "HM:3033",
+      "termino": "Cardiopatía estructural grave conocida",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "cardiopatía estructural severa"
+      ]
+    },
+    {
+      "codigo": "HM:3034",
+      "termino": "Cianosis presenciada durante el episodio",
+      "semantica": "hallazgo",
+      "padre": "HM:0606",
+      "sinonimos": [
+        "cianosis presenciada"
+      ]
+    },
+    {
+      "codigo": "HM:3035",
+      "termino": "Cambio de humor o preocupación prodrómica por los detalles",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "pródromo con cambio anímico"
+      ]
+    },
+    {
+      "codigo": "HM:3036",
+      "termino": "Sensación de frío previa al síncope",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "frío prodrómico"
+      ]
+    },
+    {
+      "codigo": "HM:3037",
+      "termino": "Cambio de humor tras el síncope",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "alteración anímica postsíncope"
+      ]
+    },
+    {
+      "codigo": "HM:3038",
+      "termino": "Incapacidad para recordar la conducta previa al síncope",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "amnesia prodrómica"
+      ]
+    },
+    {
+      "codigo": "HM:3039",
+      "termino": "Úlceras genitales",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "ulceración genital"
+      ]
+    },
+    {
+      "codigo": "HM:3040",
+      "termino": "Adenopatías referidas por el paciente",
+      "semantica": "hallazgo",
+      "padre": "HM:0607",
+      "sinonimos": [
+        "ganglios inflamados referidos"
+      ]
+    },
+    {
+      "codigo": "HM:3041",
+      "termino": "Dolor posterior de cadera al ponerse en cuclillas",
+      "semantica": "hallazgo",
+      "padre": "HM:0208"
+    },
+    {
+      "codigo": "HM:3042",
+      "termino": "Dolor inguinal a la abducción o aducción pasiva",
+      "semantica": "hallazgo",
+      "padre": "HM:0208"
+    },
+    {
+      "codigo": "HM:3043",
+      "termino": "Debilidad de los abductores de cadera",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3044",
+      "termino": "Aducción pasiva de cadera disminuida",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3045",
+      "termino": "Rotación interna de cadera disminuida",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3046",
+      "termino": "Dolor al subir escaleras o cuestas",
+      "semantica": "hallazgo",
+      "padre": "HM:0208"
+    },
+    {
+      "codigo": "HM:3047",
+      "termino": "Antecedente familiar de artrosis",
+      "semantica": "hallazgo",
+      "padre": "HM:0001"
+    },
+    {
+      "codigo": "HM:3048",
+      "termino": "Antecedente personal de artrosis de rodilla",
+      "semantica": "trastorno",
+      "padre": "HM:1000"
+    },
+    {
+      "codigo": "HM:3049",
+      "termino": "Signos de fractura de cráneo",
+      "semantica": "hallazgo",
+      "padre": "HM:0600"
+    },
+    {
+      "codigo": "HM:3050",
+      "termino": "Puntuación de Glasgow de 13",
+      "semantica": "hallazgo",
+      "padre": "HM:0501"
+    },
+    {
+      "codigo": "HM:3051",
+      "termino": "Descenso de la puntuación de Glasgow",
+      "semantica": "hallazgo",
+      "padre": "HM:0501"
+    },
+    {
+      "codigo": "HM:3052",
+      "termino": "Vómitos en dos o más episodios",
+      "semantica": "hallazgo",
+      "padre": "HM:0302"
+    },
+    {
+      "codigo": "HM:3053",
+      "termino": "Peatón atropellado por vehículo",
+      "semantica": "hallazgo",
+      "padre": "HM:0001"
+    },
+    {
+      "codigo": "HM:3054",
+      "termino": "Amnesia de más de 30 minutos",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3055",
+      "termino": "Arco doloroso",
+      "semantica": "hallazgo",
+      "padre": "HM:0208"
+    },
+    {
+      "codigo": "HM:3056",
+      "termino": "Signo de lag de rotación externa",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3057",
+      "termino": "Signo de lag de rotación interna",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3058",
+      "termino": "Signo del brazo caído",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3059",
+      "termino": "Dolor de hombro",
+      "semantica": "hallazgo",
+      "padre": "HM:0208"
     },
     {
       "codigo": "HM:6007",
