@@ -13,7 +13,7 @@
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help"
   ],
-  "version": "1.3.0",
+  "version": "1.4.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1308,6 +1308,66 @@
         "POCUS",
         "ecografía clínica",
         "ecoscopia"
+      ]
+    },
+    {
+      "codigo": "HM:3014",
+      "termino": "Dolor torácico irradiado a ambos brazos",
+      "semantica": "hallazgo",
+      "padre": "HM:0206",
+      "sinonimos": [
+        "dolor irradiado a los dos brazos",
+        "irradiación bibraquial"
+      ]
+    },
+    {
+      "codigo": "HM:3015",
+      "termino": "Descenso del segmento ST",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "infradesnivel del ST",
+        "depresión del segmento ST"
+      ]
+    },
+    {
+      "codigo": "HM:3016",
+      "termino": "Signos de isquemia en el electrocardiograma",
+      "semantica": "agrupacion",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "isquemia en ECG",
+        "cambios isquémicos electrocardiográficos"
+      ]
+    },
+    {
+      "codigo": "HM:3017",
+      "termino": "Prueba de esfuerzo previa anormal",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "ergometría previa positiva",
+        "prueba de esfuerzo patológica previa"
+      ]
+    },
+    {
+      "codigo": "HM:3018",
+      "termino": "Enfermedad arterial periférica",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "arteriopatía periférica",
+        "claudicación intermitente"
+      ]
+    },
+    {
+      "codigo": "HM:6007",
+      "termino": "Síndrome coronario agudo",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "SCA",
+        "angina inestable e infarto"
       ]
     }
   ]
