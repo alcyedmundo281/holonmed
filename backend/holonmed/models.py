@@ -233,6 +233,28 @@ class Acoplamiento(BaseModel):
     traza: list[str] = Field(default_factory=list)
 
     @property
+    def peso_evidencia_declarado(self) -> float:
+        """Σ eᵢ sobre las dimensiones que el protocolo declara.
+
+        Ésta —y no la suma sobre el vector completo— es la cantidad que
+        iguala `ln(odds posterior / odds previo)` del motor bayesiano. El
+        resto no simbolizado queda fuera a propósito: su peso es una
+        convención de este módulo, un número que Bayes nunca vio y con el
+        que nunca operó.
+
+        Existe como propiedad, y no como una suma escrita en el test, para
+        que la invariante tenga un nombre en el código. Quien mañana
+        cambie la escala del residuo verá que esta propiedad la excluye
+        explícitamente, en vez de descubrir por sorpresa que rompió una
+        identidad que sólo vivía en la documentación.
+        """
+        return sum(
+            c.observado
+            for c in self.componentes
+            if c.estado is not EstadoDimension.NO_SIMBOLIZADO
+        )
+
+    @property
     def duda(self) -> bool:
         """Hay duda cuando la creencia ha perdido su armonía con el contexto.
 

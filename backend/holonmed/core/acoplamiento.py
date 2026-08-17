@@ -52,6 +52,30 @@ No son dos modelos compitiendo: son dos proyecciones de un único objeto.
 Por eso Φ puede añadir información sin contradecir la probabilidad, y por
 eso jamás debe modificarla.
 
+La identidad es exacta, pero no es incondicional, y conviene decir dónde
+termina antes de que alguien la dé por universal:
+
+1. **La suma corre sobre las dimensiones declaradas, no sobre el vector
+   completo.** El resto no simbolizado entra con un peso que es una
+   convención de este módulo (sección siguiente) y con el que Bayes nunca
+   operó. `Acoplamiento.peso_evidencia_declarado` es la suma que sí iguala
+   el delta bayesiano, y excluye el residuo de forma explícita.
+2. **Ambos motores tienen que recibir el mismo conjunto de infones.** El
+   pipeline no lo hace a propósito: Bayes recibe el tic de hoy y Φ recibe
+   además la línea de tiempo del holón, porque medir el acoplamiento contra
+   medio paciente no mediría nada. Con historial previo, la identidad deja
+   de valer numéricamente aunque la relación conceptual se mantenga.
+3. **A lo sumo un infón validado por dimensión.** Si dos infones
+   emparejan con el mismo signo, Bayes multiplica su LR dos veces y este
+   módulo lo cuenta una. Aquí la discrepancia no favorece a Bayes: contar
+   dos veces la misma prueba es doble contabilidad de la evidencia. Se
+   deja como está porque corregirlo es cambiar el motor bayesiano, no
+   medir el acoplamiento.
+
+Las tres condiciones están fijadas como tests, incluida la divergencia,
+para que un cambio futuro en la escala del residuo falle ruidosamente en
+vez de erosionar la identidad en silencio.
+
 Los tres polos salen de la geometría, sin necesidad de postularlos:
 
 * **Φ = +1** — armonía. El registro dice exactamente lo que la hipótesis
