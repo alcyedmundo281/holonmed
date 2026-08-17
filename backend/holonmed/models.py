@@ -156,6 +156,93 @@ class InferenciaBayesiana(BaseModel):
         return "BAJA_SOSPECHA"
 
 
+class EstadoDimension(str, Enum):
+    """Qué hace el registro en una dimensión del espacio de hallazgos."""
+
+    CONCUERDA = "concuerda"            # el registro dice lo que la hipótesis exige
+    CONTRADICE = "contradice"          # el registro dice lo contrario
+    SIN_MEDIR = "sin_medir"            # nadie lo ha mirado: no es ausencia, es vacío
+    NO_SIMBOLIZADO = "no_simbolizado"  # hallazgo real que la hipótesis no explica
+
+
+class VeredictoSemiotico(str, Enum):
+    """Lectura del coeficiente de acoplamiento en bandas.
+
+    Las bandas son presentación; la métrica es Φ, que es continuo. Se
+    nombran para que el clínico no tenga que interpretar un decimal a
+    solas, nunca para sustituirlo.
+    """
+
+    ARMONIA = "ARMONIA"                            # la creencia es operable
+    ACOPLAMIENTO_PARCIAL = "ACOPLAMIENTO_PARCIAL"  # encaja, pero queda por mirar
+    INERCIA = "INERCIA"                            # ortogonal: no toca este caso
+    FRICCION = "FRICCION"                          # el contexto empieza a disentir
+    DESARMONIA = "DESARMONIA"                      # el contexto la contradice
+
+
+class ComponenteAcoplamiento(BaseModel):
+    """Una dimensión del espacio, con lo que la hipótesis exige y lo que hay.
+
+    Es la unidad de auditoría de Φ: un clínico puede recorrer la lista y
+    discrepar de una línea concreta, igual que puede hacerlo con la traza
+    bayesiana. Una métrica de armonía que no se pudiera impugnar punto por
+    punto sería justamente el tipo de argumento que la métrica existe para
+    detectar.
+    """
+
+    dimension: str
+    rol: str = "apoyo"
+    esperado: float = Field(description="hᵢ: ln(LR+) que exige el caso de libro")
+    observado: float = Field(description="eᵢ: peso de evidencia que aporta el registro")
+    estado: EstadoDimension
+    detalle: str = ""
+    infon: str | None = None
+    confianza: float = 0.0
+
+    @property
+    def contribucion(self) -> float:
+        """Lo que esta dimensión aporta al producto escalar h·e."""
+        return round(self.esperado * self.observado, 4)
+
+
+class Acoplamiento(BaseModel):
+    """Coeficiente de Acoplamiento (Φ): armonía entre la hipótesis y el contexto.
+
+    Φ ∈ [−1, +1] es el coseno del ángulo entre el caso de libro y el caso
+    real en el espacio del peso de evidencia, atenuado por el anclaje α.
+    Nunca modifica la `InferenciaBayesiana`: se lee junto a ella.
+    """
+
+    phi: float = Field(description="Φ ∈ [−1, +1]. Armonía con el contexto.")
+    coseno: float = Field(description="cos(h,e) antes de aplicar el anclaje")
+    anclaje: float = Field(description="α ∈ [0,1]: sujeción del argumento a lo medido")
+    hipotesis: str
+
+    veredicto: VeredictoSemiotico
+    cuadrante: str = Field(description="Lectura conjunta de la probabilidad y Φ")
+
+    componentes: list[ComponenteAcoplamiento] = Field(default_factory=list)
+    resto_no_simbolizado: list[str] = Field(
+        default_factory=list,
+        description="Hallazgos validados que la hipótesis no explica",
+    )
+    indagacion: list[str] = Field(
+        default_factory=list, description="Hacia dónde apunta la duda"
+    )
+    anclaje_detalle: dict[str, float] = Field(default_factory=dict)
+    traza: list[str] = Field(default_factory=list)
+
+    @property
+    def duda(self) -> bool:
+        """Hay duda cuando la creencia ha perdido su armonía con el contexto.
+
+        No es un umbral cosmético: por debajo del acoplamiento mínimo la
+        hipótesis ha dejado de funcionar como regla de acción fiable, y eso
+        es exactamente lo que debe reabrir la indagación.
+        """
+        return self.phi < 0.20
+
+
 class ResultadoTic(BaseModel):
     """Todo lo que produce un único ciclo de procesamiento (un *tic*)."""
 
@@ -177,6 +264,10 @@ class ResultadoTic(BaseModel):
     # un ResultadoClasificacion.
     clasificacion: Any | None = None
     inferencia: InferenciaBayesiana | None = None
+    # Segundo eje, independiente de la probabilidad: cuánto armoniza la
+    # hipótesis con el resto del paciente. Se lee junto a `inferencia`,
+    # nunca en lugar de ella.
+    acoplamiento: Acoplamiento | None = None
 
     @property
     def infones_validados(self) -> list[Infon]:

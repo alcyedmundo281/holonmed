@@ -28,6 +28,7 @@ from ..models import (
     Polaridad,
     ResultadoTic,
 )
+from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .skills import Skill, SkillManager
@@ -94,6 +95,7 @@ class CrystallizationPipeline:
         bayes: AntigenPresentingCell | None = None,
         settings: Settings | None = None,
         clasificador: Clasificador | None = None,
+        acoplamiento: MedidorDeAcoplamiento | None = None,
     ):
         self.llm = llm
         self.skills = skills
@@ -101,6 +103,7 @@ class CrystallizationPipeline:
         self.verificador = verificador
         self.bayes = bayes or AntigenPresentingCell()
         self.clasificador = clasificador or Clasificador()
+        self.acoplamiento = acoplamiento or MedidorDeAcoplamiento()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -162,6 +165,26 @@ class CrystallizationPipeline:
             )
         except Exception:  # noqa: BLE001 — un fallo de Bayes no anula el tic
             logger.exception("Motor bayesiano falló; el tic conserva sus infones")
+
+        # --- ETAPA 6: VALIDACIÓN SEMIÓTICA ----------------------------
+        # Bayes ya dijo cuánta evidencia hay. Falta la otra pregunta: si
+        # esta hipótesis, tomada como regla de acción, armoniza con el
+        # paciente entero o deja fricción. Es aritmética determinista
+        # sobre lo que las etapas anteriores ya auditaron — ninguna
+        # llamada más al modelo — y en ningún caso toca la probabilidad.
+        try:
+            resultado.acoplamiento = self.acoplamiento.medir(
+                skill,
+                # Se mide contra el paciente completo, no sólo contra el
+                # texto de hoy: una hipótesis puede encajar en la consulta
+                # de esta mañana y desentonar con el hallazgo de la
+                # semana pasada. Esa desafinación es justo lo que Φ existe
+                # para hacer visible.
+                list(holon.linea_tiempo) + resultado.infones,
+                resultado.inferencia,
+            )
+        except Exception:  # noqa: BLE001 — un fallo de Φ no anula el tic
+            logger.exception("Medidor de acoplamiento falló; el tic sigue en pie")
 
         return resultado
 

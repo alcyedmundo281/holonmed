@@ -1,3 +1,4 @@
+from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador, EstadoCriterio, ResultadoClasificacion, Vacio
 from .pipeline import CrystallizationPipeline
@@ -17,6 +18,7 @@ __all__ = [
     "ClinicalVerifier",
     "CrystallizationPipeline",
     "Match",
+    "MedidorDeAcoplamiento",
     "OntologyValidator",
     "Skill",
     "SkillManager",
