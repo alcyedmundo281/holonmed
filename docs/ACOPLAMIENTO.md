@@ -101,16 +101,51 @@ sección 5.
 No son dos modelos compitiendo. Son **dos proyecciones del mismo objeto**:
 
 ```
-   Σ eᵢ  =  ln(odds posterior / odds previo)
+   Σ eᵢ  =  ln(odds posterior / odds previo)          (sobre las dimensiones declaradas)
 ```
 
 Es decir: **Bayes lee la magnitud del vector de evidencia y Φ lee su
 dirección.** Por eso Φ puede añadir información sin contradecir la
-probabilidad, y por eso no debe modificarla jamás. La identidad está
-comprobada como test (`test_phi_y_bayes_leen_el_mismo_vector`), y es la
-razón de que el emparejamiento término↔signo viva en una sola función
-compartida (`bayes.emparejar_termino`): si los dos módulos poblaran el
-vector con criterios distintos, la identidad se rompería en silencio.
+probabilidad, y por eso no debe modificarla jamás. Es también la razón de
+que el emparejamiento término↔signo viva en una sola función compartida
+(`bayes.emparejar_termino`): si los dos módulos poblaran el vector con
+criterios distintos, la identidad se rompería en silencio.
+
+**Dónde termina la identidad.** Es exacta, pero no incondicional, y decirlo
+importa: quien la dé por universal escribirá código que la rompa sin
+enterarse. Se cumple bajo tres condiciones.
+
+**1. La suma corre sobre el subespacio declarado, no sobre el vector
+completo.** El resto no simbolizado entra con un peso que es una convención
+de este módulo (sección 5) y con el que Bayes nunca operó. La cantidad que
+iguala el delta bayesiano es `Acoplamiento.peso_evidencia_declarado`, que
+excluye el residuo explícitamente. Existe como propiedad con nombre, y no
+como una suma escrita dentro de un test, precisamente para que quien cambie
+la escala del residuo vea que la invariante lo excluye a propósito.
+
+**2. Ambos motores tienen que recibir el mismo conjunto de infones.** El
+pipeline no lo hace, y no por descuido: Bayes recibe el tic de hoy y Φ
+recibe además la línea de tiempo del holón, porque medir el acoplamiento
+contra medio paciente no mediría nada. Con historial previo la identidad
+deja de valer numéricamente, aunque la relación conceptual —magnitud frente
+a dirección— se mantiene intacta.
+
+**3. A lo sumo un infón validado por dimensión.** Si dos infones emparejan
+con el mismo signo, Bayes multiplica su LR dos veces y este módulo lo cuenta
+una. Aquí la discrepancia no favorece a Bayes: contar dos veces la misma
+prueba es doble contabilidad de la evidencia. Se deja como está porque
+corregirlo es cambiar el motor bayesiano, y eso es otra conversación.
+
+Las tres condiciones están fijadas como tests —incluida la divergencia, que
+se afirma para que nadie la «arregle» creyendo que corrige un fallo:
+
+| test | qué fija |
+|---|---|
+| `test_phi_y_bayes_leen_el_mismo_vector` | la identidad sobre el subespacio declarado |
+| `test_la_identidad_sobrevive_al_resto_no_simbolizado` | que con residuo el subespacio cuadra y el vector completo no |
+| `test_la_identidad_exige_el_mismo_conjunto_de_infones` | la divergencia que introduce el historial |
+| `test_la_identidad_exige_un_infon_por_dimension` | el factor 2 del doble emparejamiento |
+| `test_el_peso_declarado_excluye_el_residuo_por_construccion` | que la invariante viva en el código |
 
 ---
 
@@ -162,7 +197,12 @@ módulo escalaba el resto a la mediana del protocolo, y el resultado era que
 una prueba con LR enorme compraba armonía casi ilimitada — acertar el
 laboratorio estelar bastaba para tapar cualquier cantidad de historia sin
 explicar. Es exactamente el error que Φ debe delatar, no cometer.
-(`test_una_prueba_estelar_no_compra_armonia_ilimitada`.)
+
+La regla está fijada como propiedad en
+`test_un_hallazgo_no_explicado_pesa_como_los_que_si_se_explican`, y la
+regresión concreta —cuatro hallazgos sin explicar dejando el coseno en 0.55—
+en `test_una_prueba_estelar_no_compra_armonia_ilimitada`. Volver a escalar
+el residuo al protocolo hace caer los dos; comprobado por mutación.
 
 ---
 
@@ -341,7 +381,15 @@ confianza.
   documentada, pero es una elección.
 - **El emparejamiento término↔signo es por subcadena**, heredado del motor
   bayesiano. Es su limitación conocida, y se hereda a propósito para
-  preservar la identidad `Σeᵢ = ln(odds posterior / odds previo)`.
+  preservar la identidad de la sección 3.3.
+- **En el pipeline, Bayes y Φ no ven el mismo conjunto de infones.** Es
+  deliberado —Φ mide contra el paciente entero— pero significa que la
+  identidad numérica sólo se observa en el primer tic de un paciente. Si
+  alguna vez interesa comprobarla en producción, hay que llamar a `medir()`
+  con el mismo conjunto que recibió Bayes.
+- **Bayes cuenta dos veces dos infones sobre el mismo signo.** Φ los cuenta
+  una. La divergencia está documentada y fijada como test; la corrección,
+  si se hace, va en el motor bayesiano.
 - **No se usa `ambito_grafo` todavía.** Un hallazgo que cae en una rama que
   el protocolo reconoce pero no cuantifica cuenta hoy como resto entero;
   podría contar como resto parcial.

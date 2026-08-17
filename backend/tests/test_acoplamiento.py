@@ -253,13 +253,20 @@ def test_los_infones_no_validados_no_entran_en_el_vector(medidor, skill):
 # --- Relación con el motor bayesiano ---------------------------------
 
 
-def test_phi_y_bayes_leen_el_mismo_vector(skill):
-    """Σeᵢ = ln(odds posterior / odds previo).
+def delta_bayesiano(inferencia) -> float:
+    """ln(odds posterior / odds previo) reconstruido desde la inferencia."""
+    previa = inferencia.probabilidad_previa / 100
+    final = inferencia.probabilidad_porcentaje / 100
+    return math.log((final / (1 - final)) / (previa / (1 - previa)))
 
-    Ésta es la identidad que sostiene todo el diseño: Bayes lee la
-    magnitud del vector de evidencia y Φ lee su dirección. Si el
-    emparejamiento de los dos módulos divergiera, la identidad se rompería
-    aquí antes que en ningún otro sitio.
+
+def test_phi_y_bayes_leen_el_mismo_vector(skill):
+    """Σeᵢ = ln(odds posterior / odds previo) sobre el subespacio declarado.
+
+    Ésta es la identidad que sostiene todo el diseño: Bayes lee la magnitud
+    del vector de evidencia y Φ lee su dirección. Si el emparejamiento de
+    los dos módulos divergiera, se rompería aquí antes que en ningún otro
+    sitio.
     """
     infones = [
         infon("Hiperlipasemia"),
@@ -272,12 +279,101 @@ def test_phi_y_bayes_leen_el_mismo_vector(skill):
     )
     acoplamiento = MedidorDeAcoplamiento().medir(skill, infones, inferencia)
 
-    p_previa = inferencia.probabilidad_previa / 100
-    p_final = inferencia.probabilidad_porcentaje / 100
-    delta_bayes = math.log((p_final / (1 - p_final)) / (p_previa / (1 - p_previa)))
+    assert acoplamiento.peso_evidencia_declarado == pytest.approx(
+        delta_bayesiano(inferencia), abs=1e-3
+    )
 
-    suma_e = sum(c.observado for c in acoplamiento.componentes)
-    assert suma_e == pytest.approx(delta_bayes, abs=1e-3)
+
+def test_la_identidad_sobrevive_al_resto_no_simbolizado(skill):
+    """La identidad vive en el subespacio declarado, y el residuo queda fuera.
+
+    Éste es el test que faltaba. El caso sin resto no distingue entre sumar
+    sobre las dimensiones declaradas y sumar sobre el vector completo,
+    porque coinciden. En cuanto hay residuo dejan de coincidir, y sin este
+    test un cambio futuro en la escala del residuo erosionaría la identidad
+    en silencio.
+    """
+    infones = [
+        infon("Hiperlipasemia"),
+        infon("Dolor epigastrico"),
+        infon("Hematuria"),
+        infon("Soplo sistolico"),
+    ]
+    inferencia = AntigenPresentingCell().calcular(
+        {"edad": 50, "antecedentes": ""}, skill.para_bayes(), infones
+    )
+    ac = MedidorDeAcoplamiento().medir(skill, infones, inferencia)
+    delta = delta_bayesiano(inferencia)
+
+    # Sobre lo declarado, la identidad se cumple.
+    assert ac.peso_evidencia_declarado == pytest.approx(delta, abs=1e-3)
+
+    # Sobre el vector completo NO, y eso es correcto: el peso del residuo es
+    # una convención de este módulo con la que Bayes nunca operó. Se afirma
+    # la divergencia para que nadie "arregle" el módulo hasta hacerla
+    # desaparecer creyendo que corrige un fallo.
+    suma_total = sum(c.observado for c in ac.componentes)
+    assert suma_total > delta
+    assert ac.resto_no_simbolizado
+
+
+def test_la_identidad_exige_el_mismo_conjunto_de_infones(skill):
+    """Segunda condición, y el pipeline la incumple a propósito.
+
+    Bayes recibe el tic de hoy; Φ recibe además la línea de tiempo del
+    holón, porque medir el acoplamiento contra medio paciente no mediría
+    nada. Con historial previo la identidad deja de valer numéricamente, y
+    conviene que eso esté escrito y no descubierto.
+    """
+    hoy = [infon("Dolor epigastrico")]
+    historial = [infon("Hiperlipasemia")]
+
+    inferencia = AntigenPresentingCell().calcular(
+        {"edad": 50, "antecedentes": ""}, skill.para_bayes(), hoy
+    )
+    ac = MedidorDeAcoplamiento().medir(skill, historial + hoy, inferencia)
+
+    assert ac.peso_evidencia_declarado > delta_bayesiano(inferencia)
+
+
+def test_la_identidad_exige_un_infon_por_dimension(skill):
+    """Tercera condición: dos infones sobre un mismo signo.
+
+    Bayes multiplica el LR dos veces; este módulo lo cuenta una. La
+    discrepancia no favorece a Bayes —contar dos veces la misma prueba es
+    doble contabilidad de la evidencia— pero corregirlo es cambiar el motor
+    bayesiano, no medir el acoplamiento. Queda fijado como comportamiento
+    conocido.
+    """
+    infones = [infon("Hiperlipasemia"), infon("Hiperlipasemia", confianza=90.0)]
+
+    inferencia = AntigenPresentingCell().calcular(
+        {"edad": 50, "antecedentes": ""}, skill.para_bayes(), infones
+    )
+    ac = MedidorDeAcoplamiento().medir(skill, infones, inferencia)
+
+    # Tolerancia relativa y no absoluta: el delta se reconstruye desde una
+    # probabilidad redondeada a dos decimales, y con dos LR de 26.6 el
+    # posterior roza el techo, donde los odds son muy sensibles a ese
+    # redondeo. Lo que se afirma es el factor de 2, no el cuarto decimal.
+    assert delta_bayesiano(inferencia) == pytest.approx(
+        2 * ac.peso_evidencia_declarado, rel=1e-3
+    )
+
+
+def test_el_peso_declarado_excluye_el_residuo_por_construccion(skill):
+    """La invariante tiene un nombre en el código, no sólo en la documentación."""
+    ac = MedidorDeAcoplamiento().medir(
+        skill, [infon("Hiperlipasemia"), infon("Hematuria")]
+    )
+
+    residuo = [
+        c for c in ac.componentes if c.estado is EstadoDimension.NO_SIMBOLIZADO
+    ]
+    assert residuo and all(c.observado for c in residuo)
+    assert ac.peso_evidencia_declarado == pytest.approx(
+        sum(c.observado for c in ac.componentes) - sum(c.observado for c in residuo)
+    )
 
 
 def test_probabilidad_alta_con_resto_sin_explicar_no_se_declara_operable(
@@ -333,6 +429,52 @@ def test_una_prueba_estelar_no_compra_armonia_ilimitada(medidor, skill):
         VeredictoSemiotico.ACOPLAMIENTO_PARCIAL,
         VeredictoSemiotico.INERCIA,
     }
+    # El umbral no es decorativo: escalando el residuo a la mediana del
+    # protocolo —la primera versión de este módulo— cuatro hallazgos sin
+    # explicar dejaban el coseno en 0.55, y la hipótesis se presentaba como
+    # razonablemente acoplada. Es la regresión concreta que este número
+    # impide, y por eso está escrito.
+    cuatro_ajenos = medidor.medir(
+        skill,
+        [infon("Hiperlipasemia")] + [infon(f"Ajeno {n}") for n in range(4)],
+    )
+    assert cuatro_ajenos.coseno < 0.45
+
+
+def test_un_hallazgo_no_explicado_pesa_como_los_que_si_se_explican(medidor, skill):
+    """La regla de escala del residuo, enunciada como propiedad.
+
+    Es la formulación en una línea de la sección 5 de la especificación:
+    por cada hallazgo que la hipótesis explica con peso w, uno que no
+    explica le cuesta otro tanto. Anclarla al protocolo en vez de al caso
+    —como hacía la primera versión— deja que una prueba de LR enorme
+    compre armonía casi ilimitada.
+    """
+    res = medidor.medir(skill, [infon("Hiperlipasemia"), infon("Hematuria")])
+
+    explicada = next(c for c in res.componentes if c.dimension == "Hiperlipasemia")
+    residuo = next(
+        c for c in res.componentes if c.estado is EstadoDimension.NO_SIMBOLIZADO
+    )
+    assert residuo.observado == pytest.approx(abs(explicada.observado), abs=1e-4)
+
+    # Con dos dimensiones explicadas de peso distinto, el residuo toma la
+    # media cuadrática de ambas: ni la más fuerte ni la más débil.
+    dos = medidor.medir(
+        skill,
+        [infon("Hiperlipasemia"), infon("Vomitos"), infon("Hematuria")],
+    )
+    pesos = [
+        abs(c.observado)
+        for c in dos.componentes
+        if c.observado and c.estado is not EstadoDimension.NO_SIMBOLIZADO
+    ]
+    esperado = math.sqrt(sum(w**2 for w in pesos) / len(pesos))
+    residuo_dos = next(
+        c for c in dos.componentes if c.estado is EstadoDimension.NO_SIMBOLIZADO
+    )
+    assert residuo_dos.observado == pytest.approx(esperado, abs=1e-4)
+    assert min(pesos) < residuo_dos.observado < max(pesos)
 
 
 @pytest.mark.parametrize(
