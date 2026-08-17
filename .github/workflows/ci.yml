@@ -38,6 +38,17 @@ jobs:
           python scripts/importar_terminologia.py --semilla
           python scripts/importar_terminologia.py --estado
 
+      - name: Los protocolos anclan lo que acuñan
+        # Con el vocabulario ya cargado, comprueba que ningún protocolo
+        # apunte a un concepto que no existe: ni sus hints, ni su ámbito de
+        # grafo, ni —lo que hasta ahora no se miraba— la condición que
+        # representa y el término que su clasificación acuña. Un código
+        # colgado ahí no falla: emite el diagnóstico sin linaje ni CIE-10,
+        # en silencio. Aquí deja de ser silencioso.
+        run: |
+          python -m holonmed.cli skills --validar | tee /tmp/validacion.txt
+          grep -q "Todos los protocolos son válidos" /tmp/validacion.txt
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

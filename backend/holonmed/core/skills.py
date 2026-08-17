@@ -611,6 +611,63 @@ class Skill:
                 if index.buscar_codigo(rama) is None:
                     fallos.append(f"ámbito de grafo '{rama}' no existe")
 
+            # Los términos que el protocolo ACUÑA, que hasta ahora no se
+            # comprobaban. Es el hueco más peligroso de los tres: un hint
+            # colgado degrada un hallazgo, pero un `produce` colgado hace
+            # que el clasificador emita el DIAGNÓSTICO sin linaje ni mapeo
+            # CIE-10, en silencio y con todos los criterios satisfechos.
+            fallos.extend(self._problemas_acunados(index))
+
+        return fallos
+
+    def _problemas_acunados(self, index) -> list[str]:
+        """Comprueba los conceptos que el protocolo acuña, no los que consume.
+
+        Un protocolo declara dos cosas que no son hints y que hasta ahora
+        nadie validaba: la `condicion` que representa y el término que su
+        bloque `clasificacion` produce cuando los criterios se satisfacen.
+        Ninguno pasa por `hints()`, porque no sirven para normalizar la
+        entrada: se emiten a la salida.
+
+        Un concepto se da por anclado si **cualquiera** de sus asas llega al
+        vocabulario cargado: cualquiera de sus códigos, o su nombre. Exigir
+        que resuelva el código preferente marcaría como rota la
+        pancreatitis del propio repositorio, que sólo declara su código
+        SNOMED y corre sin SNOMED cargado. Un validador que falla nada más
+        instalarlo no se lee: se ignora, y entonces deja de proteger de lo
+        que sí importa.
+
+        Sigue teniendo dientes donde hacen falta. Si el concepto desaparece
+        del vocabulario se van con él todas sus asas a la vez —código y
+        término son el mismo registro— y la comprobación falla igual.
+        """
+        fallos: list[str] = []
+
+        def anclado(codigos: dict, nombre: str) -> bool:
+            for codigo in (codigos or {}).values():
+                if codigo and index.buscar_codigo(str(codigo)) is not None:
+                    return True
+            return bool(nombre) and index.buscar_exacto(nombre) is not None
+
+        nombre_condicion = str(self.condicion.get("nombre") or "").strip()
+        codigos_condicion = self.condicion.get("codigos") or {}
+        if (codigos_condicion or nombre_condicion) and not anclado(
+            codigos_condicion, nombre_condicion
+        ):
+            fallos.append(
+                f"la condición '{nombre_condicion or self.titulo}' no existe en "
+                f"el vocabulario: ni por código ni por término"
+            )
+
+        if self.clasificacion.declarada:
+            produce = self.clasificacion.produce
+            termino = str(produce.get("termino") or "").strip()
+            if not anclado(produce.get("codigos") or {}, termino):
+                fallos.append(
+                    f"la clasificación acuña '{termino}', que no existe en el "
+                    f"vocabulario: el diagnóstico saldría sin linaje ni CIE-10"
+                )
+
         return fallos
 
 
