@@ -38,6 +38,52 @@ export interface InferenciaBayesiana {
   evidencia_utilizada: string[];
 }
 
+export type EstadoDimension =
+  | 'concuerda'
+  | 'contradice'
+  | 'sin_medir'
+  | 'no_simbolizado';
+
+export type VeredictoSemiotico =
+  | 'ARMONIA'
+  | 'ACOPLAMIENTO_PARCIAL'
+  | 'INERCIA'
+  | 'FRICCION'
+  | 'DESARMONIA';
+
+export interface ComponenteAcoplamiento {
+  dimension: string;
+  rol: string;
+  /** hᵢ: ln(LR+) que exige el caso de libro */
+  esperado: number;
+  /** eᵢ: peso de evidencia que aporta el registro */
+  observado: number;
+  estado: EstadoDimension;
+  detalle: string;
+  infon: string | null;
+  confianza: number;
+}
+
+/**
+ * Segundo eje de lectura, independiente de la probabilidad: cuánto
+ * armoniza la hipótesis con el paciente entero. Se muestra junto a
+ * `inferencia`, nunca en su lugar.
+ */
+export interface Acoplamiento {
+  /** Φ ∈ [−1, +1] */
+  phi: number;
+  coseno: number;
+  anclaje: number;
+  hipotesis: string;
+  veredicto: VeredictoSemiotico;
+  cuadrante: string;
+  componentes: ComponenteAcoplamiento[];
+  resto_no_simbolizado: string[];
+  indagacion: string[];
+  anclaje_detalle: Record<string, number>;
+  traza: string[];
+}
+
 export interface ResultadoTic {
   tic_id: string | null;
   timestamp: string;
@@ -49,6 +95,7 @@ export interface ResultadoTic {
   resumen: string;
   infones: Infon[];
   inferencia: InferenciaBayesiana | null;
+  acoplamiento: Acoplamiento | null;
 }
 
 export interface Paciente {

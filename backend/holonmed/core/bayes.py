@@ -137,19 +137,31 @@ class AntigenPresentingCell:
     @staticmethod
     def _buscar_lr(termino: str, mapa: dict[str, tuple[float | None, float | None]]):
         """Empareja el término normalizado con un LR del protocolo."""
-        objetivo = termino.lower()
-        if objetivo in mapa:
-            return mapa[objetivo], objetivo
-        # Coincidencia por contención: "hiperamilasemia (>3x)" contra
-        # "hiperamilasemia". Se prefiere la clave más larga, que es la más
-        # específica de las que encajan.
-        candidatas = [
-            clave for clave in mapa if clave in objetivo or objetivo in clave
-        ]
-        if candidatas:
-            mejor = max(candidatas, key=len)
-            return mapa[mejor], mejor
-        return None, ""
+        clave = emparejar_termino(termino, mapa)
+        if clave is None:
+            return None, ""
+        return mapa[clave], clave
+
+
+def emparejar_termino(termino: str, mapa: dict[str, Any]) -> str | None:
+    """Localiza la clave del protocolo que corresponde a un término clínico.
+
+    Vive aquí, y no duplicada en cada consumidor, porque el motor bayesiano
+    y el medidor de acoplamiento tienen que emparejar **igual**: Φ lee la
+    dirección del mismo vector cuya magnitud lee Bayes, y si los dos
+    módulos poblaran ese vector con criterios distintos la relación entre
+    las dos métricas dejaría de ser cierta.
+    """
+    objetivo = termino.lower()
+    if objetivo in mapa:
+        return objetivo
+    # Coincidencia por contención: "hiperamilasemia (>3x)" contra
+    # "hiperamilasemia". Se prefiere la clave más larga, que es la más
+    # específica de las que encajan.
+    candidatas = [clave for clave in mapa if clave in objetivo or objetivo in clave]
+    if candidatas:
+        return max(candidatas, key=len)
+    return None
 
 
 def _a_float(valor: Any, defecto: float) -> float:

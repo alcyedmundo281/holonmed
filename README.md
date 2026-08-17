@@ -87,6 +87,42 @@ de un paso concreto.
 **Sólo la evidencia validada actualiza la probabilidad.** Un hallazgo en
 alerta se ve en pantalla pero no mueve la aguja.
 
+### Acoplamiento con el contexto (Φ)
+
+La probabilidad es una suma, y una suma pierde información sobre sus
+sumandos. Dos historias pueden dar el mismo posterior siendo cosas distintas:
+en una todo apunta al mismo sitio, en la otra una prueba muy específica
+arrastra la cifra mientras el resto del paciente habla de otra enfermedad.
+Eso tiene nombre —sesgo de anclaje— y un sistema que sólo muestre la
+probabilidad lo autoriza con un número.
+
+El **Coeficiente de Acoplamiento** mide la otra dimensión: si la hipótesis,
+tomada como regla de acción, armoniza con el paciente entero.
+
+```
+Φ = α · cos(h, e)      ∈ [−1, +1]
+```
+
+donde **h** es el caso de libro —lo que la hipótesis exige, con peso
+`ln(LR⁺)` por signo— y **e** es el caso real —lo que el registro afirma de
+hecho—. Bayes lee la magnitud de ese vector; Φ lee su dirección. Los
+hallazgos que la hipótesis no explica abren dimensiones ortogonales y bajan
+Φ sin ninguna penalización ad hoc.
+
+|  Φ  | lectura |
+|-----|---------|
+| +1 | armonía: el registro dice lo que la hipótesis exige |
+| 0 | inercia: coherente por dentro, pero no toca este caso |
+| −1 | desarmonía: el contexto la contradice punto por punto |
+
+Φ **nunca modifica la probabilidad**: se lee junto a ella. El par interesante
+es *P alta con Φ baja*, y el sistema lo nombra. El factor α castiga los
+argumentos elaborados y desanclados — un likelihood ratio sin fuente es un
+número inventado con formato científico, y colapsa Φ a cero.
+
+Fundamento, aritmética y viñetas verificadas en
+[docs/ACOPLAMIENTO.md](docs/ACOPLAMIENTO.md).
+
 ### El grafo clínico
 
 El vocabulario no es una lista plana sino un grafo dirigido. Eso permite la
@@ -233,6 +269,7 @@ backend/holonmed/
 │   ├── validator.py    validación ontológica y guardas de colisión
 │   ├── verifier.py     auditoría lógica contra criterios de laboratorio
 │   ├── bayes.py        inferencia abductiva explicable
+│   ├── acoplamiento.py coeficiente Φ: armonía de la hipótesis y el contexto
 │   ├── skills.py       protocolos clínicos y extracción de hints
 │   └── pipeline.py     orquestación del ciclo completo
 ├── db/
