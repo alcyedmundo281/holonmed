@@ -95,7 +95,36 @@ CLAVES_ARISTA = {
     "concepto", "rol", "estado_lr", "lr_positivo", "lr_negativo",
     "motivo", "decision", "nota", "advertencia", "ref", "poblacion",
     "sensibilidad", "especificidad", "ic95_sensibilidad", "ic95_especificidad",
+    # Eje `efecto`: qué papel juega el hallazgo en un criterio contado.
+    "efecto", "dispara_si", "sostiene", "odds_ratio",
 }
+
+# Meter una clave en CLAVES_ARISTA sin emitirla la pasa de «denunciada» a
+# SILENCIOSAMENTE PERDIDA, que es peor. Una clave entra en la lista blanca en el
+# mismo commit que la emite, o entra aquí con el motivo escrito.
+CONOCIDAS_NO_EMITIDAS = {
+    "odds_ratio": (
+        "un OR de regresión logística depende de qué covariables entraron en el "
+        "modelo, así que no es una propiedad del hallazgo. `Signo` no tiene dónde "
+        "ponerlo sin que el motor bayesiano pueda leerlo como cociente y "
+        "multiplicarlo. Se comenta en la salida."
+    ),
+    "poblacion": (
+        "se traslada como comentario junto a la cita, no como campo estructurado."
+    ),
+    "sensibilidad": "sin especificidad no hay cociente que emitir; se comenta.",
+    "especificidad": "sin sensibilidad no hay cociente que emitir; se comenta.",
+    "ic95_sensibilidad": "acompaña a la sensibilidad, que no se emite.",
+    "ic95_especificidad": "acompaña a la especificidad, que no se emite.",
+    "advertencia": "va a la prosa del cuerpo, no al frontmatter.",
+    "decision": "va a la prosa del cuerpo, no al frontmatter.",
+}
+
+# Qué `sostiene` autoriza una bandera roja. La regla vive también en build.py
+# del índice; se repite aquí porque el conversor puede apuntar a un clon sin
+# construir. Cerrarlo del todo exige que la taxonomía viva en un archivo
+# legible por máquina dentro del índice y que ambos la lean.
+SOSTIENE_AUTORIZA_BANDERA = ("discriminacion_medida", "consenso_con_afirmacion")
 
 
 # ── Lectura del índice ────────────────────────────────────────────────────
@@ -472,7 +501,15 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
     usados: list[str] = []
     primero = True
 
-    for arista in condicion.get("signos") or []:
+    # Las DOS listas. `signos_de_alarma` se emitía sólo a la prosa del cuerpo:
+    # el modelo las leía y `veredicto.py` no, de modo que una bandera curada en
+    # el índice no llegaba a contarse. La prosa se conserva —son dos
+    # consumidores, no uno migrando al otro—; lo que se añade es el bloque
+    # estructurado.
+    entradas = [(a, "apoya") for a in (condicion.get("signos") or [])]
+    entradas += [(a, "bandera_roja") for a in (condicion.get("signos_de_alarma") or [])]
+
+    for arista, efecto_por_defecto in entradas:
         codigo = str(arista.get("concepto") or "")
         concepto = indice.concepto(codigo)
         if not concepto:
@@ -499,6 +536,34 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         pares = ", ".join(f'{k}: "{v}"' for k, v in codigos.items())
         salida.crudo(f"    codigos: {{ {pares} }}")
         salida.campo("rol", rol, sangria=4)
+
+        # `efecto` y `dispara_si`: el eje que dice qué papel juega el hallazgo
+        # dentro de un criterio contado, ortogonal al rol.
+        efecto = str(arista.get("efecto") or efecto_por_defecto)
+        sostiene = str(arista.get("sostiene") or "")
+        if efecto not in ("apoya", "bandera_roja", "excluye"):
+            informe.pendiente(termino, f"efecto «{efecto}» que holonmed no conoce; no se emite")
+        elif efecto == "bandera_roja" and sostiene not in SOSTIENE_AUTORIZA_BANDERA:
+            # Misma regla que build.py: la pertenencia a una lista no autoriza
+            # una bandera. Enumerar la negativa es la mitad del arreglo; una
+            # negativa silenciosa sería el fallo.
+            informe.pendiente(
+                termino,
+                f"declarada como bandera roja pero la sostiene «{sostiene or 'nada'}», "
+                f"que no lo autoriza (hace falta "
+                f"{' o '.join(SOSTIENE_AUTORIZA_BANDERA)}): se emite como apoyo",
+            )
+            salida.campo("efecto", "apoya", sangria=4)
+        elif efecto == "excluye" and sostiene == "mecanismo" and not arista.get("motivo"):
+            informe.pendiente(termino, "sostiene «mecanismo» sin «motivo»: no se emite el efecto")
+        elif efecto != "apoya":
+            salida.campo("efecto", efecto, sangria=4)
+
+        dispara = str(arista.get("dispara_si") or "presente")
+        if dispara not in ("presente", "ausente"):
+            informe.pendiente(termino, f"dispara_si «{dispara}» desconocido; no se emite")
+        elif dispara != "presente":
+            salida.campo("dispara_si", dispara, sangria=4)
 
         estado = str(arista.get("estado_lr") or "")
         positivo = _lr(arista.get("lr_positivo"))
@@ -567,6 +632,11 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
                 )
 
         sobrantes = sorted(set(arista) - CLAVES_ARISTA)
+        for clave in sorted(set(arista) & set(CONOCIDAS_NO_EMITIDAS)):
+            informe.rutina(
+                f"claves que el índice trae y el frontmatter no guarda: {clave}",
+                termino,
+            )
         if sobrantes:
             informe.pendiente(
                 termino,
@@ -577,6 +647,94 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
             )
 
     return salida, usados
+
+
+
+def nucleo_y_balance(
+    condicion: dict, indice: Indice, informe: Informe
+) -> Bloque | None:
+    """Emite `nucleo` y `balance`, o se niega y enumera por qué.
+
+    Dos traducciones que no son evidentes:
+
+    · La cita cambia de nombre. El índice guarda el identificador (`ref`), la
+      skill guarda la cita en prosa (`fuente`). Emitir `ref:` dentro del balance
+      de una skill no falla —el parseador lo descarta por no ser un dict— pero
+      pierde la cita entera sin decir nada.
+
+    · Los códigos del núcleo se traducen a TÉRMINOS PREFERIDOS, porque
+      `Nucleo.satisfecho()` empareja por subcadena contra términos, no contra
+      códigos.
+
+    Y una negativa que hay que razonar: si un concepto del núcleo no resuelve,
+    NO se emite tampoco el balance. Emitir el balance solo no es conservador,
+    es más permisivo: el núcleo es justamente lo que impide que un diagnóstico
+    alcance «probable» sobre un paciente del que no consta nada.
+    """
+    nucleo = condicion.get("nucleo")
+    balance = condicion.get("balance")
+    if not isinstance(nucleo, dict) and not isinstance(balance, dict):
+        return None
+
+    salida = Bloque()
+    emitir_balance = True
+
+    if isinstance(nucleo, dict):
+        terminos: dict[str, list[str]] = {}
+        roto = False
+        for campo in ("requiere", "y_al_menos_uno_de"):
+            terminos[campo] = []
+            for codigo in (nucleo.get(campo) or []):
+                concepto = indice.concepto(str(codigo))
+                if not concepto:
+                    informe.pendiente(
+                        str(codigo),
+                        "concepto del núcleo que no resuelve: no se emite el núcleo "
+                        "NI el balance. Emitir el balance sin su núcleo sería más "
+                        "permisivo, no más conservador",
+                    )
+                    roto = True
+                    continue
+                terminos[campo].append(str(concepto.get("termino") or codigo))
+        if roto:
+            emitir_balance = False
+        else:
+            cita_nucleo = cita(str(nucleo.get("ref") or ""), indice, informe, "el núcleo")
+            salida.crudo("# Sin el núcleo el criterio ni siquiera se aplica: no es una")
+            salida.crudo("# exclusión, es que la pregunta todavía no se puede hacer.")
+            salida.crudo("nucleo:")
+            for campo, etiqueta in (("requiere", "requiere"),
+                                    ("y_al_menos_uno_de", "y_al_menos_uno_de")):
+                if terminos[campo]:
+                    lista = ", ".join(f'"{t}"' for t in terminos[campo])
+                    salida.crudo(f"  {etiqueta}: [{lista}]")
+            if cita_nucleo:
+                salida.prosa("fuente", cita_nucleo, sangria=2)
+            else:
+                informe.pendiente("el núcleo", "se emite sin fuente citable")
+
+    if isinstance(balance, dict) and emitir_balance:
+        cita_balance = cita(str(balance.get("ref") or ""), indice, informe, "el balance")
+        if not cita_balance:
+            informe.pendiente(
+                "el balance",
+                "sin fuente citable: los enteros los fija el panel que redacta el "
+                "criterio y el sistema no los deriva, así que no se emite",
+            )
+        else:
+            if salida.lineas:
+                salida.crudo()
+            salida.crudo("# Los niveles se evalúan EN ORDEN y gana el primero que se")
+            salida.crudo("# satisface: invertirlos rebajaría el grado en silencio.")
+            salida.crudo("balance:")
+            salida.prosa("fuente", cita_balance, sangria=2)
+            for nombre, regla in balance.items():
+                if nombre in ("ref", "nota", "fuente") or not isinstance(regla, dict):
+                    continue
+                pares = ", ".join(f"{k}: {v}" for k, v in regla.items())
+                salida.crudo(f"  {nombre}: {{ {pares} }}")
+
+    return salida if salida.lineas else None
 
 
 def laboratorio(codigos: list[str], indice: Indice, informe: Informe) -> Bloque | None:
@@ -1099,6 +1257,7 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
     bloque_bayes = bayes(condicion, indice, informe)
     bloque_lab = laboratorio(codigos_usados, indice, informe)
     bloque_clas = clasificacion(condicion, indice, informe)
+    bloque_nucleo = nucleo_y_balance(condicion, indice, informe)
 
     procedencia = Bloque()
     procedencia.crudo("# De dónde salió este archivo. No lo edites a mano: si vuelves a")
@@ -1118,8 +1277,11 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
             f"antes de abrir el PR",
         )
 
-    piezas = [cabecera, bloque_ambito, bloque_bayes, bloque_signos, bloque_lab,
-              bloque_clas, procedencia]
+    # El núcleo va ANTES del balance y ambos antes de los signos: se lee en el
+    # mismo orden en que se aplica —primero si el criterio procede, luego cómo
+    # se cuenta, después qué se cuenta—.
+    piezas = [cabecera, bloque_ambito, bloque_nucleo, bloque_bayes, bloque_signos,
+              bloque_lab, bloque_clas, procedencia]
     frontmatter = "\n\n".join(p.texto() for p in piezas if p is not None)
 
     referidos = list(

@@ -50,6 +50,11 @@ _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 #   prueba_sensible    su LR- descarta cuando es negativa (SnNOut)
 #   prueba_especifica  su LR+ confirma cuando es positiva  (SpPIn)
 #   apoyo              aporta poco por sí solo
+# Claves del bloque `balance` que NO son un nivel de certeza.
+_BALANCE_META = ("fuente", "ref", "nota")
+# Un bloque del balance es un nivel si declara al menos uno de estos.
+_CAMPOS_NIVEL = {"apoyos_minimos", "banderas_maximas", "contrapeso"}
+
 ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imagen")
 
 # Cómo entra un signo en la DECISIÓN, que es un eje distinto de `rol`.
@@ -224,6 +229,11 @@ class Nucleo:
 
     requiere: list[str] = field(default_factory=list)          # todos
     y_al_menos_uno_de: list[str] = field(default_factory=list)  # al menos uno
+    # Balance sí guardaba su procedencia y el núcleo no. Es la misma asimetría
+    # que el conversor denuncia en su cabecera —«un cociente sin fuente es un
+    # número inventado con formato científico»— un nivel más arriba: el núcleo
+    # decide si el criterio se aplica siquiera.
+    fuente: str = ""
 
     @property
     def declarado(self) -> bool:
@@ -325,6 +335,10 @@ class Skill:
         # para el código, y meterlo confundiría al modelo con sintaxis
         # que no necesita interpretar.
         self.cuerpo = cuerpo
+
+        # Lo que los parseadores encuentran mal y no pueden arreglar. Se llena
+        # durante el parseo —que corre siempre— y `problemas()` lo vuelca.
+        self._problemas: list[str] = []
 
         self.titulo: str = str(meta.get("titulo") or nombre)
         self.version: str = str(meta.get("version", "0"))
@@ -525,6 +539,7 @@ class Skill:
             y_al_menos_uno_de=[
                 str(x) for x in (bloque.get("y_al_menos_uno_de") or [])
             ],
+            fuente=str(bloque.get("fuente", "")),
         )
 
     def _parsear_balance(self) -> Balance:
@@ -533,7 +548,24 @@ class Skill:
             return Balance()
         niveles = []
         for nombre, regla in bloque.items():
-            if nombre == "fuente" or not isinstance(regla, dict):
+            # Lista blanca, no negación abierta. Descartar «lo que no parezca
+            # nivel» convierte en grado de certeza cualquier clave nueva que
+            # lleve un diccionario, con apoyos_minimos 0 por defecto: podría
+            # satisfacerse antes que los legítimos. Y la dirección es la mala,
+            # porque un nivel de más hace el criterio MÁS permisivo. Es el
+            # mismo defecto que el `tipo` sin lista blanca.
+            if nombre in _BALANCE_META:
+                continue
+            # Lista blanca POSITIVA: un bloque es un nivel si declara alguno de
+            # los campos que definen un nivel. Filtrar por «lo que no parezca
+            # nivel» no basta —`poblacion: {...}` es un diccionario y colaba
+            # igual—, y un nivel de más hace el criterio MÁS permisivo.
+            if not isinstance(regla, dict) or not (set(regla) & _CAMPOS_NIVEL):
+                self._problemas.append(
+                    f"balance.«{nombre}» no declara ninguno de "
+                    f"{', '.join(sorted(_CAMPOS_NIVEL))}: no se interpreta como "
+                    f"nivel de certeza"
+                )
                 continue
             niveles.append(
                 NivelCerteza(
@@ -815,6 +847,10 @@ class Skill:
             # que el clasificador emita el DIAGNÓSTICO sin linaje ni mapeo
             # CIE-10, en silencio y con todos los criterios satisfechos.
             fallos.extend(self._problemas_acunados(index))
+
+        # Lo recogido durante el parseo. Va al final para que un balance con una
+        # clave desconocida se vea aunque no haya vocabulario cargado.
+        fallos.extend(self._problemas)
 
         return fallos
 
