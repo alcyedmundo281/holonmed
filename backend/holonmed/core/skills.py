@@ -214,12 +214,20 @@ class Nucleo:
     def declarado(self) -> bool:
         return bool(self.requiere or self.y_al_menos_uno_de)
 
-    def satisfecho(self, presentes: set[str]) -> bool:
-        normal = {t.lower() for t in presentes}
-        if any(t.lower() not in normal for t in self.requiere):
+    def satisfecho(self, empareja) -> bool:
+        """`empareja(termino)` decide si ese término consta como presente.
+
+        Se recibe el emparejador en vez de un conjunto de cadenas para que
+        el núcleo case igual que todo lo demás: por subcadena, con
+        `bayes.emparejar_termino`. Comparar aquí por igualdad exacta hacía
+        que un infón «Bradicinesia leve» satisficiera un signo y no el
+        núcleo — la clase de divergencia silenciosa que la §3.3 de
+        ACOPLAMIENTO.md existe para impedir.
+        """
+        if any(not empareja(t) for t in self.requiere):
             return False
         if self.y_al_menos_uno_de:
-            return any(t.lower() in normal for t in self.y_al_menos_uno_de)
+            return any(empareja(t) for t in self.y_al_menos_uno_de)
         return True
 
 

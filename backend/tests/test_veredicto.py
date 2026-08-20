@@ -345,3 +345,63 @@ x
     assert solo_bradicinesia.nivel is None      # falta temblor o rigidez
     assert con_rigidez.nivel == "establecida"
     assert solo_temblor.nivel is None           # falta la bradicinesia
+
+
+# --- Los tres hallazgos de la revisión --------------------------------
+
+
+def test_el_nucleo_se_evalua_antes_que_el_tope_de_banderas(evaluador):
+    """MDS documenta el parkinsonismo PRIMERO y sólo después juzga la causa.
+
+    Una exclusión absoluta sí precede al núcleo —una apendicectomía excluye
+    la apendicitis se haya documentado lo que se haya documentado— pero el
+    tope de banderas es una propiedad de la tabla de balance, y el núcleo
+    es justamente lo que condiciona que esa tabla se aplique.
+    """
+    protocolo = CON_NUCLEO.replace(
+        "  probable:    { contrapeso: 1, banderas_maximas: 2 }",
+        "  probable:    { contrapeso: 1, banderas_maximas: 0 }",
+    )
+    skill = Skill("x", protocolo)
+
+    # Sin el núcleo documentado, y con una bandera que supera el tope.
+    res = evaluador.evaluar(
+        skill, [infon("Dolor en fosa ilíaca derecha", presente=False)]
+    )
+
+    assert res.veto is None, "el tope no debe vetar antes de comprobar el núcleo"
+    assert any("Núcleo no documentado" in t for t in res.traza)
+
+
+def test_el_nucleo_empareja_igual_que_el_resto_del_sistema(evaluador):
+    """Por subcadena, como `bayes.emparejar_termino`, no por igualdad exacta.
+
+    Si el núcleo emparejara distinto que los signos, un mismo infón
+    satisfaría un signo y no el núcleo — la clase de divergencia silenciosa
+    que la §3.3 de ACOPLAMIENTO.md existe para impedir.
+    """
+    skill = Skill("con_nucleo", CON_NUCLEO)
+    res = evaluador.evaluar(
+        skill,
+        [infon("Dolor en fosa ilíaca derecha irradiado"), infon("Fiebre"),
+         infon("Leucocitosis")],
+    )
+    assert res.nivel == "establecida"
+
+
+def test_sin_ningun_signo_que_dispare_no_hay_nivel(evaluador):
+    """El agujero de los «cero apoyos», sin depender de que haya núcleo.
+
+    Basta un signo emparejado que NO dispare para que `observados` deje de
+    estar vacío: entonces apoyos y banderas valen cero y un nivel sin
+    `apoyos_minimos` se satisface con 0 >= 0.
+    """
+    skill = Skill("apendicitis", APENDICITIS)   # sin bloque `nucleo`
+
+    # El dolor consta PRESENTE: su bandera dispara con la ausencia, así que
+    # no dispara nada, pero el signo sí queda emparejado.
+    res = evaluador.evaluar(skill, [infon("Dolor en fosa ilíaca derecha")])
+
+    assert res.apoyos == []
+    assert res.banderas_rojas == []
+    assert res.nivel is None, "un nivel no puede alcanzarse sin nada que lo sostenga"
