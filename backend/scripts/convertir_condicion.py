@@ -87,6 +87,12 @@ def _consola_en_utf8() -> None:
 # se avisa aquí en vez de dejar que pase desapercibido.
 ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imagen")
 
+# Las dos taxonomías del eje `efecto`. Se repiten aquí y en `skills.py` por la
+# misma razón que `ROLES`: este script no importa el paquete. Que no diverjan lo
+# comprueba `test_las_taxonomias_del_eje_no_divergen`.
+EFECTOS = ("apoya", "bandera_roja", "excluye")
+POLARIDADES = ("presente", "ausente")
+
 # Claves de una arista que este conversor sabe traducir. Cada condición nueva
 # del índice ha traído su propio bloque —tramos, sensibilidad_por_gravedad,
 # modificadores—; lo que no esté aquí se anota como pendiente en vez de
@@ -125,6 +131,15 @@ CONOCIDAS_NO_EMITIDAS = {
 # construir. Cerrarlo del todo exige que la taxonomía viva en un archivo
 # legible por máquina dentro del índice y que ambos la lean.
 SOSTIENE_AUTORIZA_BANDERA = ("discriminacion_medida", "consenso_con_afirmacion")
+
+# Un bloque del `balance` es un nivel de certeza si declara alguno de estos.
+# Lista blanca POSITIVA, igual que `skills._CAMPOS_NIVEL`, y no «lo que no
+# parezca nivel»: `poblacion: {...}` es un diccionario y colaba igual. Un nivel
+# de más hace el criterio MÁS permisivo, que es la dirección mala.
+#
+# Que el mismo conjunto viva en dos archivos es el riesgo conocido; lo cierra
+# `test_los_campos_de_nivel_no_divergen`, que compara los dos.
+CAMPOS_NIVEL = {"apoyos_minimos", "banderas_maximas", "contrapeso"}
 
 
 # ── Lectura del índice ────────────────────────────────────────────────────
@@ -491,6 +506,78 @@ def _frase(texto: Any) -> str:
     return limpio[0].upper() + limpio[1:].rstrip(".") + "."
 
 
+def _decidir_efecto(
+    arista: dict, por_defecto: str, termino: str, informe: Informe
+) -> tuple[str, str] | None:
+    """Qué `efecto` y `dispara_si` se emiten, o None para no emitir la arista.
+
+    LA DIRECCIÓN DE LA NEGATIVA, QUE ES TODO EL ASUNTO
+    --------------------------------------------------
+    Una versión anterior degradaba a `apoya` la arista cuyo efecto no podía
+    honrarse. Eso no es conservador: **invierte el signo**. `veredicto.py`
+    cuenta los signos con `efecto == "apoya"`, así que una anemia declarada
+    como advertencia pasaba a **sumar a favor** de la enfermedad contra la que
+    avisaba, y una exclusión absoluta sin `motivo` se convertía en un criterio
+    de apoyo.
+
+    La negativa correcta es **no meter la arista en el bloque estructurado**.
+    Eso deja exactamente el comportamiento anterior al ciclo —el hallazgo sigue
+    en la prosa del cuerpo, que el modelo lee— y por construcción no puede
+    empujar el veredicto en ninguna dirección. Es el mismo criterio del PR #10:
+    lo que no se puede honrar cae al valor más estricto, no al más permisivo.
+
+    Un matiz que importa: sólo se aplica cuando la arista **declaró** algo que
+    no puede honrarse. Una arista de `signos` sin clave `efecto` es `apoya` por
+    declaración del esquema, no por respaldo, y se emite como siempre.
+    """
+    efecto = str(arista.get("efecto") or por_defecto)
+    sostiene = str(arista.get("sostiene") or "")
+    dispara = str(arista.get("dispara_si") or "presente")
+
+    if efecto not in EFECTOS:
+        informe.pendiente(
+            termino,
+            f"efecto «{efecto}» que holonmed no conoce: la arista no entra en el "
+            f"bloque estructurado. Emitirla como apoyo invertiría su signo",
+        )
+        return None
+
+    if efecto == "bandera_roja" and sostiene not in SOSTIENE_AUTORIZA_BANDERA:
+        # Misma regla que build.py: la pertenencia a una lista no autoriza una
+        # bandera. Enumerar la negativa es la mitad del arreglo; una negativa
+        # silenciosa sería el fallo.
+        informe.pendiente(
+            termino,
+            f"declarada como bandera roja pero la sostiene «{sostiene or 'nada'}», "
+            f"que no lo autoriza (hace falta "
+            f"{' o '.join(SOSTIENE_AUTORIZA_BANDERA)}): no entra en el bloque "
+            f"estructurado. Se queda en la prosa, donde ya estaba",
+        )
+        return None
+
+    if efecto == "excluye" and sostiene == "mecanismo" and not arista.get("motivo"):
+        informe.pendiente(
+            termino,
+            "sostiene «mecanismo» sin «motivo»: la arista no entra en el bloque "
+            "estructurado. `mecanismo` es el valor que hay que justificar por "
+            "escrito, no la puerta trasera",
+        )
+        return None
+
+    if dispara not in POLARIDADES:
+        # Una bandera que debía dispararse por ausencia y se emite por
+        # presencia dispara justo al revés. Tampoco se emite.
+        informe.pendiente(
+            termino,
+            f"dispara_si «{dispara}» desconocido: la arista no entra en el bloque "
+            f"estructurado, porque emitirla como «presente» podría invertir cuándo "
+            f"dispara",
+        )
+        return None
+
+    return efecto, dispara
+
+
 def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, list[str]]:
     """Traduce las aristas concepto→condición al bloque `signos`."""
     salida = Bloque()
@@ -515,13 +602,24 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         if not concepto:
             informe.pendiente(codigo or "?", "la arista apunta a un concepto que no existe")
             continue
+
+        termino = str(concepto.get("termino") or codigo)
+
+        # SE DECIDE ANTES DE ESCRIBIR NADA. Si el efecto declarado no puede
+        # honrarse, la arista no entra en el bloque estructurado —ni siquiera
+        # su `nombre`—, porque una arista a medio emitir se lee como `apoya`
+        # por defecto y eso invierte su signo.
+        decision = _decidir_efecto(arista, efecto_por_defecto, termino, informe)
+        if decision is None:
+            continue
+        efecto, dispara = decision
+
         usados.append(codigo)
 
         if not primero:
             salida.crudo()
         primero = False
 
-        termino = str(concepto.get("termino") or codigo)
         rol = str(arista.get("rol") or "apoyo")
         if rol not in ROLES:
             informe.pendiente(termino, f"rol «{rol}» que holonmed no conoce; se leerá como «apoyo»")
@@ -538,31 +636,12 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         salida.campo("rol", rol, sangria=4)
 
         # `efecto` y `dispara_si`: el eje que dice qué papel juega el hallazgo
-        # dentro de un criterio contado, ortogonal al rol.
-        efecto = str(arista.get("efecto") or efecto_por_defecto)
-        sostiene = str(arista.get("sostiene") or "")
-        if efecto not in ("apoya", "bandera_roja", "excluye"):
-            informe.pendiente(termino, f"efecto «{efecto}» que holonmed no conoce; no se emite")
-        elif efecto == "bandera_roja" and sostiene not in SOSTIENE_AUTORIZA_BANDERA:
-            # Misma regla que build.py: la pertenencia a una lista no autoriza
-            # una bandera. Enumerar la negativa es la mitad del arreglo; una
-            # negativa silenciosa sería el fallo.
-            informe.pendiente(
-                termino,
-                f"declarada como bandera roja pero la sostiene «{sostiene or 'nada'}», "
-                f"que no lo autoriza (hace falta "
-                f"{' o '.join(SOSTIENE_AUTORIZA_BANDERA)}): se emite como apoyo",
-            )
-            salida.campo("efecto", "apoya", sangria=4)
-        elif efecto == "excluye" and sostiene == "mecanismo" and not arista.get("motivo"):
-            informe.pendiente(termino, "sostiene «mecanismo» sin «motivo»: no se emite el efecto")
-        elif efecto != "apoya":
+        # dentro de un criterio contado, ortogonal al rol. Ya vienen decididos
+        # por `_decidir_efecto`; aquí sólo se escriben los que no son el valor
+        # por defecto del frontmatter.
+        if efecto != "apoya":
             salida.campo("efecto", efecto, sangria=4)
-
-        dispara = str(arista.get("dispara_si") or "presente")
-        if dispara not in ("presente", "ausente"):
-            informe.pendiente(termino, f"dispara_si «{dispara}» desconocido; no se emite")
-        elif dispara != "presente":
+        if dispara != "presente":
             salida.campo("dispara_si", dispara, sangria=4)
 
         estado = str(arista.get("estado_lr") or "")
@@ -729,7 +808,19 @@ def nucleo_y_balance(
             salida.crudo("balance:")
             salida.prosa("fuente", cita_balance, sangria=2)
             for nombre, regla in balance.items():
-                if nombre in ("ref", "nota", "fuente") or not isinstance(regla, dict):
+                # Lista blanca POSITIVA, la misma que usa el parseador. Filtrar
+                # por «lo que no parezca nivel» dejaba pasar cualquier clave con
+                # diccionario —`poblacion: {...}`— y la escribía en el borrador
+                # como un grado de certeza. El parseador la rechaza después,
+                # pero quien revisa el borrador la lee como legítima.
+                if not isinstance(regla, dict) or not (set(regla) & CAMPOS_NIVEL):
+                    if nombre not in ("ref", "nota", "fuente"):
+                        informe.pendiente(
+                            "el balance",
+                            f"«{nombre}» no declara ninguno de "
+                            f"{', '.join(sorted(CAMPOS_NIVEL))}: no se emite como "
+                            f"nivel de certeza",
+                        )
                     continue
                 pares = ", ".join(f"{k}: {v}" for k, v in regla.items())
                 salida.crudo(f"  {nombre}: {{ {pares} }}")
