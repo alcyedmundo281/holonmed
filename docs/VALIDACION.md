@@ -264,6 +264,104 @@ el trastorno hereda la confianza más baja de la evidencia que lo sostiene.
 Un diagnóstico no puede ser más firme que su hallazgo peor sostenido, por
 mucho que venga con criterios y cita.
 
+## Cómo se verifica aquí (20/08/2026)
+
+Este documento registra **qué se ha medido**. Esta sección registra **cómo se
+comprueba lo medido**, que resultó ser un problema aparte y con su propio modo
+de fallo.
+
+La regla, en una frase:
+
+> **Verde no significa comprobado si nadie miró qué camino se recorrió.**
+
+No es un principio general sobre pruebas: es el resumen de cinco casos reales
+de este repositorio, todos con la suite en verde y todos con la verificación
+recorriendo un camino distinto del que decía recorrer.
+
+### Los cinco casos
+
+**1. Una mutación que no se aplica.** Al comprobar un guarda por mutación, el
+parche no llegó al archivo por una diferencia de indentación y el resultado
+fue «20 passed». Una mutación que no se aplica se lee **exactamente igual** que
+un guarda que funciona.
+
+**2. Una mutación que muta un comentario.** Al verificar el emparejamiento del
+núcleo se renombró `emparejar_termino` en `skills.py`, se confirmó que la
+cadena había cambiado en el archivo, y los tests siguieron pasando. La única
+aparición de ese nombre en ese archivo estaba en un docstring: el código real
+vivía en `veredicto.py`. Comprobar que la mutación *se aplicó* no basta; hay
+que comprobar que **alcanzó el camino que el test ejecuta**.
+
+**3. Una aserción con salida de emergencia.** El test que debía garantizar que
+Φ categórico funciona sin likelihood ratios decía:
+
+```python
+assert res is None or res.phi_categorico is not None
+```
+
+Como el protocolo de la fixture no declaraba ningún LR, `res is None` era
+siempre cierto, el `or` cortocircuitaba y la segunda mitad no se evaluaba
+nunca. El test pasaba **por la misma razón por la que debía fallar**.
+
+El problema no es el operador sino de dónde sale. Un `or` que expresa una
+disyunción real del dominio es legítimo; aquél expresaba la incertidumbre de
+quien escribía el test, y la rama defensiva resultó ser justo la que el fallo
+toma. Un `or` que describe al autor y no al dominio es decoración.
+
+**4. Una condición de salto sobre un campo sin lista blanca.** El salto de
+`test_los_protocolos_clinicos_aportan_hints` era `if skill.tipo != "clinico"`,
+una negación abierta, y `tipo` era el único campo taxonómico del parseador sin
+normalizar contra un conjunto conocido —`rol`, `efecto` y `dispara_si` sí lo
+hacían—. Cualquier cadena distinta de `clinico` eximía al protocolo de declarar
+signos **y** saltaba la comprobación de hints:
+
+```
+'clinico' → 1 problema, no salta      'clínico' → 0 problemas, SALTA
+'Clinico' → 0 problemas, SALTA        ''        → 0 problemas, SALTA
+```
+
+Un acento mal puesto, en un repositorio escrito en español, dejaba un protocolo
+clínico sin validar y la build en verde.
+
+**5. Una muestra que hace cierto el resultado.** Fuera de las pruebas, el mismo
+patrón: en el estudio de la fase 2, una medición correcta sobre cuatro
+configuraciones disfrazadas de veinte, donde la cantidad que se decía variar se
+movía un 0.5 %. Ver `FASE2-ACOPLAMIENTO.md` §9, que indexa cada cifra con la
+muestra sobre la que se midió.
+
+### La comprobación, que no necesita juicio
+
+**Si una de las ramas nunca se ejecuta, la aserción no prueba lo que dice.**
+
+Se mide, no se opina, y generaliza más allá del `or`: vale igual para un `if`
+dentro de un test, un `pytest.skip` condicional o una mutación que se creyó
+aplicada. Las preguntas concretas son tres:
+
+1. ¿Qué rama toma este test **de verdad**, hoy, con el código como está?
+2. Si es una mutación: ¿tocó la línea que el test ejecuta, o una homónima?
+3. Si salta: ¿hay algo que **sí** debería afirmarse sobre lo que salta, y lo
+   afirma algún otro test?
+
+La tercera es la que encontró el caso 4. Los tres saltos que quedan en la suite
+son legítimos —dos protocolos operativos y uno de documento, que por definición
+no extraen hallazgos, y que sí se validan por la rama `operativo` de
+`problemas()`— pero la condición que enrutaba hacia ellos no lo era.
+
+### Dirección del respaldo
+
+Cuando algo no se reconoce, el valor por defecto debe ser **el más estricto y
+no el más permisivo**. `tipo` caía al más permisivo por accidente: al no
+coincidir con ninguna rama, escapaba de todas. Hoy se normaliza a `clinico`, y
+`problemas()` denuncia el valor declarado.
+
+La normalización y el informe cubren frentes distintos y hacen falta los dos:
+`problemas()` sólo corre bajo `skills --validar`, que CI ejecuta para los
+protocolos del repositorio pero **nadie ejecuta en producción**. La
+normalización es la única defensa que actúa siempre; el informe es lo que hace
+que alguien corrija la errata en vez de convivir con ella.
+
+---
+
 ## Lo que hace falta
 
 Seguir ajustando el prompt mirando ejecuciones sueltas tiene rendimientos

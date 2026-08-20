@@ -193,8 +193,8 @@ def test_los_protocolos_del_repositorio_son_validos(ruta):
 @pytest.mark.parametrize("ruta", _skills_del_repo(), ids=lambda p: p.stem)
 def test_los_protocolos_clinicos_aportan_hints(ruta):
     skill = Skill(ruta.stem, ruta.read_text(encoding="utf-8"))
-    if skill.tipo != "clinico":
-        pytest.skip("las skills de documento no extraen hallazgos")
+    if skill.tipo in ("operativo", "documento"):
+        pytest.skip(f"un protocolo '{skill.tipo}' no extrae hallazgos")
     assert skill.hints(), f"{ruta.name} no aporta hints"
 
 
@@ -384,3 +384,58 @@ def test_los_protocolos_del_repositorio_anclan_lo_que_acunan(ruta, tmp_path):
 
     skill = Skill(ruta.stem, ruta.read_text(encoding="utf-8"))
     assert skill._problemas_acunados(index) == []
+
+
+# --- Un `tipo` desconocido no puede desactivar comprobaciones ----------
+#
+# El salto de `test_los_protocolos_clinicos_aportan_hints` enruta hacia una
+# rama sobre la que no se afirma nada, y su condición fue durante un tiempo
+# `tipo != "clinico"`: una negación abierta sobre el único campo taxonómico
+# del parseador sin lista blanca. Cualquier cadena que no fuera exactamente
+# "clinico" —un acento, una mayúscula, la clave sin valor— eximía al
+# protocolo de declarar signos Y saltaba la comprobación de hints, con la
+# build en verde.
+#
+# Verde no significa comprobado si nadie miró qué camino se recorrió.
+
+PLANTILLA_TIPO = """---
+titulo: Protocolo de prueba
+condicion:
+  nombre: Apendicitis
+tipo: '{tipo}'
+---
+
+PROTOCOLO
+"""
+
+
+@pytest.mark.parametrize(
+    "declarado", ["clínico", "Clinico", "documeto", "", "None", "clinic"]
+)
+def test_un_tipo_desconocido_cae_al_valor_mas_estricto(declarado):
+    """Lo desconocido se normaliza a `clinico`, que es el que más exige.
+
+    La dirección es lo que importa: caía al más permisivo por accidente —al
+    no coincidir con ninguna rama, escapaba de todas—. `problemas()` sólo
+    corre bajo `skills --validar`, así que la normalización es la única
+    defensa que actúa también en producción.
+    """
+    skill = Skill("x", PLANTILLA_TIPO.format(tipo=declarado))
+
+    assert skill.tipo == "clinico"
+    assert skill.tipo_declarado == declarado
+    assert any("no declara signos" in f for f in skill.problemas())
+
+
+@pytest.mark.parametrize("declarado", ["clínico", "documeto", ""])
+def test_un_tipo_desconocido_se_denuncia(declarado):
+    """Normalizar en silencio arreglaría el efecto y ocultaría la errata."""
+    skill = Skill("x", PLANTILLA_TIPO.format(tipo=declarado))
+    assert any("desconocido" in f for f in skill.problemas())
+
+
+@pytest.mark.parametrize("valido", ["clinico", "operativo", "documento"])
+def test_los_tipos_validos_se_respetan(valido):
+    skill = Skill("x", PLANTILLA_TIPO.format(tipo=valido))
+    assert skill.tipo == valido
+    assert not any("desconocido" in f for f in skill.problemas())
