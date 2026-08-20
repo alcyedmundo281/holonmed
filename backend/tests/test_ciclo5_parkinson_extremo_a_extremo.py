@@ -22,11 +22,20 @@ from holonmed.models import EstadoInfon, Infon, Polaridad
 
 RAIZ = Path(__file__).resolve().parents[1]
 CONVERSOR = RAIZ / "scripts" / "convertir_condicion.py"
-INDICE = Path("C:/Users/alcye/OneDrive - Outlook/OneDrive/Documents/medsemiotics-db")
+
+# La misma convención que `test_convertir_condicion.py`: relativa al repo, no
+# a la máquina de nadie. Una ruta absoluta del portátil del autor hace que
+# estas pruebas se salten en CI y en cualquier otro sitio, y son justamente
+# las que demuestran que el bucle se cierra. La razón del salto lleva la ruta
+# dentro para que el salto diga la verdad.
+sys.path.insert(0, str(RAIZ / "scripts"))
+convertir_condicion = pytest.importorskip("convertir_condicion")
+
+INDICE = convertir_condicion.INDICE_POR_DEFECTO
 
 pytestmark = pytest.mark.skipif(
     not (INDICE / "condiciones").is_dir(),
-    reason="hace falta un clon de medsemiotics-db",
+    reason=f"no hay un clon de medsemiotics-db en {INDICE}",
 )
 
 

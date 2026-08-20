@@ -575,7 +575,17 @@ class Skill:
                     contrapeso=int(regla.get("contrapeso", 0) or 0),
                 )
             )
-        return Balance(niveles=niveles, fuente=str(bloque.get("fuente", "")))
+        fuente = str(bloque.get("fuente", ""))
+        # Los enteros los fija el panel que redacta el criterio publicado; el
+        # sistema no los deriva. Un balance sin procedencia son cifras propias
+        # sin la muestra sobre la que se midieron. El índice ya exige `ref`,
+        # pero una skill escrita a mano no pasa por el índice.
+        if niveles and not fuente:
+            self._problemas.append(
+                "balance sin `fuente`: los enteros vienen del criterio publicado "
+                "con su cita, y el sistema no los deriva"
+            )
+        return Balance(niveles=niveles, fuente=fuente)
 
     def _parsear_laboratorio(self) -> list[CriterioLaboratorio]:
         salida = []
