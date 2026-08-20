@@ -71,6 +71,18 @@ if TYPE_CHECKING:  # pragma: no cover - sólo para tipado
 logger = logging.getLogger(__name__)
 
 
+def _emparejador(presentes: Sequence[str]):
+    """Devuelve una función que decide si un término consta como presente.
+
+    Usa el mismo emparejamiento por subcadena que el motor bayesiano, para
+    que el núcleo y los signos no puedan divergir.
+    """
+    from .bayes import emparejar_termino
+
+    indice = {t.lower(): t for t in presentes}
+    return lambda termino: emparejar_termino(termino, indice) is not None
+
+
 class EvaluadorDeVeredicto:
     """Aplica los tres niveles declarados por el protocolo a un paciente."""
 
@@ -110,6 +122,32 @@ class EvaluadorDeVeredicto:
         ]
         traza.append(f"{len(apoyos)} apoyo(s), {len(banderas)} bandera(s) roja(s)")
 
+        # --- NIVEL 2: el núcleo ---------------------------------------
+        # Sin el rasgo central, el criterio no se aplica. No es que el
+        # diagnóstico sea imposible: es que la pregunta todavía no se puede
+        # hacer.
+        if skill.nucleo.declarado:
+            presentes = [
+                i.termino for _, i in observados if i.polaridad is Polaridad.PRESENTE
+            ]
+            if not skill.nucleo.satisfecho(_emparejador(presentes)):
+                traza.append(
+                    "Núcleo no documentado: el criterio no se aplica todavía"
+                )
+                return VeredictoDeclarado(
+                    apoyos=apoyos,
+                    banderas_rojas=banderas,
+                    fuente=skill.balance.fuente,
+                    traza=traza,
+                )
+
+        # --- NIVEL 3: el tope de banderas -----------------------------
+        # Va DESPUÉS del núcleo y no antes. Una exclusión absoluta sí
+        # precede a todo —una apendicectomía excluye la apendicitis se haya
+        # documentado lo que se haya documentado— pero el tope es una
+        # propiedad de la tabla de balance, y el núcleo es justamente lo
+        # que condiciona que esa tabla se aplique. MDS documenta el
+        # parkinsonismo primero y sólo después juzga la causa.
         if skill.balance.declarado and len(banderas) > skill.balance.banderas_tolerables:
             veto = Veto(
                 tipo="tope_banderas",
@@ -128,32 +166,19 @@ class EvaluadorDeVeredicto:
                 traza=traza,
             )
 
-        # --- NIVEL 2: el núcleo ---------------------------------------
-        # Sin el rasgo central, el criterio no se aplica. No es que el
-        # diagnóstico sea imposible: es que la pregunta todavía no se puede
-        # hacer.
-        if skill.nucleo.declarado:
-            presentes = {
-                i.termino for _, i in observados if i.polaridad is Polaridad.PRESENTE
-            }
-            if not skill.nucleo.satisfecho(presentes):
-                traza.append(
-                    "Núcleo no documentado: el criterio no se aplica todavía"
-                )
-                return VeredictoDeclarado(
-                    apoyos=apoyos,
-                    banderas_rojas=banderas,
-                    fuente=skill.balance.fuente,
-                    traza=traza,
-                )
-
-        # --- NIVEL 3: el balance declarado ----------------------------
+        # --- NIVEL 4: el balance declarado ----------------------------
         nivel = None
-        if not observados:
+        if not apoyos and not banderas:
             # Cero apoyos y cero banderas no es un caso equilibrado: es un
-            # caso que nadie ha mirado. Un balance que admita «cero apoyos
-            # mínimos» daría por probable un diagnóstico sobre el vacío.
-            traza.append("Sin observaciones: no hay balance que evaluar")
+            # caso del que no consta nada que cuente. Un balance que admita
+            # «cero apoyos mínimos» daría por probable un diagnóstico sobre
+            # el vacío, porque 0 ≥ 0 se cumple.
+            #
+            # Se mira lo que DISPARA y no lo que empareja: basta un signo
+            # emparejado que no active su efecto —un `dispara_si: ausente`
+            # que conste presente— para que la lista de observados deje de
+            # estar vacía sin que nada sostenga el diagnóstico.
+            traza.append("Nada que cuente: no hay balance que evaluar")
         elif skill.balance.declarado:
             for candidato in skill.balance.niveles:
                 if candidato.satisface(len(apoyos), len(banderas)):
