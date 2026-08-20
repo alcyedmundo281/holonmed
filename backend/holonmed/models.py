@@ -156,6 +156,48 @@ class InferenciaBayesiana(BaseModel):
         return "BAJA_SOSPECHA"
 
 
+class Veto(BaseModel):
+    """Un corte duro: la hipótesis no se evalúa, se retira.
+
+    No es una probabilidad baja, es una imposibilidad. Un paciente
+    apendicectomizado no tiene poca probabilidad de apendicitis: tiene
+    cero, y ninguna evidencia futura la actualiza. Por eso no puede
+    expresarse como un likelihood ratio —un cociente de 0.001 deja una
+    probabilidad pequeña pero distinta de cero— y necesita mecanismo
+    propio.
+
+    Se retira **con su motivo visible**, nunca en silencio: el sistema
+    clasifica evidencia, no la borra, y el próximo clínico que lea el caso
+    no debería tener que rehacer el razonamiento.
+    """
+
+    tipo: str = Field(description="'exclusion_absoluta' | 'tope_banderas'")
+    motivo: str
+    termino: str | None = None
+    hipotesis: str = ""
+
+
+class VeredictoDeclarado(BaseModel):
+    """El conteo del criterio publicado: apoyos contra banderas rojas.
+
+    Es el estándar reproducible —para eso lo escribe un panel— y se lee
+    junto a la probabilidad y a Φ **sin fundirse con ellas**. Cuando el
+    criterio contado y la aritmética discrepan, esa discrepancia es
+    información clínica; reconciliarlas en un número la destruiría.
+    """
+
+    nivel: str | None = Field(default=None, description="El grado alcanzado, si alguno")
+    apoyos: list[str] = Field(default_factory=list)
+    banderas_rojas: list[str] = Field(default_factory=list)
+    veto: Veto | None = None
+    fuente: str = ""
+    traza: list[str] = Field(default_factory=list)
+
+    @property
+    def sostiene(self) -> bool:
+        return self.veto is None and self.nivel is not None
+
+
 class EstadoDimension(str, Enum):
     """Qué hace el registro en una dimensión del espacio de hallazgos."""
 
@@ -215,6 +257,15 @@ class Acoplamiento(BaseModel):
 
     phi: float = Field(description="Φ ∈ [−1, +1]. Armonía con el contexto.")
     coseno: float = Field(description="cos(h,e) antes de aplicar el anclaje")
+    phi_categorico: float | None = Field(
+        default=None,
+        description=(
+            "Φ sobre TODOS los signos declarados, con peso ±1 en vez de ln(LR). "
+            "Es la única lectura posible cuando el protocolo declara categorías y "
+            "no cocientes, que es el caso de casi todos los criterios publicados."
+        ),
+    )
+    dimensiones_categoricas: int = 0
     anclaje: float = Field(description="α ∈ [0,1]: sujeción del argumento a lo medido")
     hipotesis: str
 
@@ -290,6 +341,9 @@ class ResultadoTic(BaseModel):
     # hipótesis con el resto del paciente. Se lee junto a `inferencia`,
     # nunca en lugar de ella.
     acoplamiento: Acoplamiento | None = None
+    # El criterio publicado, contado. Se lee junto a `inferencia` y
+    # `acoplamiento`, nunca fundido con ellos.
+    veredicto_declarado: VeredictoDeclarado | None = None
 
     @property
     def infones_validados(self) -> list[Infon]:

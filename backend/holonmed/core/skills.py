@@ -52,6 +52,19 @@ _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 #   apoyo              aporta poco por sí solo
 ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imagen")
 
+# Cómo entra un signo en la DECISIÓN, que es un eje distinto de `rol`.
+# `rol` dice qué clase de signo es —una manifestación, una prueba sensible—;
+# `efecto` dice qué hace con el diagnóstico. Una prueba específica es a la vez
+# `prueba_especifica` y `apoya`. Una apendicectomía no es una prueba, no tiene
+# cociente de verosimilitud, y sin embargo decide: excluye.
+#
+# La forma viene de los criterios MDS 2015 para Parkinson (Postuma RB et al,
+# Mov Disord 2015;30:1591-601), que separan explícitamente los tres niveles:
+# criterios de exclusión absoluta, banderas rojas contrarrestables, y
+# criterios de apoyo.
+EFECTOS = ("apoya", "bandera_roja", "excluye")
+POLARIDADES = ("presente", "ausente")
+
 
 @dataclass
 class Signo:
@@ -63,6 +76,25 @@ class Signo:
     lr: float | None = None            # LR+ (alias histórico: `lr`)
     lr_negativo: float | None = None   # LR- cuando consta como ausente
     fuente: str = ""
+
+    # Los dos ejes de la decisión. Por defecto un signo apoya cuando está
+    # presente, que es lo que declaran todos los protocolos escritos antes
+    # de existir estas claves: así siguen valiendo sin tocarlos.
+    efecto: str = "apoya"
+    dispara_si: str = "presente"       # la polaridad que activa el efecto
+
+    @property
+    def polaridad_adversa(self) -> str:
+        """La polaridad que va EN CONTRA del diagnóstico.
+
+        Para un apoyo es la contraria a la que lo dispara: si la fiebre
+        apoya estando presente, su ausencia documentada resta. Para una
+        bandera roja es la que la dispara: si la bandera es «no hay dolor
+        en fosa ilíaca derecha», la ausencia es lo que resta.
+        """
+        if self.efecto == "bandera_roja":
+            return self.dispara_si
+        return "ausente" if self.dispara_si == "presente" else "presente"
 
     @property
     def lr_positivo(self) -> float | None:
@@ -158,6 +190,96 @@ class Clasificacion:
 
 
 @dataclass
+class Nucleo:
+    """El rasgo central sin el cual el criterio ni siquiera se aplica.
+
+    MDS lo dice en ese orden: primero se documenta el parkinsonismo motor
+    —bradicinesia más temblor de reposo o rigidez— y **sólo después** se
+    determina si la causa es la enfermedad de Parkinson. Sin el núcleo no
+    hay criterio que evaluar.
+
+    No es una exclusión: no dice que el diagnóstico sea imposible, dice que
+    la pregunta todavía no se puede hacer. Y no es un apoyo: no suma, es
+    condición previa.
+
+    Su ausencia es lo que impide el fallo que este bloque vino a tapar: sin
+    núcleo, un balance que admite «cero apoyos mínimos» daba por probable
+    un diagnóstico en un paciente del que no consta absolutamente nada.
+    """
+
+    requiere: list[str] = field(default_factory=list)          # todos
+    y_al_menos_uno_de: list[str] = field(default_factory=list)  # al menos uno
+
+    @property
+    def declarado(self) -> bool:
+        return bool(self.requiere or self.y_al_menos_uno_de)
+
+    def satisfecho(self, presentes: set[str]) -> bool:
+        normal = {t.lower() for t in presentes}
+        if any(t.lower() not in normal for t in self.requiere):
+            return False
+        if self.y_al_menos_uno_de:
+            return any(t.lower() in normal for t in self.y_al_menos_uno_de)
+        return True
+
+
+@dataclass
+class NivelCerteza:
+    """Un grado de certeza declarado, con su regla de conteo.
+
+    MDS 2015 declara dos: «establecida», que maximiza especificidad
+    exigiendo dos apoyos y ninguna bandera roja, y «probable», que
+    equilibra permitiendo hasta dos banderas si van contrarrestadas.
+    """
+
+    nombre: str
+    apoyos_minimos: int = 0
+    banderas_maximas: int = 0
+    contrapeso: int = 0   # apoyos exigidos POR CADA bandera roja presente
+
+    def satisface(self, apoyos: int, banderas: int) -> bool:
+        if apoyos < self.apoyos_minimos:
+            return False
+        if banderas > self.banderas_maximas:
+            return False
+        return apoyos >= banderas * self.contrapeso
+
+
+@dataclass
+class Balance:
+    """La regla que equilibra apoyos contra banderas rojas.
+
+    No se deriva: se declara, igual que los likelihood ratios. Quien
+    escribe el criterio publicado fija los enteros —«al menos dos
+    apoyos», «uno por uno», «máximo dos banderas»— y el sistema los
+    aplica. Buscar un umbral universal por simulación fue un error de
+    categoría: el umbral es específico de la enfermedad y lo pone el panel
+    que redacta el criterio.
+
+    Los niveles se evalúan en el orden en que se declaran, del más
+    estricto al más laxo, y gana el primero que se satisface.
+    """
+
+    niveles: list[NivelCerteza] = field(default_factory=list)
+    fuente: str = ""
+
+    @property
+    def declarado(self) -> bool:
+        return bool(self.niveles)
+
+    @property
+    def banderas_tolerables(self) -> int:
+        """El tope duro: ni el nivel más laxo admite más que esto.
+
+        Superarlo no es «peor balance», es un veto. Medido contra MDS: un
+        coseno es continuo y monótono en el balance, así que no puede
+        expresar un tope — cuatro apoyos con tres banderas sale rechazado
+        por el criterio y con Φ positiva. El tope va fuera del coeficiente.
+        """
+        return max((n.banderas_maximas for n in self.niveles), default=0)
+
+
+@dataclass
 class ModeloBayesiano:
     probabilidad_base: float = 0.0
     factores_riesgo: dict[str, float] = field(default_factory=dict)
@@ -192,6 +314,8 @@ class Skill:
         self.signos = self._parsear_signos()
         self.laboratorio = self._parsear_laboratorio()
         self.bayes = self._parsear_bayes()
+        self.balance = self._parsear_balance()
+        self.nucleo = self._parsear_nucleo()
         self.clasificacion = self._parsear_clasificacion()
         # Un protocolo operativo pertenece a un rol y declara qué debe
         # contener su registro. Se busca por este campo y no por el nombre
@@ -292,6 +416,8 @@ class Skill:
             if not isinstance(s, dict) or not s.get("nombre"):
                 continue
             rol = str(s.get("rol", "apoyo"))
+            efecto = str(s.get("efecto", "apoya"))
+            dispara = str(s.get("dispara_si", "presente"))
             salida.append(
                 Signo(
                     nombre=str(s["nombre"]),
@@ -300,6 +426,8 @@ class Skill:
                     lr=_num(s.get("lr") if "lr" in s else s.get("lr_positivo")),
                     lr_negativo=_num(s.get("lr_negativo")),
                     fuente=str(s.get("fuente", "")),
+                    efecto=efecto if efecto in EFECTOS else "apoya",
+                    dispara_si=dispara if dispara in POLARIDADES else "presente",
                 )
             )
         return salida
@@ -354,6 +482,35 @@ class Skill:
             criterios=criterios,
             produce=bloque.get("produce") or {},
         )
+
+    def _parsear_nucleo(self) -> Nucleo:
+        bloque = self.meta.get("nucleo")
+        if not isinstance(bloque, dict):
+            return Nucleo()
+        return Nucleo(
+            requiere=[str(x) for x in (bloque.get("requiere") or [])],
+            y_al_menos_uno_de=[
+                str(x) for x in (bloque.get("y_al_menos_uno_de") or [])
+            ],
+        )
+
+    def _parsear_balance(self) -> Balance:
+        bloque = self.meta.get("balance")
+        if not isinstance(bloque, dict):
+            return Balance()
+        niveles = []
+        for nombre, regla in bloque.items():
+            if nombre == "fuente" or not isinstance(regla, dict):
+                continue
+            niveles.append(
+                NivelCerteza(
+                    nombre=str(nombre),
+                    apoyos_minimos=int(regla.get("apoyos_minimos", 0) or 0),
+                    banderas_maximas=int(regla.get("banderas_maximas", 0) or 0),
+                    contrapeso=int(regla.get("contrapeso", 0) or 0),
+                )
+            )
+        return Balance(niveles=niveles, fuente=str(bloque.get("fuente", "")))
 
     def _parsear_laboratorio(self) -> list[CriterioLaboratorio]:
         salida = []
