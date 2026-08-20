@@ -2,6 +2,8 @@
 
 **Validación semiótica del diagnóstico en HolonMed.**
 Módulo: `backend/holonmed/core/acoplamiento.py` · Tests: `backend/tests/test_acoplamiento.py`
+Complementa [`docs/VEREDICTO.md`](VEREDICTO.md), que documenta los tres
+niveles de la decisión: vetar, contar, balancear.
 
 ---
 
