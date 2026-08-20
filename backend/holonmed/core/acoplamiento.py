@@ -229,6 +229,7 @@ class MedidorDeAcoplamiento:
         componentes.extend(self._componer_residuo(residuo, peso_tipico))
 
         coseno, traza_geom = self._coseno(componentes)
+        phi_cat, dims_cat, traza_cat = self._categorico(skill, infones)
         anclaje, detalle_anclaje, traza_anc = self._anclaje(
             dimensiones, observaciones, residuo
         )
@@ -238,6 +239,10 @@ class MedidorDeAcoplamiento:
         return Acoplamiento(
             phi=round(phi, 4),
             coseno=round(coseno, 4),
+            phi_categorico=(
+                None if phi_cat is None else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
+            ),
+            dimensiones_categoricas=dims_cat,
             anclaje=round(anclaje, 4),
             hipotesis=skill.condicion.get("nombre") or skill.titulo,
             veredicto=self._veredicto(phi, componentes),
@@ -246,8 +251,87 @@ class MedidorDeAcoplamiento:
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
-            traza=traza_geom + traza_anc,
+            traza=traza_geom + traza_anc + traza_cat,
         )
+
+    # --- El vector categórico -----------------------------------------
+
+    @staticmethod
+    def _categorico(
+        skill: "Skill", infones: Sequence[Infon]
+    ) -> tuple[float | None, int, list[str]]:
+        """Φ sobre TODOS los signos declarados, con peso ±1 en vez de ln(LR).
+
+        La lectura ponderada de arriba sólo puede usar los signos con
+        likelihood ratio publicado, y ésos son una minoría: los criterios
+        que la clínica usa a diario —MDS, Atlanta, Duke, ACR/EULAR—
+        declaran categorías, no cocientes. Sin esta lectura, Φ devolvería
+        `None` para casi todos ellos.
+
+        Cada dimensión pregunta lo mismo, y por eso el caso de libro es el
+        vector de unos: **¿el registro confirma lo que la hipótesis
+        espera?** La hipótesis espera que sus apoyos estén y que sus
+        banderas rojas no. De ahí:
+
+            hᵢ = +1  en toda dimensión declarada
+            eᵢ = +1  el registro confirma la expectativa
+                 −1  la contradice
+                  0  nadie lo ha mirado
+
+                     Σ eᵢ
+            Φ_cat = ───────────────      ∈ [−1, +1]
+                    √(D · medidos)
+
+        que es el coseno de esos dos vectores, escrito sin cancelar. Los
+        tres polos salen igual que en la lectura ponderada: todo confirma
+        da +1, todo contradice da −1, y mitad y mitad da 0.
+
+        Las exclusiones absolutas **no son dimensiones**: no restan, vetan,
+        y para cuando esto se calcula la hipótesis ya se habrá retirado.
+
+        El peso ±1 tiene un coste que conviene no perder de vista: un signo
+        que nadie midió pesa aquí lo mismo que uno con LR de 26.6 y su
+        intervalo de confianza. Lo único que separa una tabla útil de una
+        lista de corazonadas con formato es la curación contra evidencia
+        del índice. Cuando no hay cociente que pondere, **la disciplina de
+        curación es la ponderación**.
+        """
+        dimensiones = [s for s in skill.signos if s.efecto != "excluye"]
+        if not dimensiones:
+            return None, 0, []
+
+        from .bayes import emparejar_termino
+
+        indice = {s.nombre.lower(): s for s in dimensiones}
+        contribuciones: dict[str, int] = {}
+
+        for infon in infones:
+            if not infon.es_valido:
+                continue
+            clave = emparejar_termino(infon.termino, indice)
+            if clave is None or clave in contribuciones:
+                continue
+            signo = indice[clave]
+            observada = (
+                "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
+            )
+            contribuciones[clave] = -1 if observada == signo.polaridad_adversa else 1
+
+        medidos = len(contribuciones)
+        if not medidos:
+            return 0.0, len(dimensiones), [
+                "Φ categórico = 0: ningún signo declarado consta en el registro"
+            ]
+
+        suma = sum(contribuciones.values())
+        phi = suma / math.sqrt(len(dimensiones) * medidos)
+        favor = sum(1 for v in contribuciones.values() if v > 0)
+        traza = [
+            f"Φ categórico: {favor} a favor, {medidos - favor} en contra, "
+            f"sobre {len(dimensiones)} dimensiones declaradas",
+            f"Φ_cat = {suma} / √({len(dimensiones)} × {medidos}) = {phi:.4f}",
+        ]
+        return phi, len(dimensiones), traza
 
     # --- Construcción del espacio ------------------------------------
 

@@ -5,6 +5,7 @@ from .pipeline import CrystallizationPipeline
 from .skills import Skill, SkillManager
 from .terminology import Candidato, TerminologyIndex, VocabularyLoader
 from .validator import Match, OntologyValidator, hay_colision
+from .veredicto import EvaluadorDeVeredicto
 from .verifier import Auditoria, ClinicalVerifier
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "CrystallizationPipeline",
     "Match",
     "MedidorDeAcoplamiento",
+    "EvaluadorDeVeredicto",
     "OntologyValidator",
     "Skill",
     "SkillManager",

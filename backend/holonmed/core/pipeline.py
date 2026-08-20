@@ -33,6 +33,7 @@ from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
+from .veredicto import EvaluadorDeVeredicto
 from .verifier import ClinicalVerifier
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ class CrystallizationPipeline:
         settings: Settings | None = None,
         clasificador: Clasificador | None = None,
         acoplamiento: MedidorDeAcoplamiento | None = None,
+        veredicto: EvaluadorDeVeredicto | None = None,
     ):
         self.llm = llm
         self.skills = skills
@@ -104,6 +106,7 @@ class CrystallizationPipeline:
         self.bayes = bayes or AntigenPresentingCell()
         self.clasificador = clasificador or Clasificador()
         self.acoplamiento = acoplamiento or MedidorDeAcoplamiento()
+        self.veredicto = veredicto or EvaluadorDeVeredicto()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -156,7 +159,31 @@ class CrystallizationPipeline:
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Clasificador falló; el tic conserva sus infones")
 
-        # --- ETAPA 5: INFERENCIA ABDUCTIVA ----------------------------
+        # --- ETAPA 5: VETO ---------------------------------------------
+        # Va ANTES de Bayes y de Φ, y no por orden de escritura: una
+        # exclusión absoluta no es una probabilidad baja, es una
+        # imposibilidad. Calcular la probabilidad de una apendicitis en un
+        # paciente apendicectomizado no es conservador, es ruido con
+        # formato numérico.
+        try:
+            resultado.veredicto_declarado = self.veredicto.evaluar(
+                skill, list(holon.linea_tiempo) + resultado.infones
+            )
+        except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
+            logger.exception("Evaluador de veredicto falló; el tic sigue en pie")
+
+        vetada = bool(
+            resultado.veredicto_declarado and resultado.veredicto_declarado.veto
+        )
+        if vetada:
+            logger.info(
+                "Hipótesis '%s' retirada: %s",
+                skill.nombre,
+                resultado.veredicto_declarado.veto.motivo,
+            )
+            return resultado
+
+        # --- ETAPA 6: INFERENCIA ABDUCTIVA ----------------------------
         try:
             resultado.inferencia = self.bayes.calcular(
                 holon.metadatos_para_bayes(texto),
@@ -166,7 +193,7 @@ class CrystallizationPipeline:
         except Exception:  # noqa: BLE001 — un fallo de Bayes no anula el tic
             logger.exception("Motor bayesiano falló; el tic conserva sus infones")
 
-        # --- ETAPA 6: VALIDACIÓN SEMIÓTICA ----------------------------
+        # --- ETAPA 7: VALIDACIÓN SEMIÓTICA ----------------------------
         # Bayes ya dijo cuánta evidencia hay. Falta la otra pregunta: si
         # esta hipótesis, tomada como regla de acción, armoniza con el
         # paciente entero o deja fricción. Es aritmética determinista
