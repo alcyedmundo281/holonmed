@@ -65,6 +65,21 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 EFECTOS = ("apoya", "bandera_roja", "excluye")
 POLARIDADES = ("presente", "ausente")
 
+# Qué clase de protocolo es, y por tanto qué se le exige.
+#
+#   clinico     extrae hallazgos: debe declarar signos o criterios de
+#               laboratorio, y debe aportar hints
+#   operativo   registra lo que hizo un rol: debe declarar `rol` y campos
+#   documento   sólo da formato a algo ya decidido (una receta, un informe)
+#
+# Un `tipo` desconocido se normaliza a `clinico`, que es el más exigente.
+# La dirección importa: hasta que esta lista blanca existió, cualquier cadena
+# que no fuera exactamente "clinico" —un acento, una mayúscula, la clave sin
+# valor— escapaba a la vez de la exigencia de declarar signos y de la
+# comprobación de hints, porque el salto de esa prueba es `tipo != "clinico"`.
+# Una errata dejaba el protocolo sin validar y la build en verde.
+TIPOS = ("clinico", "operativo", "documento")
+
 
 @dataclass
 class Signo:
@@ -317,7 +332,17 @@ class Skill:
         self.ambito_grafo: list[str] = [str(a) for a in (meta.get("ambito_grafo") or [])]
         # 'clinico' extrae hallazgos; 'documento' sólo da formato a algo
         # que el profesional ya decidió (una receta, un informe).
-        self.tipo: str = str(meta.get("tipo", "clinico"))
+        #
+        # Lo desconocido cae al valor MÁS ESTRICTO y no al más permisivo, que
+        # es donde caía por accidente: al no coincidir con ninguna rama,
+        # escapaba de todas. `problemas()` sólo corre bajo `skills --validar`,
+        # que nadie ejecuta en producción, así que la normalización es la
+        # única defensa que actúa siempre. Se conserva el valor declarado
+        # para poder informar de él.
+        self.tipo_declarado: str = str(meta.get("tipo", "clinico"))
+        self.tipo: str = (
+            self.tipo_declarado if self.tipo_declarado in TIPOS else "clinico"
+        )
 
         self.signos = self._parsear_signos()
         self.laboratorio = self._parsear_laboratorio()
@@ -736,6 +761,14 @@ class Skill:
 
         if not self.meta:
             fallos.append("sin frontmatter YAML ni JSON embebido legible")
+        # El parseador ya lo normalizó a `clinico` para que la errata no
+        # desactive nada; aquí se dice en voz alta, que es lo que hace que
+        # alguien la corrija en vez de convivir con ella.
+        if self.tipo_declarado not in TIPOS:
+            fallos.append(
+                f"tipo '{self.tipo_declarado}' desconocido; se trata como "
+                f"'clinico'. Válidos: {', '.join(TIPOS)}"
+            )
         # Una skill de documento (una receta, un informe) no extrae
         # hallazgos, así que exigirle signos sería un falso positivo.
         if self.tipo == "clinico" and not self.signos and not self.laboratorio:
