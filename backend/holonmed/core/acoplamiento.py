@@ -214,9 +214,15 @@ class MedidorDeAcoplamiento:
         preguntarlo. Confundirlas sería inventar una medida.
         """
         dimensiones = self._dimensiones_declaradas(skill)
-        if not dimensiones:
+        # El protocolo puede no declarar un solo likelihood ratio y aun así
+        # ser medible: es el caso de casi todos los criterios publicados,
+        # que declaran categorías. Salir aquí dejaba `phi_categorico`
+        # inalcanzable **justo para los protocolos que lo motivaron**.
+        categoricas = [s for s in skill.signos if s.efecto != "excluye"]
+        if not dimensiones and not categoricas:
             logger.debug(
-                "El protocolo '%s' no declara LR: no hay espacio donde medir Φ",
+                "El protocolo '%s' no declara ni LR ni signos: no hay espacio "
+                "donde medir Φ",
                 skill.nombre,
             )
             return None
@@ -230,11 +236,23 @@ class MedidorDeAcoplamiento:
 
         coseno, traza_geom = self._coseno(componentes)
         phi_cat, dims_cat, traza_cat = self._categorico(skill, infones)
+        if not dimensiones:
+            traza_geom.append(
+                "El protocolo no declara ningún LR: la lectura ponderada no "
+                "aplica y las bandas se leen del Φ categórico."
+            )
         anclaje, detalle_anclaje, traza_anc = self._anclaje(
-            dimensiones, observaciones, residuo
+            dimensiones, observaciones, residuo, skill, infones
         )
 
         phi = max(-1.0, min(1.0, coseno * anclaje))
+        # Cuando no hay LR declarados, `phi` vale 0 porque no hay vector que
+        # proyectar — y 0 se leería como INERCIA, que es una afirmación
+        # falsa sobre el caso. La banda se lee entonces del categórico, que
+        # es la única lectura disponible.
+        phi_para_bandas = phi
+        if not dimensiones and phi_cat is not None:
+            phi_para_bandas = max(-1.0, min(1.0, phi_cat * anclaje))
 
         return Acoplamiento(
             phi=round(phi, 4),
@@ -245,8 +263,8 @@ class MedidorDeAcoplamiento:
             dimensiones_categoricas=dims_cat,
             anclaje=round(anclaje, 4),
             hipotesis=skill.condicion.get("nombre") or skill.titulo,
-            veredicto=self._veredicto(phi, componentes),
-            cuadrante=self._cuadrante(phi, inferencia),
+            veredicto=self._veredicto(phi_para_bandas, componentes),
+            cuadrante=self._cuadrante(phi_para_bandas, inferencia),
             componentes=componentes,
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
@@ -467,7 +485,11 @@ class MedidorDeAcoplamiento:
         """
         from .bayes import emparejar_termino
 
-        indice = {d["clave"]: d for d in dimensiones}
+        # Se indexan TODOS los signos declarados y no sólo los que llevan
+        # likelihood ratio: un signo declarado categóricamente está
+        # contemplado por el protocolo, y contarlo como resto diría que la
+        # hipótesis no lo explica cuando sí lo declara.
+        indice = {s.nombre.lower(): s for s in skill.signos}
         condicion = str(skill.condicion.get("nombre") or skill.titulo).lower()
 
         # El mismo hallazgo puede llegar dos veces —una desde la línea de
@@ -620,6 +642,8 @@ class MedidorDeAcoplamiento:
         dimensiones: list[dict[str, Any]],
         observaciones: dict[str, Infon],
         residuo: Sequence[Infon],
+        skill: "Skill",
+        infones: Sequence[Infon],
     ) -> tuple[float, dict[str, float], list[str]]:
         """α: cuánto de este argumento está sujeto a la realidad medida.
 
@@ -627,7 +651,22 @@ class MedidorDeAcoplamiento:
         uno solo debe bastar: un razonamiento impecable sobre LR sin fuente
         no es medio verdadero, es irrelevante.
         """
-        contribuyentes = list(observaciones.values()) + list(residuo)
+        # Los infones que sostienen la lectura, sea cual sea la que exista:
+        # los emparejados con dimensiones que llevan LR, los emparejados con
+        # signos declarados por categoría, y el resto no simbolizado. Contar
+        # sólo los primeros dejaba α a 0 en cuanto el protocolo no declaraba
+        # cocientes, que es precisamente el caso que el vector categórico
+        # vino a cubrir.
+        contribuyentes = list(observaciones.values())
+        vistos = {id(i) for i in contribuyentes}
+        for infon in self._infones_invocados(skill, infones):
+            if id(infon) not in vistos:
+                vistos.add(id(infon))
+                contribuyentes.append(infon)
+        for infon in residuo:
+            if id(infon) not in vistos:
+                vistos.add(id(infon))
+                contribuyentes.append(infon)
 
         if not contribuyentes:
             detalle = {"confianza": 0.0, "procedencia": 0.0, "fuente": 0.0}
@@ -639,13 +678,27 @@ class MedidorDeAcoplamiento:
             sum(_calidad_normalizacion(i.razon_auditoria) for i in contribuyentes) / n
         )
 
-        # Sólo se juzga la procedencia de los LR que este caso realmente
-        # usó. Que el protocolo tenga un signo sin fuente no ensucia un
+        # Sólo se juzga la procedencia de lo que este caso realmente usó.
+        # Que el protocolo tenga un signo sin fuente no ensucia un
         # razonamiento que no lo invocó.
+        #
+        # Cuando el protocolo declara categorías y no cocientes, no hay LR
+        # que citar y esta lista quedaba vacía: α colapsaba a 0 y con él
+        # todo Φ, castigando por falta de fuente a un protocolo que puede
+        # estar perfectamente citado. La procedencia se juzga entonces sobre
+        # los SIGNOS declarados que el caso invocó, que es donde vive la
+        # cita en un criterio categórico.
         usadas = [d for d in dimensiones if d["clave"] in observaciones]
-        a_fuente = (
-            sum(1.0 for d in usadas if d["fuente"]) / len(usadas) if usadas else 0.0
-        )
+        if usadas:
+            a_fuente = sum(1.0 for d in usadas if d["fuente"]) / len(usadas)
+        else:
+            invocados = self._signos_invocados(skill, infones)
+            a_fuente = (
+                sum(1.0 for s in invocados if (s.fuente or "").strip())
+                / len(invocados)
+                if invocados
+                else 0.0
+            )
 
         detalle = {
             "confianza": round(a_conf, 4),
@@ -665,6 +718,29 @@ class MedidorDeAcoplamiento:
                 "y Φ colapsa a 0 (irrelevante), no a un valor negativo."
             )
         return alfa, detalle, traza
+
+    @staticmethod
+    def _emparejar_signos(skill: "Skill", infones: Sequence[Infon]) -> dict:
+        """Signo declarado -> primer infón validado que lo toca, lleve LR o no."""
+        from .bayes import emparejar_termino
+
+        indice = {s.nombre.lower(): s for s in skill.signos if s.efecto != "excluye"}
+        vistos: dict[str, tuple] = {}
+        for infon in infones:
+            if not infon.es_valido:
+                continue
+            clave = emparejar_termino(infon.termino, indice)
+            if clave is not None:
+                vistos.setdefault(clave, (indice[clave], infon))
+        return vistos
+
+    def _signos_invocados(self, skill: "Skill", infones: Sequence[Infon]) -> list:
+        """Signos declarados que este caso realmente tocó."""
+        return [signo for signo, _ in self._emparejar_signos(skill, infones).values()]
+
+    def _infones_invocados(self, skill: "Skill", infones: Sequence[Infon]) -> list:
+        """Infones que tocan un signo declarado, lleve LR o no."""
+        return [infon for _, infon in self._emparejar_signos(skill, infones).values()]
 
     # --- Lectura ------------------------------------------------------
 

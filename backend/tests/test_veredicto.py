@@ -10,7 +10,7 @@ import pytest
 from holonmed.core.acoplamiento import MedidorDeAcoplamiento
 from holonmed.core.skills import Skill
 from holonmed.core.veredicto import EvaluadorDeVeredicto
-from holonmed.models import EstadoInfon, Infon, Polaridad
+from holonmed.models import EstadoInfon, Infon, Polaridad, VeredictoSemiotico
 
 APENDICITIS = """---
 titulo: Protocolo de apendicitis aguda
@@ -230,11 +230,64 @@ def test_un_protocolo_sin_los_bloques_nuevos_devuelve_None(evaluador):
 
 
 def test_el_vector_categorico_no_necesita_ningun_LR(skill):
-    """Casi todos los criterios publicados declaran categorías, no cocientes."""
+    """Casi todos los criterios publicados declaran categorías, no cocientes.
+
+    La versión anterior de este test escribía
+    `assert res is None or res.phi_categorico is not None`, y como el
+    protocolo no declara ningún LR el `res is None` era SIEMPRE cierto: el
+    `or` cortocircuitaba y la segunda mitad no se evaluaba nunca. El test
+    pasaba por la misma razón por la que debía fallar — una aserción con una
+    salida de emergencia que el comportamiento real toma siempre.
+    """
     assert all(s.lr is None for s in skill.signos)
 
     res = MedidorDeAcoplamiento().medir(skill, [infon("Fiebre")])
-    assert res is None or res.phi_categorico is not None
+
+    assert res is not None, "un protocolo sólo-categorías tiene que ser medible"
+    assert res.phi_categorico is not None
+    assert res.phi_categorico > 0
+
+
+def test_el_categorico_se_alcanza_por_el_camino_publico(skill):
+    """Que la aritmética sea correcta no sirve si `medir()` no llega a ella.
+
+    Los otros tests del vector llaman a `_categorico` directamente, así que
+    verifican la aritmética y no la accesibilidad. Éste entra por donde entra
+    el pipeline.
+    """
+    med = MedidorDeAcoplamiento()
+    directo, _, _ = med._categorico(skill, [infon("Fiebre"), infon("Anemia")])
+    publico = med.medir(skill, [infon("Fiebre"), infon("Anemia")])
+
+    assert publico is not None
+    assert publico.phi_categorico == pytest.approx(
+        round(directo * publico.anclaje, 4), abs=1e-4
+    )
+
+
+def test_sin_LR_las_bandas_se_leen_del_categorico(skill):
+    """Con `phi` a 0 por falta de LR, la banda diría INERCIA — que es falso."""
+    res = MedidorDeAcoplamiento().medir(
+        skill, [infon("Fiebre"), infon("Leucocitosis"), infon("Signo de Blumberg")]
+    )
+
+    assert res.phi == 0.0                       # no hay vector ponderado
+    assert res.phi_categorico > 0.20
+    assert res.veredicto is not VeredictoSemiotico.INERCIA
+    assert any("no declara ningún LR" in t for t in res.traza)
+
+
+def test_un_signo_declarado_sin_LR_no_es_resto_no_simbolizado(skill):
+    """Declarado por categoría es declarado: el protocolo sí lo contempla."""
+    res = MedidorDeAcoplamiento().medir(skill, [infon("Fiebre"), infon("Cefalea")])
+
+    assert res.resto_no_simbolizado == ["Cefalea"]
+
+
+def test_un_protocolo_sin_signos_sigue_devolviendo_None(skill):
+    """Ni LR ni categorías: no hay espacio donde medir, y eso no es Φ = 0."""
+    vacio = Skill("vacio", "---\ntitulo: Sin nada\n---\n\nx\n")
+    assert MedidorDeAcoplamiento().medir(vacio, [infon("Fiebre")]) is None
 
 
 def test_los_tres_polos_del_vector_categorico(skill):
