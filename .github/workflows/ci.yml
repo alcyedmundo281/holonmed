@@ -22,6 +22,19 @@ jobs:
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
 
+      # El índice es OTRO repositorio, y las pruebas de aceptación del ciclo 5
+      # convierten desde él con el conversor real. Sin el clon se saltan, así
+      # que lo que demuestra que el bucle cierra —índice → conversor → skill →
+      # veredicto— no se comprobaba en ninguna parte.
+      #
+      # Y hay un modo de fallo que sólo este paso caza: que los dos repos se
+      # desincronicen. Un clon viejo no rompe nada visible; simplemente el
+      # conversor deja de emitir lo que la prueba espera. Clonándolo aquí, la
+      # desincronización se ve el día que ocurre.
+      - name: Clonar el índice, hermano del repo
+        run: git clone --depth 1 https://github.com/alcyedmundo281/medsemiotics-db.git ../../medsemiotics-db
+        working-directory: backend
+
       - name: Linter
         run: ruff check .
 
