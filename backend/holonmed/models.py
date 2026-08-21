@@ -265,6 +265,14 @@ class Acoplamiento(BaseModel):
             "no cocientes, que es el caso de casi todos los criterios publicados."
         ),
     )
+    coseno_categorico: float | None = Field(
+        default=None,
+        description=(
+            "Φ categórico ANTES de α: el término homólogo de `coseno`, y el "
+            "único que sirve para ordenar candidatas. `phi_categorico` ya lleva "
+            "α dentro, así que ordenar por él ordena por calidad documental."
+        ),
+    )
     dimensiones_categoricas: int = 0
 
     # Los tres factores del coseno. No son cálculo nuevo: son `coseno`
@@ -294,6 +302,18 @@ class Acoplamiento(BaseModel):
             "el factor que cobra el resto no simbolizado. None si no hay "
             "vector observado."
         ),
+    )
+
+    # Los mismos tres, sobre la lectura de pesos unitarios. Su producto
+    # reconstruye `coseno_categorico`, no `phi_categorico`.
+    direccion_categorica: float | None = Field(
+        default=None, description="Σeᵢ/m: de lo mirado, cuánto concuerda"
+    )
+    cobertura_categorica: float | None = Field(
+        default=None, description="m/D: de lo declarado, cuánto se ha mirado"
+    )
+    explicacion_categorica: float | None = Field(
+        default=None, description="m/(m+r): del registro, cuánto cae dentro"
     )
 
     anclaje: float = Field(description="α ∈ [0,1]: sujeción del argumento a lo medido")

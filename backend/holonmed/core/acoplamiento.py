@@ -237,6 +237,9 @@ class MedidorDeAcoplamiento:
         coseno, traza_geom = self._coseno(componentes)
         direccion, cobertura, explicacion, traza_fact = self._factores(componentes)
         phi_cat, dims_cat, traza_cat = self._categorico(skill, infones, len(residuo))
+        dir_cat, cob_cat, expl_cat, traza_fact_cat = self._factores_categoricos(
+            skill, infones, len(residuo)
+        )
         if not dimensiones:
             traza_geom.append(
                 "El protocolo no declara ningún LR: la lectura ponderada no "
@@ -261,7 +264,11 @@ class MedidorDeAcoplamiento:
             phi_categorico=(
                 None if phi_cat is None else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
             ),
+            coseno_categorico=None if phi_cat is None else round(phi_cat, 4),
             dimensiones_categoricas=dims_cat,
+            direccion_categorica=None if dir_cat is None else round(dir_cat, 4),
+            cobertura_categorica=None if cob_cat is None else round(cob_cat, 4),
+            explicacion_categorica=None if expl_cat is None else round(expl_cat, 4),
             direccion=None if direccion is None else round(direccion, 4),
             cobertura=None if cobertura is None else round(cobertura, 4),
             explicacion=None if explicacion is None else round(explicacion, 4),
@@ -273,7 +280,7 @@ class MedidorDeAcoplamiento:
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
-            traza=traza_geom + traza_fact + traza_anc + traza_cat,
+            traza=traza_geom + traza_fact + traza_anc + traza_cat + traza_fact_cat,
         )
 
     # --- El vector categórico -----------------------------------------
@@ -335,26 +342,11 @@ class MedidorDeAcoplamiento:
         del índice. Cuando no hay cociente que pondere, **la disciplina de
         curación es la ponderación**.
         """
-        dimensiones = [s for s in skill.signos if s.efecto != "excluye"]
+        dimensiones, contribuciones = MedidorDeAcoplamiento._contribuciones_categoricas(
+            skill, infones
+        )
         if not dimensiones:
             return None, 0, []
-
-        from .bayes import emparejar_termino
-
-        indice = {s.nombre.lower(): s for s in dimensiones}
-        contribuciones: dict[str, int] = {}
-
-        for infon in infones:
-            if not infon.es_valido:
-                continue
-            clave = emparejar_termino(infon.termino, indice)
-            if clave is None or clave in contribuciones:
-                continue
-            signo = indice[clave]
-            observada = (
-                "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
-            )
-            contribuciones[clave] = -1 if observada == signo.polaridad_adversa else 1
 
         medidos = len(contribuciones)
         if not medidos:
@@ -371,6 +363,101 @@ class MedidorDeAcoplamiento:
             f"Φ_cat = {suma} / √({len(dimensiones)} × ({medidos} + {resto})) = {phi:.4f}",
         ]
         return phi, len(dimensiones), traza
+
+    @staticmethod
+    def _contribuciones_categoricas(
+        skill: "Skill", infones: Sequence[Infon]
+    ) -> tuple[list[Any], dict[str, int]]:
+        """Las dimensiones categóricas y lo que el registro dice de cada una.
+
+        Vive aparte porque la usan dos lectores —el Φ categórico y sus
+        factores— y **tienen que emparejar igual**. Si cada uno recorriera
+        los infones por su cuenta, los factores podrían describir una
+        medición distinta de la que produjo el número, y la identidad
+        cerraría o no según el caso. Es el mismo motivo por el que
+        `emparejar_termino` es una sola función compartida con Bayes.
+        """
+        from .bayes import emparejar_termino
+
+        dimensiones = [s for s in skill.signos if s.efecto != "excluye"]
+        if not dimensiones:
+            return [], {}
+
+        indice = {s.nombre.lower(): s for s in dimensiones}
+        contribuciones: dict[str, int] = {}
+
+        for infon in infones:
+            if not infon.es_valido:
+                continue
+            clave = emparejar_termino(infon.termino, indice)
+            if clave is None or clave in contribuciones:
+                continue
+            signo = indice[clave]
+            observada = (
+                "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
+            )
+            contribuciones[clave] = -1 if observada == signo.polaridad_adversa else 1
+
+        return dimensiones, contribuciones
+
+    @staticmethod
+    def _factores_categoricos(
+        skill: "Skill", infones: Sequence[Infon], resto: int = 0
+    ) -> tuple[float | None, float | None, float | None, list[str]]:
+        """Los mismos tres factores, sobre la lectura de pesos unitarios.
+
+        La descomposición de `_factores` no es propia de la lectura
+        ponderada: es lo que hace cualquier coseno. La categórica **es la
+        ponderada con todos los pesos iguales**, y como el coseno es
+        invariante de escala, la escala se cancela y las dos leen en la
+        misma unidad. Medido en `guiones/misma_escala.py`: cinco signos y
+        uno presente dan 0.4472 tanto declarando `lr: 2.0` en los cinco
+        como no declarando ninguno.
+
+        Con `h` el vector de unos, cada término se simplifica:
+
+            dirección   = Σeᵢ / m        de lo mirado, cuánto concuerda
+            cobertura   = m / D          de lo declarado, cuánto se miró
+            explicación = m / (m + r)    del registro, cuánto cae dentro
+
+        y su producto reconstruye `Σeᵢ / √(D·(m+r))`, que es el Φ
+        categórico **antes de α** — es decir el término homólogo de
+        `coseno`, y el único que sirve para ordenar candidatas. Ordenar por
+        `phi_categorico` sería ordenar por la calidad documental del
+        protocolo, que es lo que α mide.
+
+        El criterio de `None` es el de `_factores`, dimensión por
+        dimensión: sin nada mirado no hay dirección que dar, y sin ninguna
+        dimensión declarada no hay ni cobertura ni explicación. Cero diría
+        que el factor vale cero, que es otra afirmación.
+        """
+        dimensiones, contribuciones = MedidorDeAcoplamiento._contribuciones_categoricas(
+            skill, infones
+        )
+        total = len(dimensiones)
+        if not total:
+            return None, None, None, []
+
+        medidos = len(contribuciones)
+        direccion = sum(contribuciones.values()) / medidos if medidos else None
+        cobertura = medidos / total
+        explicacion = medidos / (medidos + resto) if medidos + resto else None
+
+        traza: list[str] = []
+        if direccion is not None:
+            traza.append(
+                f"dirección categórica = {sum(contribuciones.values())}/{medidos} "
+                f"= {direccion:.4f}"
+            )
+        traza.append(
+            f"cobertura categórica = {medidos}/{total} = {cobertura:.2%}"
+        )
+        if explicacion is not None:
+            traza.append(
+                f"explicación categórica = {medidos}/({medidos} + {resto}) "
+                f"= {explicacion:.2%}"
+            )
+        return direccion, cobertura, explicacion, traza
 
     # --- Construcción del espacio ------------------------------------
 

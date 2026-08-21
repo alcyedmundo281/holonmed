@@ -291,6 +291,95 @@ def test_un_protocolo_categorico_no_finge_factores_ponderados(medidor):
     assert res.direccion is None
     assert res.cobertura is None
     assert res.explicacion is None
+    # Pero la lectura categórica sí tiene los suyos: la ausencia es de la
+    # lectura ponderada, no del caso.
+    assert res.cobertura_categorica is not None
+
+
+def _categorico(nombre, cuantos, lr=None, citado=True):
+    """Un protocolo de `cuantos` signos, con o sin cociente y con o sin cita."""
+    cuerpo = "\n".join(
+        f"  - nombre: Signo {i}"
+        + ("\n    fuente: y" if citado else "")
+        + (f"\n    lr: {lr}" if lr else "")
+        for i in range(cuantos)
+    )
+    return Skill(nombre, f"---\ntitulo: {nombre}\nsignos:\n{cuerpo}\n---\n\nP\n")
+
+
+def test_los_factores_categoricos_reconstruyen_su_coseno(medidor):
+    """El producto da `coseno_categorico`, no `phi_categorico`.
+
+    La diferencia no es un detalle de implementación: `phi_categorico` lleva
+    α dentro, y α es la calidad documental del protocolo. Ordenar candidatas
+    por él ordenaría por cuán bien citado está el índice, que es justo el
+    error que la regla de selección existe para evitar.
+    """
+    skill = _categorico("cuatro", 4)
+    escenarios = [
+        [infon("Signo 0")],
+        [infon("Signo 0"), infon("Signo 1"), infon("Signo 2", presente=False)],
+        [infon("Signo 0"), infon("Hematuria")],            # con resto
+        [infon("Signo 0"), infon("Hematuria"), infon("Soplo sistolico")],
+    ]
+
+    for infones in escenarios:
+        res = medidor.medir(skill, infones)
+        producto = res.direccion_categorica * math.sqrt(
+            res.cobertura_categorica * res.explicacion_categorica
+        )
+        assert producto == pytest.approx(res.coseno_categorico, abs=1e-3), infones
+
+
+def test_la_categorica_lee_en_la_misma_escala_que_la_ponderada(medidor):
+    """La categórica ES la ponderada con todos los pesos iguales.
+
+    El coseno es invariante de escala, así que con pesos uniformes la
+    escala se cancela y las dos lecturas dan el mismo número. Eso es lo que
+    permite que una candidata categórica y una ponderada compitan sin
+    traducción — sin esto, compararlas sería comparar unidades distintas.
+
+    La asimetría que queda es fiel y no un defecto: un criterio categórico
+    no puede concentrar su peso en un signo, así que nunca alcanzará el
+    coseno de una ponderada cuyo signo estrella consta. Es la cobertura
+    haciendo su trabajo.
+    """
+    visto = [infon("Signo 0")]                    # uno de cinco, en los tres
+
+    uniforme = medidor.medir(_categorico("uniforme", 5, lr=2.0), visto)
+    assert uniforme.coseno == pytest.approx(uniforme.coseno_categorico, abs=1e-4)
+
+    # El mismo caso sin declarar cocientes: la lectura ponderada no existe,
+    # y la categórica da exactamente lo que daba la uniforme.
+    puro = medidor.medir(_categorico("puro", 5), visto)
+    assert puro.coseno_categorico == pytest.approx(uniforme.coseno_categorico, abs=1e-4)
+
+    # Y con un LR estrella, la ponderada se despega hacia arriba.
+    estrella = Skill(
+        "estrella",
+        "---\ntitulo: estrella\nsignos:\n"
+        "  - nombre: Signo 0\n    lr: 26.6\n    fuente: y\n"
+        + "".join(f"  - nombre: Signo {i}\n    lr: 2.0\n    fuente: y\n" for i in range(1, 5))
+        + "---\n\nP\n",
+    )
+    assert medidor.medir(estrella, visto).coseno > uniforme.coseno
+
+
+def test_el_coseno_categorico_no_lo_mueve_la_bibliografia(medidor):
+    """`coseno_categorico` es la clave de orden porque α no lo toca.
+
+    Dos protocolos idénticos salvo por las citas acoplan igual con el mismo
+    paciente. Lo que cambia es cuánto se puede confiar en el argumento, y
+    eso vive en α — separado, no mezclado en la clave de orden.
+    """
+    visto = [infon("Signo 0"), infon("Signo 1")]
+
+    con = medidor.medir(_categorico("citado", 3), visto)
+    sin = medidor.medir(_categorico("sin_citar", 3, citado=False), visto)
+
+    assert con.coseno_categorico == pytest.approx(sin.coseno_categorico, abs=1e-4)
+    assert con.phi_categorico > sin.phi_categorico
+    assert sin.anclaje == 0.0
 
 
 # --- La guarda anti-pseudociencia ------------------------------------
