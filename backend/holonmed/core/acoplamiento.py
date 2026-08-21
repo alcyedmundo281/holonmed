@@ -235,6 +235,7 @@ class MedidorDeAcoplamiento:
         componentes.extend(self._componer_residuo(residuo, peso_tipico))
 
         coseno, traza_geom = self._coseno(componentes)
+        direccion, cobertura, explicacion, traza_fact = self._factores(componentes)
         phi_cat, dims_cat, traza_cat = self._categorico(skill, infones, len(residuo))
         if not dimensiones:
             traza_geom.append(
@@ -261,6 +262,9 @@ class MedidorDeAcoplamiento:
                 None if phi_cat is None else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
             ),
             dimensiones_categoricas=dims_cat,
+            direccion=None if direccion is None else round(direccion, 4),
+            cobertura=None if cobertura is None else round(cobertura, 4),
+            explicacion=None if explicacion is None else round(explicacion, 4),
             anclaje=round(anclaje, 4),
             hipotesis=skill.condicion.get("nombre") or skill.titulo,
             veredicto=self._veredicto(phi_para_bandas, componentes),
@@ -269,7 +273,7 @@ class MedidorDeAcoplamiento:
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
-            traza=traza_geom + traza_anc + traza_cat,
+            traza=traza_geom + traza_fact + traza_anc + traza_cat,
         )
 
     # --- El vector categórico -----------------------------------------
@@ -651,6 +655,100 @@ class MedidorDeAcoplamiento:
         coseno = max(-1.0, min(1.0, coseno))
         traza.append(f"cos(h,e) = {producto:.3f} / ({norma_h:.3f} × {norma_e:.3f}) = {coseno:.4f}")
         return coseno, traza
+
+    @staticmethod
+    def _factores(
+        componentes: Sequence[ComponenteAcoplamiento],
+    ) -> tuple[float | None, float | None, float | None, list[str]]:
+        """Parte el coseno en sus tres factores. No calcula nada nuevo.
+
+        Un coseno de 0.86 no dice cuál de tres cosas distintas ha pasado, y
+        las tres piden conductas opuestas: que lo mirado concuerda, que se
+        ha mirado poco, o que la hipótesis deja al paciente sin explicar.
+        El número fundido las presenta iguales.
+
+        Llamando `S` a las dimensiones declaradas que el registro **sí**
+        informa, y usando que `e` vale 0 en las que nadie miró:
+
+            cos(h,e) = ─────────── · ─────── · ───────
+                        ‖h_S‖‖e_S‖    ‖h‖       ‖e‖
+                          h_S·e_S      ‖h_S‖     ‖e_S‖
+
+            cos = dirección · √cobertura · √explicación
+
+        No es una aproximación: es la misma cantidad escrita sin cancelar,
+        y el producto la reconstruye exactamente.
+
+        LOS DOS LADOS, QUE SON DISTINTOS
+        La **cobertura** es del lado `h`: cuánto de lo que la hipótesis
+        afirma se ha puesto a prueba. La **explicación** es del lado `e`:
+        cuánto de lo que el paciente tiene cae dentro de lo que la
+        hipótesis declara. El resto no simbolizado no entra en la
+        cobertura —no es superficie de la hipótesis, es del paciente— pero
+        tampoco desaparece: sale por la explicación, que es su lado.
+
+        Esa asimetría es la que hace legible la diferencia entre *nada la
+        contradice todavía* —dirección alta, cobertura baja— y *se ha
+        puesto a prueba y aguanta* —las dos altas—.
+
+        Y NUNCA SE MULTIPLICAN
+        Los tres ya están dentro de `coseno`. Se informan para poder leer
+        POR QUÉ salió lo que salió; aplicarlos otra vez contaría dos veces
+        lo mismo. Es la misma razón por la que la cobertura acompaña a un
+        posterior provisional en vez de corregirlo.
+
+        Se devuelve `None` —y no 0.0— donde la definición no existe: sin
+        dimensión declarada no hay cobertura que preguntar, y sin nada
+        mirado no hay dirección. Un cero diría que el factor vale cero, que
+        es una afirmación distinta y falsa.
+        """
+        declaradas = [
+            c for c in componentes if c.estado is not EstadoDimension.NO_SIMBOLIZADO
+        ]
+        medidas = [
+            c
+            for c in declaradas
+            if c.estado in (EstadoDimension.CONCUERDA, EstadoDimension.CONTRADICE)
+        ]
+
+        norma_h = sum(c.esperado**2 for c in declaradas)
+        norma_h_s = sum(c.esperado**2 for c in medidas)
+        norma_e_s = sum(c.observado**2 for c in medidas)
+        # ‖e‖ va sobre TODOS los componentes: el resto no simbolizado tiene
+        # h=0 y no toca el numerador, pero sí esta norma. Ahí es donde el
+        # resto cobra su descuento, y por eso el tercer factor existe.
+        norma_e = sum(c.observado**2 for c in componentes)
+
+        cobertura = norma_h_s / norma_h if norma_h else None
+        explicacion = norma_e_s / norma_e if norma_e else None
+        direccion = None
+        if norma_h_s and norma_e_s:
+            producto = sum(c.esperado * c.observado for c in medidas)
+            direccion = producto / math.sqrt(norma_h_s * norma_e_s)
+            direccion = max(-1.0, min(1.0, direccion))
+
+        traza: list[str] = []
+        if direccion is not None:
+            traza.append(
+                f"dirección = cos(h_S, e_S) = {direccion:.4f} — de lo mirado, "
+                f"cuánto concuerda con la hipótesis"
+            )
+        if cobertura is not None:
+            traza.append(
+                f"cobertura = {cobertura:.2%} — de lo que la hipótesis afirma, "
+                f"cuánto se ha puesto a prueba"
+            )
+        if explicacion is not None:
+            traza.append(
+                f"explicación = {explicacion:.2%} — de lo que el paciente tiene, "
+                f"cuánto cae dentro de la hipótesis"
+            )
+        if None not in (direccion, cobertura, explicacion):
+            reconstruido = direccion * math.sqrt(cobertura * explicacion)
+            traza.append(
+                f"cos = dirección · √(cobertura · explicación) = {reconstruido:.4f}"
+            )
+        return direccion, cobertura, explicacion, traza
 
     # --- Anclaje ------------------------------------------------------
 

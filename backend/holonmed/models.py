@@ -266,6 +266,36 @@ class Acoplamiento(BaseModel):
         ),
     )
     dimensiones_categoricas: int = 0
+
+    # Los tres factores del coseno. No son cálculo nuevo: son `coseno`
+    # partido, y su producto lo reconstruye. Se informan y NUNCA se
+    # aplican — multiplicarlos otra vez contaría dos veces algo que ya
+    # está dentro. Valen None cuando su definición no existe para este
+    # caso, que no es lo mismo que valer cero.
+    direccion: float | None = Field(
+        default=None,
+        description=(
+            "cos(h_S, e_S): si lo que se ha mirado concuerda con la hipótesis. "
+            "None cuando no se ha mirado ninguna dimensión declarada."
+        ),
+    )
+    cobertura: float | None = Field(
+        default=None,
+        description=(
+            "‖h_S‖²/‖h‖²: qué fracción de lo que la hipótesis AFIRMA se ha "
+            "puesto a prueba. Es del lado h. None si el protocolo no declara LR."
+        ),
+    )
+    explicacion: float | None = Field(
+        default=None,
+        description=(
+            "‖e_S‖²/‖e‖²: qué fracción de lo que el paciente TIENE cae dentro "
+            "de las dimensiones que la hipótesis declara. Es del lado e, y es "
+            "el factor que cobra el resto no simbolizado. None si no hay "
+            "vector observado."
+        ),
+    )
+
     anclaje: float = Field(description="α ∈ [0,1]: sujeción del argumento a lo medido")
     hipotesis: str
 

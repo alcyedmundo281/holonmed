@@ -149,6 +149,62 @@ se afirma para que nadie la «arregle» creyendo que corrige un fallo:
 | `test_la_identidad_exige_un_infon_por_dimension` | el factor 2 del doble emparejamiento |
 | `test_el_peso_declarado_excluye_el_residuo_por_construccion` | que la invariante viva en el código |
 
+### 3.4 Los tres factores del coseno
+
+Un coseno de 0.86 no dice cuál de tres cosas ha pasado, y las tres piden
+conductas distintas: que lo mirado concuerda, que se ha mirado poco, o que
+la hipótesis deja al paciente sin explicar. El número fundido las presenta
+iguales.
+
+Llamando `S` a las dimensiones declaradas que el registro **sí** informa, y
+usando que `e` vale 0 en las que nadie miró:
+
+```
+                h_S · e_S       ‖h_S‖     ‖e_S‖
+   cos(h, e) = ───────────  ·  ───────  ·  ───────
+                ‖h_S‖‖e_S‖       ‖h‖        ‖e‖
+
+   cos = dirección · √cobertura · √explicación
+```
+
+No es una descomposición aproximada ni una métrica nueva: es el mismo
+coseno escrito sin cancelar, y el producto lo reconstruye.
+
+| factor | fórmula | qué mide | lado |
+|---|---|---|---|
+| **dirección** | `cos(h_S, e_S)` | de lo mirado, cuánto concuerda | — |
+| **cobertura** | `‖h_S‖²/‖h‖²` | de lo que la hipótesis **afirma**, cuánto se ha puesto a prueba | `h` |
+| **explicación** | `‖e_S‖²/‖e‖²` | de lo que el paciente **tiene**, cuánto cae dentro de la hipótesis | `e` |
+
+**Los dos lados no se mezclan, y ahí está el contenido.** El resto no
+simbolizado (sección 5) no entra en la cobertura —no es superficie de la
+hipótesis, es del paciente, y meterlo haría que un paciente complejo bajara
+la cobertura de una hipótesis bien examinada— pero tampoco desaparece: sale
+por la explicación, que es su lado. Es el mismo hecho de la sección 5 visto
+como factor en vez de como dimensión ortogonal.
+
+**Se informan y nunca se aplican.** Los tres ya están dentro de `coseno`;
+multiplicarlos otra vez contaría dos veces lo mismo. Sirven para leer *por
+qué* salió lo que salió, que es la diferencia entre «nada la contradice
+todavía» —dirección alta, cobertura baja— y «se ha puesto a prueba y
+aguanta» —las dos altas—.
+
+**Valen `None` donde su definición no existe**, no cero: un protocolo que
+declara categorías y no cocientes no tiene cobertura ponderada que
+preguntar, y un cero afirmaría que no se ha mirado nada. Es la misma
+distinción por la que `medir` devuelve `None` en vez de un Φ de 0.
+
+| test | qué fija |
+|---|---|
+| `test_los_tres_factores_reconstruyen_el_coseno` | que el producto cierra, también con residuo |
+| `test_el_resto_sale_por_la_explicacion_y_nunca_por_la_cobertura` | la asimetría entre los dos lados |
+| `test_los_factores_distinguen_no_mirado_de_puesto_a_prueba` | lo que el número fundido no distinguía |
+| `test_un_protocolo_categorico_no_finge_factores_ponderados` | `None` y no 0 |
+
+La lectura **categórica** admite la misma descomposición con pesos
+unitarios —`Σeᵢ/m`, `m/D` y `m/(m+r)`—, pero sus factores no se exponen
+todavía.
+
 ---
 
 ## 4. Los tres polos salen de la geometría
@@ -179,6 +235,11 @@ Un hallazgo validado que el protocolo no contempla **se añade como una
 dimensión propia**, donde `h = 0` y `e ≠ 0`. Es ortogonal por construcción,
 así que baja el coseno **sin ningún castigo escrito en ninguna parte**: una
 hipótesis que deja media historia sin explicar se desacopla sola.
+
+Dicho con los factores de la sección 3.4: como `h = 0`, el resto no toca el
+numerador ni la cobertura; sólo sube `‖e‖`. Todo su efecto sobre Φ pasa por
+el factor de **explicación**, y ése es el lugar donde queda visible cuánto
+del paciente se está dejando fuera.
 
 Esto es lo que significa exigir que un signo represente a su objeto. Un
 diagnóstico que no simboliza lo que el paciente tiene es un símbolo

@@ -197,6 +197,102 @@ def test_el_diagnostico_derivado_no_cuenta_como_resto(medidor, skill):
     assert res.resto_no_simbolizado == []
 
 
+# --- Los tres factores del coseno ------------------------------------
+
+
+def test_los_tres_factores_reconstruyen_el_coseno(medidor, skill):
+    """La identidad, afirmada sobre el número publicado y no sobre la cuenta.
+
+    `cos = dirección · √cobertura · √explicación` no es una aproximación:
+    es el mismo coseno escrito sin cancelar. Si alguien cambia la
+    definición de un factor, el producto deja de cerrar.
+
+    La tolerancia es 1e-3 y no 1e-4 A PROPÓSITO: los tres factores se
+    exponen redondeados a cuatro decimales, así que rehacer el producto
+    desde ellos arrastra hasta tres cuantos de redondeo. Apretarla dejaría
+    la aserción en el filo, que ya nos pasó una vez.
+    """
+    escenarios = [
+        [infon("Hiperlipasemia"), infon("Dolor epigastrico")],
+        [infon("Hiperlipasemia"), infon("Hiperamilasemia", presente=False)],
+        # con resto: es donde la identidad de dos factores se rompía
+        [infon("Hiperlipasemia"), infon("Hematuria")],
+        [infon("Hiperlipasemia"), infon("Hematuria"), infon("Soplo sistolico")],
+    ]
+
+    for infones in escenarios:
+        res = medidor.medir(skill, infones)
+        producto = res.direccion * math.sqrt(res.cobertura * res.explicacion)
+        assert producto == pytest.approx(res.coseno, abs=1e-3), infones
+
+
+def test_el_resto_sale_por_la_explicacion_y_nunca_por_la_cobertura(medidor, skill):
+    """Los dos lados de la identidad miden cosas distintas y no se mezclan.
+
+    La cobertura es del lado `h`: cuánto de lo que la hipótesis AFIRMA se
+    ha mirado. Un hallazgo que el protocolo no contempla no es superficie
+    de la hipótesis, así que no puede moverla — pero tampoco desaparece:
+    cae del lado `e`, en la explicación.
+
+    Meter el resto en el denominador de la cobertura haría que un paciente
+    complejo bajara la cobertura de una hipótesis bien examinada, que es
+    una afirmación falsa sobre cuánto se la ha puesto a prueba.
+    """
+    base = [infon("Hiperlipasemia"), infon("Dolor epigastrico")]
+
+    solo = medidor.medir(skill, base)
+    con_resto = medidor.medir(skill, base + [infon("Hematuria")])
+
+    assert con_resto.cobertura == solo.cobertura
+    assert con_resto.explicacion < solo.explicacion
+    assert con_resto.direccion == solo.direccion
+    assert con_resto.coseno < solo.coseno
+
+
+def test_los_factores_distinguen_no_mirado_de_puesto_a_prueba(medidor, skill):
+    """El coseno fundido presenta igual dos estados que piden conductas opuestas.
+
+    Mirar poco y que nada contradiga da un coseno alto. Mirarlo todo y que
+    la hipótesis aguante da otro. Partido, el primero es dirección alta con
+    cobertura baja —*nada la contradice todavía*— y el segundo dirección
+    alta con cobertura alta —*se ha puesto a prueba y aguanta*—.
+    """
+    poco_mirado = medidor.medir(skill, [infon("Hiperlipasemia")])
+    todo_mirado = medidor.medir(
+        skill,
+        [
+            infon("Hiperlipasemia"),
+            infon("Hiperamilasemia"),
+            infon("Dolor epigastrico"),
+            infon("Vomitos"),
+        ],
+    )
+
+    assert poco_mirado.direccion == pytest.approx(todo_mirado.direccion, abs=1e-4)
+    assert poco_mirado.cobertura < todo_mirado.cobertura
+
+
+def test_un_protocolo_categorico_no_finge_factores_ponderados(medidor):
+    """Sin LR declarados no hay cobertura que preguntar: es None, no 0.
+
+    Un cero diría que ninguna dimensión se ha mirado, que es una
+    afirmación sobre el caso. `None` dice que la lectura ponderada no
+    aplica a este protocolo, que es lo cierto. Es la misma distinción por
+    la que `medir` devuelve None en vez de un Φ de 0.
+    """
+    categorico = Skill(
+        "categorico",
+        "---\ntitulo: X\nsignos:\n  - nombre: Hiperlipasemia\n    fuente: y\n---\n\nP\n",
+    )
+    res = medidor.medir(categorico, [infon("Hiperlipasemia")])
+
+    assert res is not None, "un protocolo sólo-categorías sigue siendo medible"
+    assert res.phi_categorico is not None
+    assert res.direccion is None
+    assert res.cobertura is None
+    assert res.explicacion is None
+
+
 # --- La guarda anti-pseudociencia ------------------------------------
 
 
