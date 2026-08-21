@@ -13,7 +13,13 @@ from holonmed.core.skills import SkillManager
 from holonmed.core.terminology import Candidato
 from holonmed.core.validator import OntologyValidator
 from holonmed.core.verifier import ClinicalVerifier
-from holonmed.models import EstadoInfon, HolonPaciente
+from holonmed.models import (
+    CandidataAbductiva,
+    EstadoInfon,
+    HolonPaciente,
+    Infon,
+    Polaridad,
+)
 
 SKILL = """# SKILL: PRUEBA
 
@@ -85,6 +91,10 @@ class IndexFalso:
 
     def metadatos(self, concepto_id):
         return "R50.9", "Signo clínico"
+
+    def cobertura_de_grafo(self, concepto_ids):
+        # El doble no tiene jerarquía: el concepto se cubre a sí mismo.
+        return {self.codigo} if list(concepto_ids) else set()
 
 
 @pytest.fixture
@@ -231,3 +241,282 @@ async def test_el_holon_solo_absorbe_infones_validados(entorno):
     otro = await ruidoso.ejecutar("Texto", holon)
     holon.absorber(otro.infones)
     assert len(holon.linea_tiempo) == 1  # el ruido no entra en la historia
+
+
+# --- La competencia abductiva -----------------------------------------
+#
+# Corre en paralelo al triaje y NO decide nada todavía: mide cuánto se
+# equivoca el prompt antes de sustituirlo por nada.
+
+CITADA = """---
+titulo: Candidata citada
+condicion:
+  nombre: Condicion citada
+ambito_grafo: ["386661006"]
+signos:
+  - nombre: Fiebre
+    lr: 3.0
+    fuente: "Wagner JM et al, JAMA 1996"
+  - nombre: Tos
+    lr: 2.0
+    fuente: "Wagner JM et al, JAMA 1996"
+---
+
+Cuerpo.
+"""
+
+SIN_CITAR = """---
+titulo: Candidata sin citar
+condicion:
+  nombre: Condicion sin citar
+ambito_grafo: ["386661006"]
+signos:
+  - nombre: Fiebre
+    lr: 9.0
+---
+
+Cuerpo.
+"""
+
+# El protocolo de triaje, pero acuñando un trastorno — y no uno
+# cualquiera: el término que EXCLUYE a la candidata `imposible`.
+TRIAJE_QUE_ACUNA = """---
+titulo: Triaje que acuña
+condicion:
+  nombre: Condicion de triaje
+signos:
+  - nombre: Fiebre
+    lr: 3.0
+    fuente: "Wagner JM et al, JAMA 1996"
+clasificacion:
+  nombre: Criterio de prueba
+  fuente: "criterio de prueba"
+  requiere: 1
+  produce:
+    termino: Organo extirpado
+  criterios:
+    - nombre: Fiebre
+      satisface_si: [Fiebre]
+---
+
+Cuerpo.
+"""
+
+
+VETADA = """---
+titulo: Candidata imposible
+condicion:
+  nombre: Condicion imposible
+ambito_grafo: ["386661006"]
+signos:
+  - nombre: Fiebre
+    lr: 40.0
+    fuente: "Wagner JM et al, JAMA 1996"
+  - nombre: Organo extirpado
+    efecto: excluye
+    dispara_si: presente
+    fuente: "sin órgano no hay enfermedad"
+---
+
+Cuerpo.
+"""
+
+
+@pytest.fixture
+def arena(tmp_path):
+    """El mismo entorno, más candidatas que el grafo puede proponer."""
+    (tmp_path / "general_triage.md").write_text(SKILL, encoding="utf-8")
+    settings = Settings(skills_dir=tmp_path, docs_dir=tmp_path / "docs")
+
+    def construir(**protocolos):
+        for nombre, texto in protocolos.items():
+            (tmp_path / f"{nombre}.md").write_text(texto, encoding="utf-8")
+        return CrystallizationPipeline(
+            llm=LLMFalso(),
+            skills=SkillManager(settings),
+            validador=OntologyValidator(
+                IndexFalso(score=95.0, exacto=True), LLMFalso(), settings
+            ),
+            verificador=ClinicalVerifier(LLMFalso(), settings),
+            settings=settings,
+        )
+
+    return construir
+
+
+async def test_la_competencia_mide_y_no_decide(arena):
+    """La invariante del paso: el protocolo que se USA no cambia.
+
+    Si esto cae, el paso dejó de ser medición y pasó a ser una inversión
+    del pipeline a medias — que es otra conversación y otro riesgo.
+    """
+    pipeline = arena(citada=CITADA)
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert resultado.skill_activa == "general_triage"
+    assert resultado.ganadora_abductiva == "citada"
+    assert resultado.triaje_coincide is False
+    # Y lo que se publica sigue saliendo de la skill del triaje.
+    assert resultado.acoplamiento is None or (
+        resultado.acoplamiento.hipotesis != "Condicion citada"
+    )
+
+
+async def test_la_competencia_guarda_a_las_perdedoras(arena):
+    """«Se consideró X y sacó 0.25» ES la traza de auditoría.
+
+    Sin las perdedoras el sistema muestra una conclusión sin decir contra
+    qué compitió, que es pedirle al clínico que confíe en el orden.
+    """
+    pipeline = arena(citada=CITADA, otra=CITADA.replace("citada", "otra"))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert {c.skill for c in resultado.competencia} == {"citada", "otra"}
+    assert all(c.clave is not None for c in resultado.competencia)
+    assert all(c.lectura == "ponderada" for c in resultado.competencia)
+
+
+async def test_una_candidata_imposible_sale_antes_de_dar_su_coseno(arena):
+    """Un coseno bonito sobre una imposibilidad es ruido con formato numérico."""
+    holon = HolonPaciente(paciente_id="t")
+    holon.linea_tiempo.append(
+        Infon(
+            texto_origen="apendicectomía en 2019",
+            termino_propuesto="Organo extirpado",
+            termino="Organo extirpado",
+            polaridad=Polaridad.PRESENTE,
+            estado=EstadoInfon.VALIDADO,
+            confianza=99.0,
+            razon_auditoria="[hint_exacto] auditado",
+        )
+    )
+
+    pipeline = arena(citada=CITADA, imposible=VETADA)
+    resultado = await pipeline.ejecutar("Temperatura 38.5", holon)
+
+    vetada = next(c for c in resultado.competencia if c.skill == "imposible")
+    assert vetada.vetada
+    assert vetada.motivo_veto
+    assert vetada.clave is None, "una imposibilidad no aporta coseno a la comparación"
+    # Y un veto ya no termina el tic: la otra candidata siguió compitiendo.
+    assert resultado.ganadora_abductiva == "citada"
+
+
+async def test_la_compuerta_de_alfa_no_actua_callada(arena):
+    """La mejor acoplada queda fuera por α, y se dice en voz alta.
+
+    Callada, el sistema trataría otra cosa sin explicar por qué. Dicha, la
+    frase es accionable: manda a arreglar el índice.
+    """
+    pipeline = arena(citada=CITADA, sin_citar=SIN_CITAR)
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    fuera = next(c for c in resultado.competencia if c.skill == "sin_citar")
+    assert fuera.anclaje == 0.0
+    assert not fuera.admitida
+    assert fuera.clave > next(
+        c.clave for c in resultado.competencia if c.skill == "citada"
+    ), "la fixture ya no sirve: la excluida tiene que ser la de mejor coseno"
+
+    assert resultado.ganadora_abductiva == "citada"
+    assert resultado.aviso_competencia is not None
+    assert "sin_citar" in resultado.aviso_competencia
+
+
+async def test_la_competencia_corre_sobre_el_paciente_de_antes_de_clasificar(tmp_path):
+    """Cada candidata compite contra el MISMO paciente, no contra el suyo.
+
+    La etapa 4 acuña un infón específico de la hipótesis activa y lo mete
+    en la lista. Compitiendo después, ese término entraría en la evidencia
+    de todas las demás — y aquí es literal: el trastorno que acuña el
+    triaje es el signo que EXCLUYE a otra candidata. Corriendo después, la
+    candidata quedaría vetada por un término que el paciente no tiene y
+    que fabricó la hipótesis rival.
+
+    Φ solo no lo detectaría: `_resto_no_simbolizado` salta los infones
+    derivados, así que el coseno no se movería. El veto no tiene esa
+    guarda, y es por donde el error entra.
+    """
+    (tmp_path / "general_triage.md").write_text(TRIAJE_QUE_ACUNA, encoding="utf-8")
+    (tmp_path / "imposible.md").write_text(VETADA, encoding="utf-8")
+    settings = Settings(skills_dir=tmp_path, docs_dir=tmp_path / "docs")
+    pipeline = CrystallizationPipeline(
+        llm=LLMFalso(),
+        skills=SkillManager(settings),
+        validador=OntologyValidator(
+            IndexFalso(score=95.0, exacto=True), LLMFalso(), settings
+        ),
+        verificador=ClinicalVerifier(LLMFalso(), settings),
+        settings=settings,
+    )
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    acunado = [i for i in resultado.infones if i.derivado_de]
+    assert acunado, "la fixture ya no sirve: el triaje tiene que acuñar algo"
+    assert acunado[0].termino == "Organo extirpado"
+
+    candidata = next(c for c in resultado.competencia if c.skill == "imposible")
+    assert not candidata.vetada, (
+        "la competencia vio el trastorno que acuñó la hipótesis rival"
+    )
+
+
+# --- La regla de orden, aparte del pipeline ---------------------------
+
+
+def _fila(nombre, clave, anclaje, admitida=True, vetada=False):
+    return CandidataAbductiva(
+        skill=nombre, clave=clave, anclaje=anclaje, admitida=admitida, vetada=vetada
+    )
+
+
+def test_se_ordena_por_coseno_y_no_por_phi():
+    """La decisión con contenido de toda la regla.
+
+    Φ = α · cos, y α es la calidad documental del PROTOCOLO, no una
+    propiedad del paciente. Aquí la mejor acoplada cita menos, así que
+    ordenar por Φ la relega — y el sistema trataría al paciente con el
+    protocolo mejor escrito en vez de con el que encaja.
+    """
+    acoplada = _fila("acoplada", clave=0.90, anclaje=0.69)      # Φ = 0.621
+    documentada = _fila("documentada", clave=0.75, anclaje=0.87)  # Φ = 0.653
+
+    ganadora, aviso = CrystallizationPipeline._ordenar_candidatas(
+        [acoplada, documentada]
+    )
+
+    assert ganadora.skill == "acoplada"
+    assert aviso is None
+    # Y que la fixture siga midiendo lo que dice medir:
+    assert documentada.clave * documentada.anclaje > acoplada.clave * acoplada.anclaje
+
+
+def test_la_compuerta_es_de_admision_y_no_de_peso():
+    """α excluye o deja pasar; una vez dentro, no pondera el orden."""
+    ganadora, _ = CrystallizationPipeline._ordenar_candidatas(
+        [
+            _fila("apenas_citada", clave=0.80, anclaje=0.30),
+            _fila("muy_citada", clave=0.70, anclaje=0.99),
+        ]
+    )
+    assert ganadora.skill == "apenas_citada"
+
+
+def test_una_vetada_no_entra_en_el_orden_ni_en_el_aviso():
+    ganadora, aviso = CrystallizationPipeline._ordenar_candidatas(
+        [
+            _fila("imposible", clave=0.99, anclaje=0.9, vetada=True),
+            _fila("posible", clave=0.40, anclaje=0.9),
+        ]
+    )
+    assert ganadora.skill == "posible"
+    assert aviso is None
+
+
+def test_sin_ninguna_admitida_no_hay_ganadora():
+    """Todas fuera no es «no encontré hipótesis»: es que ninguna compite."""
+    ganadora, aviso = CrystallizationPipeline._ordenar_candidatas(
+        [_fila("sin_citar", clave=0.99, anclaje=0.0, admitida=False)]
+    )
+    assert ganadora is None
+    assert aviso is None

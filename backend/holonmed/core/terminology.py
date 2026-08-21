@@ -23,6 +23,7 @@ tienes la licencia correspondiente.
 import json
 import logging
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -163,6 +164,32 @@ class TerminologyIndex:
         ).fetchone()
         cie10 = fila["codigo_destino"] if fila else None
         return cie10, self._grafo.padre_inmediato(concepto_id) or "Concepto raíz"
+
+    def cobertura_de_grafo(self, concepto_ids: Iterable[int]) -> set[str]:
+        """Los códigos que cubren a esos conceptos: ellos y sus ancestros.
+
+        Es lo que `SkillManager.para_concepto` necesita para responder «¿qué
+        protocolos aplican a este paciente?». Un protocolo declara su ámbito
+        por una rama —«cualquier hallazgo pancreático»—, así que preguntar
+        sólo por el código exacto del hallazgo no lo encontraría nunca: hay
+        que subir por la jerarquía.
+
+        Se incluye el concepto propio y no sólo sus padres, porque un
+        protocolo puede declarar como ámbito el concepto mismo.
+        """
+        codigos: set[str] = set()
+        for concepto_id in {c for c in concepto_ids if c}:
+            fila = (
+                self._db.conexion()
+                .execute("SELECT codigo FROM concepto WHERE id = ?", (concepto_id,))
+                .fetchone()
+            )
+            if fila and fila["codigo"]:
+                codigos.add(fila["codigo"])
+            for ancestro in self._grafo.ancestros(concepto_id):
+                if ancestro["codigo"]:
+                    codigos.add(ancestro["codigo"])
+        return codigos
 
 
 def _consulta_fts(texto: str) -> str:
