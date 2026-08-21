@@ -192,7 +192,49 @@ aguanta» —las dos altas—.
 **Valen `None` donde su definición no existe**, no cero: un protocolo que
 declara categorías y no cocientes no tiene cobertura ponderada que
 preguntar, y un cero afirmaría que no se ha mirado nada. Es la misma
-distinción por la que `medir` devuelve `None` en vez de un Φ de 0.
+distinción por la que `medir` devuelve `None` en vez de un Φ de 0, y la que
+`SIN_MEDIR` hace un nivel más abajo: no es ausencia, es vacío.
+
+**Los tres se publican redondeados a cuatro decimales, y el producto se
+calcula sin redondear.** Quien recomponga la identidad desde los números
+que ve puede obtener `0.7020` donde `coseno` dice `0.7019`: son hasta tres
+cuantos de redondeo, no un desacuerdo. Para ordenar candidatas se usa
+`coseno` —o `coseno_categorico`—, que es el valor íntegro; los factores
+sirven para leer por qué, no para rehacer la cuenta.
+
+### 3.5 La lectura categórica es la misma, con pesos unitarios
+
+La descomposición no es propia de la lectura ponderada: es lo que hace
+cualquier coseno. Con `h` el vector de unos, cada término se simplifica —y
+se expone igual, con el mismo criterio de `None`:
+
+| factor | ponderada | categórica |
+|---|---|---|
+| dirección | `cos(h_S, e_S)` | `Σeᵢ / m` |
+| cobertura | `‖h_S‖²/‖h‖²` | `m / D` |
+| explicación | `‖e_S‖²/‖e‖²` | `m / (m+r)` |
+
+**Y las dos leen en la misma unidad.** La categórica *es* la ponderada con
+todos los pesos iguales, y el coseno es invariante de escala: la escala se
+cancela. Medido (`guiones/misma_escala.py`), cinco signos declarados y uno
+presente:
+
+```
+ponderado · un LR estrella (26.6) y cuatro de 2.0      0.9212
+ponderado · los cinco iguales (2.0)                    0.4472
+categórico · los cinco iguales por definición          0.4472
+```
+
+Eso es lo que permite que una candidata categórica y una ponderada compitan
+**sin traducción**. La asimetría que queda corre en una sola dirección: un
+criterio categórico no puede concentrar su peso en un signo, así que nunca
+alcanzará el coseno de una ponderada cuyo signo estrella consta. No es un
+defecto — es la cobertura haciendo su trabajo.
+
+**El término que se compara es `coseno_categorico`, no `phi_categorico`.**
+El segundo lleva α dentro, y α es la calidad documental del protocolo:
+ordenar por él ordenaría por cuán bien citado está el índice. Es el mismo
+error, un nivel más abajo, que ordenar por Φ en vez de por `coseno`.
 
 | test | qué fija |
 |---|---|
@@ -200,10 +242,9 @@ distinción por la que `medir` devuelve `None` en vez de un Φ de 0.
 | `test_el_resto_sale_por_la_explicacion_y_nunca_por_la_cobertura` | la asimetría entre los dos lados |
 | `test_los_factores_distinguen_no_mirado_de_puesto_a_prueba` | lo que el número fundido no distinguía |
 | `test_un_protocolo_categorico_no_finge_factores_ponderados` | `None` y no 0 |
-
-La lectura **categórica** admite la misma descomposición con pesos
-unitarios —`Σeᵢ/m`, `m/D` y `m/(m+r)`—, pero sus factores no se exponen
-todavía.
+| `test_los_factores_categoricos_reconstruyen_su_coseno` | el producto da `coseno_categorico`, no `phi_categorico` |
+| `test_la_categorica_lee_en_la_misma_escala_que_la_ponderada` | que las dos lecturas compiten sin traducir |
+| `test_el_coseno_categorico_no_lo_mueve_la_bibliografia` | que α no entra en la clave de orden |
 
 ---
 
