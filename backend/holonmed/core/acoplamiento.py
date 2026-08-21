@@ -235,7 +235,7 @@ class MedidorDeAcoplamiento:
         componentes.extend(self._componer_residuo(residuo, peso_tipico))
 
         coseno, traza_geom = self._coseno(componentes)
-        phi_cat, dims_cat, traza_cat = self._categorico(skill, infones)
+        phi_cat, dims_cat, traza_cat = self._categorico(skill, infones, len(residuo))
         if not dimensiones:
             traza_geom.append(
                 "El protocolo no declara ningún LR: la lectura ponderada no "
@@ -276,7 +276,7 @@ class MedidorDeAcoplamiento:
 
     @staticmethod
     def _categorico(
-        skill: "Skill", infones: Sequence[Infon]
+        skill: "Skill", infones: Sequence[Infon], resto: int = 0
     ) -> tuple[float | None, int, list[str]]:
         """Φ sobre TODOS los signos declarados, con peso ±1 en vez de ln(LR).
 
@@ -296,13 +296,30 @@ class MedidorDeAcoplamiento:
                  −1  la contradice
                   0  nadie lo ha mirado
 
-                     Σ eᵢ
-            Φ_cat = ───────────────      ∈ [−1, +1]
-                    √(D · medidos)
+        Y el resto no simbolizado —los `r` hallazgos validados y presentes
+        que ninguna dimensión declarada explica— son dimensiones ortogonales
+        con hᵢ = 0 y eᵢ = ±1: no tocan el numerador, sólo ‖e‖.
 
-        que es el coseno de esos dos vectores, escrito sin cancelar. Los
-        tres polos salen igual que en la lectura ponderada: todo confirma
-        da +1, todo contradice da −1, y mitad y mitad da 0.
+                          Σ eᵢ
+            Φ_cat = ─────────────────────      ∈ [−1, +1]
+                    √(D · (medidos + r))
+
+        que es el coseno de esos dos vectores, escrito sin cancelar.
+
+        LOS POLOS, Y LA CONDICIÓN QUE LOS GOBIERNA
+        Todo confirma da +1 **cuando la hipótesis explica todo el registro**;
+        todo contradice da −1 en la misma condición, y mitad y mitad da 0.
+        Con resto sin explicar el polo positivo es **inalcanzable**, y eso no
+        es una limitación: es el punto. Sin el término `r`, un protocolo que
+        declara dos signos y los dos constan daba armonía perfecta en un
+        paciente con seis hallazgos que no explicaba — el polo que Φ define
+        como cero, «internamente ordenado pero aislado», informado como +1.
+
+        El término es el mismo factor de explicación de la lectura ponderada
+        con pesos unitarios: `m/(m+r)` es ‖e_S‖²/‖e‖² cuando cada dimensión
+        pesa 1. Y `m` y `r` no cuentan nunca el mismo infón, porque
+        `_resto_no_simbolizado` salta los que emparejan con un signo
+        declarado.
 
         Las exclusiones absolutas **no son dimensiones**: no restan, vetan,
         y para cuando esto se calcula la hipótesis ya se habrá retirado.
@@ -342,12 +359,12 @@ class MedidorDeAcoplamiento:
             ]
 
         suma = sum(contribuciones.values())
-        phi = suma / math.sqrt(len(dimensiones) * medidos)
+        phi = suma / math.sqrt(len(dimensiones) * (medidos + resto))
         favor = sum(1 for v in contribuciones.values() if v > 0)
         traza = [
             f"Φ categórico: {favor} a favor, {medidos - favor} en contra, "
             f"sobre {len(dimensiones)} dimensiones declaradas",
-            f"Φ_cat = {suma} / √({len(dimensiones)} × {medidos}) = {phi:.4f}",
+            f"Φ_cat = {suma} / √({len(dimensiones)} × ({medidos} + {resto})) = {phi:.4f}",
         ]
         return phi, len(dimensiones), traza
 

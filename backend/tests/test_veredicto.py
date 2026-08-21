@@ -256,13 +256,49 @@ def test_el_categorico_se_alcanza_por_el_camino_publico(skill):
     el pipeline.
     """
     med = MedidorDeAcoplamiento()
-    directo, _, _ = med._categorico(skill, [infon("Fiebre"), infon("Anemia")])
-    publico = med.medir(skill, [infon("Fiebre"), infon("Anemia")])
+    infones = [infon("Fiebre"), infon("Anemia")]
+
+    # `Anemia` no la explica ningún signo del protocolo: es resto no
+    # simbolizado, y desde que el denominador cuenta `medidos + resto` hay
+    # que pasarlo. Antes daba igual porque el categórico era ciego al resto
+    # —un hallazgo sin explicar dejaba la armonía intacta—.
+    directo, _, _ = med._categorico(skill, infones, resto=1)
+    publico = med.medir(skill, infones)
 
     assert publico is not None
+    # La tolerancia es 1e-3 y no 1e-4 A PROPÓSITO. `medir` multiplica por el α
+    # sin redondear y expone `anclaje` ya redondeado a cuatro decimales, así
+    # que rehacer la cuenta desde el valor expuesto se desvía justo un cuanto
+    # de redondeo. Con `abs=1e-4` la aserción vive en el filo: hoy pasaba por
+    # suerte, y cualquier cambio que mueva los valores la tumba sin que haya
+    # nada roto.
     assert publico.phi_categorico == pytest.approx(
-        round(directo * publico.anclaje, 4), abs=1e-4
+        directo * publico.anclaje, abs=1e-3
     )
+
+
+def test_un_hallazgo_sin_explicar_baja_el_categorico(skill):
+    """La propiedad, afirmada sin mirar dentro de la fórmula.
+
+    El test del camino público pasa `resto` a `_categorico` para poder
+    comparar las dos rutas, y eso lo vuelve ciego a QUÉ hace el denominador:
+    si alguien quita el `+ resto`, las dos rutas se mueven juntas y la
+    comparación sigue cuadrando. Verde sin comprobar qué camino se recorrió.
+
+    Éste no mira dentro. Afirma lo que el coeficiente promete: un hallazgo
+    validado que ninguna dimensión declarada explica **tiene que bajar la
+    armonía**. Antes no la bajaba —el vector categórico era ciego al resto—,
+    y un protocolo de dos signos con seis hallazgos ajenos daba armonía
+    perfecta, que es justo el polo que Φ define como cero.
+    """
+    med = MedidorDeAcoplamiento()
+
+    sin_resto = med.medir(skill, [infon("Fiebre")])
+    con_resto = med.medir(skill, [infon("Fiebre"), infon("Anemia")])
+
+    assert "Anemia" in con_resto.resto_no_simbolizado, "la fixture ya no sirve"
+    assert sin_resto.phi_categorico is not None
+    assert con_resto.phi_categorico < sin_resto.phi_categorico
 
 
 def test_sin_LR_las_bandas_se_leen_del_categorico(skill):
