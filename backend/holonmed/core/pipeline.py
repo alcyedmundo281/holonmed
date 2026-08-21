@@ -18,10 +18,12 @@ decir nada antes que decir algo falso.
 """
 
 import logging
+from collections.abc import Sequence
 
 from ..config import Settings, get_settings
 from ..llm import LLMUnavailable, OllamaClient
 from ..models import (
+    CandidataAbductiva,
     EstadoInfon,
     HolonPaciente,
     Infon,
@@ -146,6 +148,22 @@ class CrystallizationPipeline:
             if infon:
                 resultado.infones.append(infon)
 
+        # --- ETAPA 3b: COMPETENCIA ABDUCTIVA (sólo mide) ---------------
+        # Corre AQUÍ y no más abajo por una razón que no es de orden de
+        # escritura: la etapa 4 acuña un infón específico de la hipótesis
+        # y lo mete en la lista. Si las candidatas compitieran después,
+        # cada una competiría contra un paciente distinto —el suyo, con su
+        # propio trastorno inyectado—, que es la forma más literal de usar
+        # el dato dos veces.
+        #
+        # No cambia nada: `skill_activa` sigue siendo la del triaje. Esto
+        # registra cuál habría elegido el grafo, para poder decir con una
+        # cifra —y no con una intuición— cuánto se equivoca el prompt.
+        try:
+            self._competir(resultado, holon)
+        except Exception:  # noqa: BLE001 — la medición no puede tumbar el tic
+            logger.exception("La competencia abductiva falló; el tic sigue en pie")
+
         # --- ETAPA 4: CLASIFICACIÓN -----------------------------------
         # De hallazgos a trastorno, por criterios publicados. Es el paso
         # que acuña un término nuevo, y lo hace Python: es lógica sobre
@@ -214,6 +232,156 @@ class CrystallizationPipeline:
             logger.exception("Medidor de acoplamiento falló; el tic sigue en pie")
 
         return resultado
+
+    def _competir(self, resultado: ResultadoTic, holon: HolonPaciente) -> None:
+        """La regla de selección abductiva, corrida para medir y no para decidir.
+
+        Peirce: se observa el hecho sorprendente C; si A fuera verdadera, C
+        sería de curso natural; luego hay razón para sospechar A. Un coseno
+        alto es exactamente eso, así que elegir la A que maximiza cos(h,e)
+        **es** la regla abductiva y no una analogía de ella.
+
+        La regla tiene cuatro pasos y los cuatro importan:
+
+            1. VETO       por candidata. Una hipótesis imposible no puede
+                          aportar un coseno a la comparación: un coseno
+                          bonito sobre una imposibilidad es ruido con
+                          formato numérico.
+            2. ADMISIÓN   α > 0. Sin ninguna procedencia el argumento no
+                          está anclado a nada medido, y no compite.
+            3. ORDEN      por coseno descendente. Por coseno y no por Φ:
+                          ordenar por Φ escogería la mejor documentada en
+                          vez de la mejor acoplada, porque α es una
+                          propiedad del protocolo y no del paciente.
+            4. AVISO      si la de mayor coseno quedó fuera por α, se dice.
+                          Es la mitad del diseño: la compuerta callada hace
+                          que el sistema trate otra cosa sin explicar por
+                          qué. En voz alta, manda a arreglar el índice.
+
+        Las candidatas salen del **grafo del paciente** —los ancestros de
+        sus conceptos validados— y no de un prompt. Ésa es la sustitución
+        que este paso prepara; hoy sólo la mide.
+        """
+        validados = resultado.infones_validados
+        if not validados:
+            return
+
+        codigos = self.validador.index.cobertura_de_grafo(
+            i.concepto_id for i in validados if i.concepto_id
+        )
+        candidatas = self.skills.para_concepto(codigos) if codigos else []
+        if not candidatas:
+            return
+
+        # El mismo conjunto para todas: se compite contra UN paciente, no
+        # contra uno por hipótesis.
+        comun = list(holon.linea_tiempo) + validados
+
+        for skill in candidatas:
+            fila = CandidataAbductiva(skill=skill.nombre)
+
+            veredicto = None
+            try:
+                veredicto = self.veredicto.evaluar(skill, comun)
+            except Exception:  # noqa: BLE001 — una candidata rota no anula el resto
+                logger.exception("Veredicto falló para la candidata '%s'", skill.nombre)
+            if veredicto and veredicto.veto:
+                fila.vetada = True
+                fila.motivo_veto = veredicto.veto.motivo
+                resultado.competencia.append(fila)
+                continue
+
+            acoplamiento = None
+            try:
+                acoplamiento = self.acoplamiento.medir(skill, comun)
+            except Exception:  # noqa: BLE001
+                logger.exception("Φ falló para la candidata '%s'", skill.nombre)
+            if acoplamiento is None:
+                resultado.competencia.append(fila)
+                continue
+
+            # `cobertura is None` dice que el protocolo no declara un solo
+            # LR: la lectura ponderada no existe y la clave es la
+            # categórica. Las dos leen en la misma unidad —la categórica es
+            # la ponderada con pesos uniformes— así que se comparan sin
+            # traducir.
+            ponderada = acoplamiento.cobertura is not None
+            fila.lectura = "ponderada" if ponderada else "categorica"
+            fila.clave = (
+                acoplamiento.coseno if ponderada else acoplamiento.coseno_categorico
+            )
+            fila.anclaje = acoplamiento.anclaje
+            fila.cobertura = (
+                acoplamiento.cobertura if ponderada else acoplamiento.cobertura_categorica
+            )
+            fila.explicacion = (
+                acoplamiento.explicacion
+                if ponderada
+                else acoplamiento.explicacion_categorica
+            )
+            fila.admitida = acoplamiento.anclaje > 0 and fila.clave is not None
+            resultado.competencia.append(fila)
+
+        ganadora, aviso = self._ordenar_candidatas(resultado.competencia)
+        if ganadora is None:
+            return
+
+        resultado.ganadora_abductiva = ganadora.skill
+        resultado.triaje_coincide = ganadora.skill == resultado.skill_activa
+        resultado.aviso_competencia = aviso
+        if aviso:
+            logger.warning("%s", aviso)
+
+        logger.info(
+            "Competencia abductiva: %d candidatas, gana '%s' (%s %.4f); "
+            "el triaje dijo '%s' — %s",
+            len(resultado.competencia),
+            ganadora.skill,
+            ganadora.lectura,
+            ganadora.clave,
+            resultado.skill_activa,
+            "coinciden" if resultado.triaje_coincide else "DISCREPAN",
+        )
+
+    @staticmethod
+    def _ordenar_candidatas(
+        filas: Sequence[CandidataAbductiva],
+    ) -> tuple[CandidataAbductiva | None, str | None]:
+        """Los pasos 3 y 4 de la regla, aparte para poder probarlos solos.
+
+        Se ordena **por coseno y no por Φ**, y ésa es la decisión con
+        contenido. Φ = α · cos, y α mide la calidad documental del
+        protocolo: es una propiedad del índice, no del paciente. Ordenar
+        por Φ escoge la hipótesis mejor documentada en vez de la mejor
+        acoplada, y con eso el sistema trataría una diverticulitis a un
+        paciente cuya apendicitis encaja con coseno 1.00.
+
+        α no desaparece: actúa como **compuerta** en el paso 2, no como
+        peso en el orden. Sin ninguna procedencia el argumento no está
+        anclado a nada medido y no compite; con alguna, compite en pie de
+        igualdad con las demás y decide el ajuste con el paciente.
+
+        Y si la mejor acoplada quedó fuera por la compuerta, se devuelve
+        un aviso. Ese aviso es la mitad del diseño: callada, la compuerta
+        hace que el sistema trate otra cosa sin decir por qué; en voz alta
+        es una frase verdadera y accionable que manda a arreglar el índice.
+        """
+        con_clave = [c for c in filas if not c.vetada and c.clave is not None]
+        admitidas = [c for c in con_clave if c.admitida]
+        if not admitidas:
+            return None, None
+
+        ganadora = max(admitidas, key=lambda c: c.clave)
+        mejor = max(con_clave, key=lambda c: c.clave)
+        if mejor.admitida:
+            return ganadora, None
+
+        return ganadora, (
+            f"La hipótesis que mejor encaja con este paciente es '{mejor.skill}', "
+            f"coseno {mejor.clave:.2f}, y no compite porque su protocolo no cita "
+            f"sus cocientes (α = {mejor.anclaje:.2f}). Se usa '{ganadora.skill}', "
+            f"coseno {ganadora.clave:.2f}."
+        )
 
     async def _extraer(self, texto: str, skill: Skill):
         """Etapa 2: el LLM propone hallazgos. Nada se da por bueno todavía."""

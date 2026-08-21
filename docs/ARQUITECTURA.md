@@ -41,12 +41,63 @@ flowchart TD
     K -->|score ≥ 75| AL[ALERTA]
     K -->|resto| R
 
+    V --> CA[Competencia abductiva<br/>sólo mide]
+    CA -.->|no cambia el protocolo| M
+
     V --> M[Motor bayesiano]
     AL -.->|no cuenta como prueba| M
     R -.->|no cuenta como prueba| M
     M --> N[ResultadoTic]
     V --> G2[Grafo del paciente]
 ```
+
+## La competencia abductiva, que hoy sólo mide
+
+El protocolo activo lo elige un prompt de triaje, en la primera etapa, y
+todo lo demás cuelga de esa conjetura: la validación de tres capas, el veto,
+los cocientes con su cita y el coseno. Es la pieza menos medida del sistema
+y está en el sitio más temprano.
+
+Peirce lo llamaría abducción: *se observa el hecho sorprendente C; si A
+fuera verdadera, C sería de curso natural; luego hay razón para sospechar
+A*. Un coseno alto es exactamente eso, así que **elegir la A que maximiza
+`cos(h,e)` es la regla abductiva y no una analogía de ella** — y el grafo
+del paciente puede proponer las candidatas sin preguntarle nada al modelo.
+
+Antes de sustituir el prompt por esa regla hay que saber cuánto se equivoca.
+Por eso la competencia corre **en paralelo** y no decide: registra qué
+protocolo habría elegido el grafo y si coincide con el del triaje.
+
+```
+1. VETO       cada candidata por separado. Un coseno bonito sobre una
+              imposibilidad es ruido con formato numérico.
+2. ADMISIÓN   α > 0. Sin ninguna procedencia no compite.
+3. ORDEN      por coseno descendente, no por Φ.
+4. AVISO      si la de mayor coseno quedó fuera por α, se dice.
+```
+
+**El paso 3 es la decisión con contenido.** Φ = α · cos, y α mide la calidad
+documental del protocolo: una propiedad del índice, no del paciente.
+Ordenar por Φ escogería la hipótesis mejor documentada en vez de la mejor
+acoplada. α no desaparece — actúa como compuerta en el paso 2, no como peso
+en el orden.
+
+**El paso 4 es la otra mitad.** «La hipótesis que mejor encaja es X, coseno
+1.00, y no compite porque su protocolo no cita sus cocientes» es una frase
+verdadera y accionable: manda a arreglar el índice. Callada, la compuerta
+hace que el sistema trate otra cosa sin decir por qué.
+
+**Corre antes de la clasificación**, y no por orden de escritura. La etapa
+de clasificación acuña un infón específico de la hipótesis activa y lo mete
+en la lista; compitiendo después, ese término entraría en la evidencia de
+todas las demás. Φ solo no lo delataría —el residuo salta los infones
+derivados— pero el veto no tiene esa guarda, y es por donde el error entra.
+Está fijado en
+`test_la_competencia_corre_sobre_el_paciente_de_antes_de_clasificar`.
+
+Las candidatas perdedoras se guardan a propósito: «se consideró
+diverticulitis y sacó 0.25» *es* la traza de auditoría. Sin ella el sistema
+mostraría una conclusión sin decir contra qué compitió.
 
 ## Por qué tres estados y no dos
 

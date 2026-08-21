@@ -366,6 +366,39 @@ class Acoplamiento(BaseModel):
         return self.phi < 0.20
 
 
+class CandidataAbductiva(BaseModel):
+    """Un protocolo que compitió por explicar a este paciente, y con qué.
+
+    La competencia **no decide nada todavía**: corre en paralelo al triaje
+    para medir cuánto se equivoca el prompt antes de sustituirlo por nada.
+    Las perdedoras se guardan a propósito — «se consideró diverticulitis y
+    sacó 0.25» *es* la traza de auditoría, y sin ella el sistema mostraría
+    una conclusión sin decir contra qué compitió.
+    """
+
+    skill: str
+    clave: float | None = Field(
+        default=None,
+        description=(
+            "El coseno por el que se ordena: el ponderado si el protocolo "
+            "declara cocientes, el categórico si no. Los dos leen en la misma "
+            "unidad, así que se comparan sin traducir."
+        ),
+    )
+    lectura: str = Field(
+        default="ponderada", description="De cuál de las dos salió `clave`"
+    )
+    anclaje: float = 0.0
+    cobertura: float | None = None
+    explicacion: float | None = None
+
+    vetada: bool = False
+    motivo_veto: str | None = None
+    admitida: bool = Field(
+        default=False, description="Ni vetada ni con α = 0: compite de verdad"
+    )
+
+
 class ResultadoTic(BaseModel):
     """Todo lo que produce un único ciclo de procesamiento (un *tic*)."""
 
@@ -394,6 +427,24 @@ class ResultadoTic(BaseModel):
     # El criterio publicado, contado. Se lee junto a `inferencia` y
     # `acoplamiento`, nunca fundido con ellos.
     veredicto_declarado: VeredictoDeclarado | None = None
+
+    # La competencia abductiva, que hoy sólo MIDE. El protocolo que se usa
+    # sigue siendo `skill_activa`, elegido por el prompt de triaje; esto
+    # registra cuál habría elegido el grafo y si coinciden.
+    competencia: list[CandidataAbductiva] = Field(default_factory=list)
+    ganadora_abductiva: str | None = None
+    triaje_coincide: bool | None = Field(
+        default=None,
+        description="None si no hubo competencia con la que comparar",
+    )
+    aviso_competencia: str | None = Field(
+        default=None,
+        description=(
+            "Se dice en voz alta cuando la de mayor coseno quedó fuera por α: "
+            "«encaja mejor y no puedo usarla porque su protocolo no cita». Si "
+            "la compuerta actúa callada, el sistema trata otra cosa."
+        ),
+    )
 
     @property
     def infones_validados(self) -> list[Infon]:
