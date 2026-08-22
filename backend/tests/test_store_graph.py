@@ -386,3 +386,197 @@ def test_una_base_anterior_se_migra_sin_perder_datos(tmp_path):
     fila = db.conexion().execute("SELECT origen, resumen FROM tic WHERE id = 1").fetchone()
     assert fila["origen"] == "consulta"
     assert fila["resumen"] == "resumen"
+
+
+# --- La persistencia de la competencia y del segundo eje ---------------
+#
+# La §8 de VEREDICTO.md declaraba el hueco: el tic guardaba `skill TEXT`
+# —el nombre, sin la versión— y ni `acoplamiento` ni `veredicto`. Con la
+# competencia abductiva había además una comparación entera que registrar.
+
+
+def _resultado_con_competencia(**extra):
+    from holonmed.models import CandidataAbductiva
+
+    r = ResultadoTic(
+        paciente_id="p1",
+        texto_original="dolor en FID",
+        skill_activa="apendicitis",
+        skill_version="3.1",
+        **extra,
+    )
+    r.competencia = [
+        CandidataAbductiva(
+            skill="apendicitis", clave=0.87, anclaje=0.9, cobertura=0.74,
+            explicacion=1.0, admitida=True,
+        ),
+        CandidataAbductiva(
+            skill="diverticulitis", clave=0.25, anclaje=0.87, admitida=True
+        ),
+        CandidataAbductiva(
+            skill="colecistitis", vetada=True, motivo_veto="colecistectomía en 2019"
+        ),
+    ]
+    r.ganadora_abductiva = "apendicitis"
+    r.triaje_coincide = True
+    r.aviso_competencia = (
+        "La hipótesis que mejor encaja es 'gastroenteritis', coseno 0.95, y no "
+        "compite porque su protocolo no cita sus cocientes (α = 0.00)."
+    )
+    return r
+
+
+def test_el_tic_guarda_la_competencia_entera_y_no_solo_la_ganadora(entorno):
+    """«Se consideró diverticulitis y sacó 0.25» ES la traza de auditoría.
+
+    Guardar sólo la ganadora deja al sistema mostrando una conclusión sin
+    poder decir contra qué compitió, que es pedir que se confíe en el orden.
+    """
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tic_id = tics.guardar(_resultado_con_competencia())
+
+    leido = tics.tic_completo(tic_id)
+    assert [c["skill"] for c in leido["competencia"]] == [
+        "apendicitis", "diverticulitis", "colecistitis"
+    ]
+    perdedora = leido["competencia"][1]
+    assert perdedora["clave"] == 0.25
+    vetada = leido["competencia"][2]
+    assert vetada["vetada"] and "colecistectomía" in vetada["motivo_veto"]
+    assert leido["ganadora_abductiva"] == "apendicitis"
+    # Y el aviso, que es la mitad del diseño: si la compuerta actúa callada
+    # el sistema trata otra cosa sin dejar constancia de por qué.
+    assert "gastroenteritis" in leido["aviso_competencia"]
+
+
+def test_el_tic_guarda_la_version_del_protocolo_y_no_solo_su_nombre(entorno):
+    """Es la columna que convierte recomputar en auditar.
+
+    Sin ella, volver a pasar los infones de aquel día por el protocolo que
+    hay hoy responde a una pregunta distinta de la que se quería hacer.
+    """
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    leido = tics.tic_completo(tics.guardar(_resultado_con_competencia()))
+
+    assert leido["skill"] == "apendicitis"
+    assert leido["skill_version"] == "3.1"
+
+
+def test_el_acoplamiento_y_el_veredicto_sobreviven_al_viaje(entorno):
+    """El hueco que la §8 de VEREDICTO.md declaraba, cerrado."""
+    from holonmed.core.acoplamiento import MedidorDeAcoplamiento
+    from holonmed.core.skills import Skill
+
+    protocolo = Skill(
+        "apendicitis",
+        "---\ntitulo: Apendicitis\nsignos:\n  - nombre: Fiebre\n"
+        "    lr: 3.0\n    fuente: y\n---\n\nP\n",
+    )
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    r = _resultado_con_competencia()
+    r.infones = [_infon("Fiebre", None, codigo="T:5")]
+    r.acoplamiento = MedidorDeAcoplamiento().medir(protocolo, r.infones)
+    assert r.acoplamiento is not None
+
+    leido = tics.tic_completo(tics.guardar(r))
+    assert leido["acoplamiento"]["coseno"] == r.acoplamiento.coseno
+    # y la traza entera, que es lo que hace a Φ impugnable línea a línea
+    assert leido["acoplamiento"]["traza"]
+    assert leido["acoplamiento"]["componentes"][0]["dimension"] == "Fiebre"
+
+
+# --- La cifra que el paso 2 buscaba ------------------------------------
+
+
+def test_el_acuerdo_del_triaje_se_agrega_sobre_el_historico(entorno):
+    """De una línea de log por tic a una medida del histórico."""
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    for coincide in (True, True, False):
+        r = _resultado_con_competencia()
+        r.triaje_coincide = coincide
+        tics.guardar(r)
+
+    medida = tics.acuerdo_del_triaje("p1")
+    assert medida["coinciden"] == 2
+    assert medida["discrepan"] == 1
+    assert medida["comparables"] == 3
+    assert medida["acuerdo"] == pytest.approx(2 / 3)
+
+
+def test_un_tic_sin_competencia_no_cuenta_como_desacuerdo(entorno):
+    """NULL, 0 y 1 son tres estados, y sólo dos son un juicio sobre el prompt.
+
+    `triaje_coincide` es NULL cuando el grafo no propuso candidatas. Meter
+    esos tics en el denominador diría que el prompt falló donde nadie le
+    llevó la contraria: una tasa de error inventada.
+    """
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    acertado = _resultado_con_competencia()
+    tics.guardar(acertado)
+    # Un tic normal, sin competencia que registrar.
+    tics.guardar(ResultadoTic(paciente_id="p1", texto_original="…", skill_activa="x"))
+
+    medida = tics.acuerdo_del_triaje("p1")
+    assert medida["tics"] == 2
+    assert medida["sin_competencia"] == 1
+    assert medida["comparables"] == 1
+    assert medida["acuerdo"] == 1.0, "el tic sin competencia no puede bajar la tasa"
+
+
+def test_sin_nada_comparable_la_tasa_es_None_y_no_cero(entorno):
+    """Un cero diría «el prompt nunca acierta», que es otra afirmación."""
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tics.guardar(ResultadoTic(paciente_id="p1", texto_original="…", skill_activa="x"))
+
+    medida = tics.acuerdo_del_triaje("p1")
+    assert medida["acuerdo"] is None
+    assert medida["sin_competencia"] == 1
+
+
+def test_una_base_anterior_admite_la_competencia_sin_perder_sus_tics(tmp_path):
+    """Las columnas nuevas llegan por migración a una base ya escrita."""
+    import sqlite3
+
+    ruta = tmp_path / "antigua.db"
+    cx = sqlite3.connect(ruta)
+    cx.executescript(
+        """
+        CREATE TABLE paciente (id TEXT PRIMARY KEY, nombre TEXT NOT NULL,
+            edad INTEGER, sexo TEXT, telefono TEXT,
+            antecedentes TEXT NOT NULL DEFAULT '', creado TEXT NOT NULL);
+        CREATE TABLE tic (id INTEGER PRIMARY KEY, paciente_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL, skill TEXT NOT NULL,
+            texto_original TEXT NOT NULL, resumen TEXT NOT NULL DEFAULT '',
+            inferencia TEXT);
+        INSERT INTO paciente VALUES ('p1','Antiguo',NULL,NULL,NULL,'','2026-01-01');
+        INSERT INTO tic VALUES (1,'p1','2026-01-01','vieja','texto','resumen',NULL);
+        """
+    )
+    cx.commit()
+    cx.close()
+
+    db = Database(ruta)
+    columnas = {f[1] for f in db.conexion().execute("PRAGMA table_info(tic)")}
+    assert {
+        "skill_version", "acoplamiento", "veredicto",
+        "competencia", "ganadora_abductiva", "triaje_coincide",
+        "aviso_competencia",
+    } <= columnas
+
+    tics = TicRepo(db, GraphRepo(db))
+    tics.guardar(_resultado_con_competencia())
+
+    # El tic viejo sigue ahí, y no cuenta como desacuerdo del triaje.
+    medida = tics.acuerdo_del_triaje("p1")
+    assert medida["tics"] == 2
+    assert medida["sin_competencia"] == 1
+    assert medida["coinciden"] == 1

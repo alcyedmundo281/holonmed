@@ -139,9 +139,26 @@ CREATE TABLE IF NOT EXISTS tic (
     origen         TEXT NOT NULL DEFAULT 'consulta',
     actor          TEXT,
     skill          TEXT NOT NULL,
+    -- La versión del protocolo, junto a su nombre. Es la columna que
+    -- convierte recomputar en AUDITAR: sin ella, volver a pasar los infones
+    -- de aquel día por el protocolo de hoy responde a otra pregunta.
+    skill_version  TEXT,
     texto_original TEXT NOT NULL,
     resumen        TEXT NOT NULL DEFAULT '',
-    inferencia     TEXT             -- JSON de la inferencia bayesiana
+    inferencia     TEXT,            -- JSON de la inferencia bayesiana
+    acoplamiento   TEXT,            -- JSON de Φ, con sus componentes y su traza
+    veredicto      TEXT,            -- JSON del criterio publicado, contado
+
+    -- La competencia abductiva ENTERA, no sólo quién ganó: «se consideró
+    -- diverticulitis y sacó 0.25» es la traza de auditoría, y sin las
+    -- perdedoras se muestra una conclusión sin decir contra qué compitió.
+    competencia        TEXT,        -- JSON de la lista de candidatas
+    ganadora_abductiva TEXT,
+    -- 1, 0 o NULL, y los tres son distintos: NULL dice que no hubo
+    -- competencia con la que comparar. Colapsarlo a 0 contaría como
+    -- desacuerdo un tic donde nadie compitió.
+    triaje_coincide    INTEGER,
+    aviso_competencia  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tic_paciente ON tic(paciente_id, timestamp DESC);
