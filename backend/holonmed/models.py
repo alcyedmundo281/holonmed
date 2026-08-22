@@ -414,6 +414,15 @@ class ResultadoTic(BaseModel):
     )
 
     skill_activa: str
+    skill_version: str | None = Field(
+        default=None,
+        description=(
+            "La versión del protocolo que corrió, junto a su nombre. Es lo que "
+            "convierte recomputar en auditar: sin ella, volver a pasar los "
+            "infones de aquel día por el protocolo de hoy responde a otra "
+            "pregunta que la que se quería hacer."
+        ),
+    )
     resumen: str = ""
     infones: list[Infon] = Field(default_factory=list)
     # `Any` para no importar de core y crear un ciclo; en la práctica es

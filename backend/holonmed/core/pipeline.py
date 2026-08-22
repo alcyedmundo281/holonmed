@@ -132,6 +132,7 @@ class CrystallizationPipeline:
             paciente_id=holon.paciente_id,
             texto_original=texto,
             skill_activa=skill.nombre,
+            skill_version=skill.version,
         )
 
         # --- ETAPA 2: EXTRACCIÓN --------------------------------------
