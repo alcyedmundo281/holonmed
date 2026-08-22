@@ -85,6 +85,12 @@ POLARIDADES = ("presente", "ausente")
 # Una errata dejaba el protocolo sin validar y la build en verde.
 TIPOS = ("clinico", "operativo", "documento")
 
+# Los tres roles de la tupla: la clínica que trae al paciente, la prueba que
+# descarta cuando sale negativa (SnNOut) y la que confirma cuando sale
+# positiva (SpPIn). No es una lista nueva: son tres de los cinco `ROLES` que
+# ya existían, nombrados aparte porque juntos deciden otra cosa.
+ROLES_DE_LA_TUPLA = ("manifestacion", "prueba_sensible", "prueba_especifica")
+
 
 @dataclass
 class Signo:
@@ -207,6 +213,47 @@ class Clasificacion:
     @property
     def declarada(self) -> bool:
         return bool(self.criterios and self.produce.get("termino"))
+
+
+@dataclass
+class Promocion:
+    """Cuándo un hallazgo deja de ser un problema y pasa a ser un diagnóstico.
+
+    LA TUPLA
+    --------
+    Una clínica positiva, una prueba sensible positiva y una prueba
+    específica positiva. Los tres roles ya existían en `ROLES`; lo que
+    faltaba era declarar que juntos deciden.
+
+    Exigir la **sensible en positivo** no es redundante con exigir la
+    específica: significa que una sensible NEGATIVA impide la promoción. Es
+    SnNOut usado como compuerta, y es lo que hace que la tupla sea una regla
+    y no una suma de apoyos.
+
+    LO QUE PASA SI NO SE COMPLETA
+    -----------------------------
+    El hallazgo **se queda como problema**. No se rebaja el diagnóstico ni
+    se emite con reservas: no se emite. Es la parsimonia del principio —la
+    explicación única supera a la múltiple— aplicada a la promoción.
+
+    EL UMBRAL NO ES UNA CIFRA DEL ÍNDICE
+    ------------------------------------
+    `umbral_postest` es una POLÍTICA, no un dato de la enfermedad: dice
+    cuánta certeza exige este servicio antes de actuar, y puede ser distinta
+    para un cuadro letal y tratable que para uno banal. Ninguna revista
+    publica «actúe por encima del 90%», así que no puede llevar PMID — y por
+    eso exige `motivo` en prosa, igual que `sostiene: mecanismo` en el
+    índice. Un umbral sin motivo escrito es un número sin nadie detrás.
+    """
+
+    exige: dict[str, int] = field(default_factory=dict)
+    umbral_postest: float | None = None
+    fuente: str = ""
+    motivo: str = ""
+
+    @property
+    def declarada(self) -> bool:
+        return bool(self.exige) or self.umbral_postest is not None
 
 
 @dataclass
@@ -364,6 +411,7 @@ class Skill:
         self.balance = self._parsear_balance()
         self.nucleo = self._parsear_nucleo()
         self.clasificacion = self._parsear_clasificacion()
+        self.promocion = self._parsear_promocion()
         # Un protocolo operativo pertenece a un rol y declara qué debe
         # contener su registro. Se busca por este campo y no por el nombre
         # del archivo: cada centro nombra sus protocolos como quiera.
@@ -529,6 +577,58 @@ class Skill:
             criterios=criterios,
             produce=bloque.get("produce") or {},
         )
+
+    def _parsear_promocion(self) -> Promocion:
+        bloque = self.meta.get("promocion")
+        if not isinstance(bloque, dict):
+            return Promocion()
+
+        exige: dict[str, int] = {}
+        crudo = bloque.get("exige")
+        if isinstance(crudo, dict):
+            for rol, cuantos in crudo.items():
+                nombre = str(rol)
+                if nombre not in ROLES:
+                    # Lista blanca, como `efecto` y `dispara_si`. Un rol
+                    # desconocido no se ignora en silencio: se denuncia, y no
+                    # entra — exigir algo que nadie puede satisfacer haría la
+                    # promoción imposible sin decir por qué.
+                    self._problemas.append(
+                        f"promocion.exige: rol «{nombre}» desconocido; "
+                        f"válidos: {', '.join(ROLES)}"
+                    )
+                    continue
+                try:
+                    n = int(cuantos)
+                except (TypeError, ValueError):
+                    self._problemas.append(
+                        f"promocion.exige.{nombre}: «{cuantos}» no es un entero"
+                    )
+                    continue
+                if n > 0:
+                    exige[nombre] = n
+
+        umbral = _num(bloque.get("umbral_postest"))
+        if umbral is not None and not 0.0 < umbral <= 1.0:
+            self._problemas.append(
+                f"promocion.umbral_postest {umbral} fuera de (0, 1]"
+            )
+            umbral = None
+
+        promocion = Promocion(
+            exige=exige,
+            umbral_postest=umbral,
+            fuente=str(bloque.get("fuente", "")),
+            motivo=str(bloque.get("motivo", "")),
+        )
+        # El umbral es una política del servicio, no un dato publicado: no
+        # puede citarse, así que se justifica por escrito o no vale.
+        if promocion.umbral_postest is not None and not promocion.motivo.strip():
+            self._problemas.append(
+                "promocion.umbral_postest sin `motivo`: cuánta certeza exigir "
+                "antes de actuar es una política, y ninguna fuente la publica"
+            )
+        return promocion
 
     def _parsear_nucleo(self) -> Nucleo:
         bloque = self.meta.get("nucleo")

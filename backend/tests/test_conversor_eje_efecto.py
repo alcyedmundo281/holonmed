@@ -1,10 +1,10 @@
 """El eje `efecto` en el conversor, comprobado SIN el índice.
 
 Por qué existe este archivo aparte de `test_ciclo5_parkinson_extremo_a_extremo`:
-aquéllas convierten desde un clon real de `medsemiotics-db` y por tanto **se
-saltan en CI**, que no lo tiene. Son la prueba de aceptación del ciclo y valen
-lo que valen, pero mientras sean las únicas, todo lo que el ciclo garantiza
-queda sin comprobar en el único sitio que mira todo el mundo.
+aquéllas convierten desde un clon real de `medsemiotics-db` y **se saltan allí
+donde no esté**: CI lo clona, pero una máquina cualquiera no. Son la prueba de
+aceptación del ciclo y valen lo que valen, pero mientras sean las únicas, todo
+lo que el ciclo garantiza depende de tener la fuente delante.
 
 Éstas construyen un índice sintético en memoria y corren en cualquier parte.
 No sustituyen a las de aceptación: cubren las reglas, no el trayecto.
