@@ -1,7 +1,8 @@
 """El traslado desde medsemiotics-db no inventa lo que el índice no dice.
 
 Estas pruebas necesitan un clon local del índice y se saltan si no está: es
-un repositorio separado a propósito, y CI no lo tiene. Cuando sí está, cada
+un repositorio separado a propósito. CI lo clona antes de correrlas, así que
+allí corren; en una máquina que no lo tenga, se saltan. Cuando está, cada
 condición debe producir un protocolo que parsee, que pase su propia revisión
 y —lo que de verdad importa— que no traiga ni un cociente que la fuente no
 haya publicado tal cual.
