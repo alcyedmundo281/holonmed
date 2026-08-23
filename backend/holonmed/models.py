@@ -399,6 +399,44 @@ class CandidataAbductiva(BaseModel):
     )
 
 
+class Promocion(BaseModel):
+    """¿Sigue siendo un problema, o ya es un diagnóstico?
+
+    La cuarta pregunta, y ninguna de las otras tres la responde. Se lee junto
+    a ellas y por separado: una probabilidad alta con la tupla incompleta es
+    información clínica —dice que falta una prueba, no que falte evidencia— y
+    fundirlas la destruiría.
+    """
+
+    hipotesis: str
+    promueve: bool
+
+    exigido: dict[str, int] = Field(
+        default_factory=dict, description="Cuántos de cada rol pide la tupla"
+    )
+    cumplido: dict[str, int] = Field(default_factory=dict)
+    terminos: dict[str, list[str]] = Field(
+        default_factory=dict, description="Qué hallazgo satisface cada rol"
+    )
+    faltan: dict[str, int] = Field(
+        default_factory=dict, description="Lo que impide promover, por rol"
+    )
+
+    umbral_postest: float | None = None
+    probabilidad: float | None = None
+    # None cuando el protocolo no declara umbral: no es «no lo cumple», es
+    # que no hay umbral que cumplir.
+    umbral_cumplido: bool | None = None
+
+    fuente: str = ""
+    traza: list[str] = Field(default_factory=list)
+
+    @property
+    def se_queda_como_problema(self) -> bool:
+        """Lo que ocurre cuando la tupla no se completa, dicho con su nombre."""
+        return not self.promueve
+
+
 class ResultadoTic(BaseModel):
     """Todo lo que produce un único ciclo de procesamiento (un *tic*)."""
 
