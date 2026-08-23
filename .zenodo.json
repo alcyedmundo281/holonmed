@@ -24,6 +24,12 @@
     }
   ],
 
+  "communities": [
+    {
+      "identifier": "powersemiotics"
+    }
+  ],
+
   "keywords": [
     "clinical decision support",
     "clinical natural language processing",
