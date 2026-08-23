@@ -38,6 +38,21 @@ Uso
     python scripts/convertir_condicion.py HM:6007 --salida skills/sca.md
     python scripts/convertir_condicion.py HM:6007 --indice /ruta/al/indice
 
+Para traer de una vez toda condición nueva que medsemiotics-db haya
+publicado desde la última corrida:
+
+    python scripts/convertir_condicion.py --sync-all
+    python scripts/convertir_condicion.py --sync-all --vocabulario vocabulario_nuevo.json
+
+Decide qué es «nuevo» por el nombre de archivo de destino en
+`backend/skills/`, igual que `--forzar` en el modo de una sola condición:
+si el archivo ya existe, no lo toca —un protocolo en uso lleva prosa
+escrita a mano que este script no reconstruye—. El vocabulario que falte
+de TODAS las condiciones nuevas se consolida en un solo archivo, sin
+repetir un concepto que ya pidió una condición anterior en la misma
+corrida. Ningún borrador se autocompleta ni se sube solo: cada uno sigue
+necesitando prosa, revisión y su propio pull request.
+
 Casi ninguna condición del índice se apoya sólo en conceptos que holonmed ya
 conozca. Los que falten salen traducidos al formato del vocabulario semilla,
 para mezclarlos a mano en su lista `conceptos`:
@@ -1431,6 +1446,96 @@ def nombre_por_defecto(identificador: str, indice: Indice) -> str:
     return re.sub(r"^HM\d+-", "", stem).replace("-", "_")
 
 
+def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
+    """Convierte de una sola pasada toda condición del índice que todavía no
+    tenga protocolo en `backend/skills/`.
+
+    Reutiliza `convertir()` y `nombre_por_defecto()` sin duplicar su lógica,
+    así que se comporta exactamente igual que pasar cada condición a mano:
+    el mismo nombre de archivo, el mismo informe, la misma protección
+    `--forzar` para no pisar un protocolo con prosa ya escrita. Lo único que
+    hace por su cuenta es decidir CUÁLES condiciones son nuevas —comparando
+    el archivo de destino, no una lista aparte que pueda desincronizarse—.
+    """
+    conocidos, ruta_semilla = vocabulario_local()
+
+    nuevas: list[str] = []
+    cubiertas: list[str] = []
+    for identificador in sorted(indice.condiciones):
+        nombre = nombre_por_defecto(identificador, indice)
+        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
+        (nuevas if (forzar or not destino.exists()) else cubiertas).append(identificador)
+
+    print(
+        f"\nÍndice: {indice.ruta}  ({indice.commit}"
+        f"{'' if indice.limpio else ', con cambios sin confirmar'})",
+        file=sys.stderr,
+    )
+    print(f"{len(cubiertas)} condición(es) ya con protocolo, {len(nuevas)} nueva(s)\n", file=sys.stderr)
+    if not nuevas:
+        print("Nada que convertir.", file=sys.stderr)
+        return 0
+
+    vocab_acumulado: list[dict] = []
+    vistos_acumulado = set()
+    for identificador in nuevas:
+        condicion = indice.condiciones[identificador]
+        informe = Informe()
+        borrador = convertir(condicion, indice, informe)
+
+        faltan = fragmento_vocabulario(borrador.codigos, condicion, indice, conocidos)
+        for entrada in faltan:
+            if entrada["codigo"] not in vistos_acumulado:
+                vistos_acumulado.add(entrada["codigo"])
+                vocab_acumulado.append(entrada)
+        if faltan:
+            informe.pendiente(
+                "vocabulario",
+                f"{len(faltan)} concepto(s) del protocolo no existen en "
+                f"{ruta_semilla.name}: {', '.join(e['codigo'] for e in faltan)}. "
+                f"Van en el vocabulario consolidado de esta corrida",
+            )
+        # Los recién vistos cuentan como conocidos para el resto de la
+        # corrida: dos condiciones nuevas que comparten un concepto no lo
+        # duplican en el vocabulario consolidado.
+        conocidos = conocidos | {e["codigo"] for e in faltan}
+
+        nombre = nombre_por_defecto(identificador, indice)
+        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
+
+        print(f"=== {identificador} · {condicion.get('termino')} -> {destino.name} ===", file=sys.stderr)
+        informe.imprimir()
+        print(file=sys.stderr)
+
+    if vocab_acumulado:
+        destino_vocab = ruta_vocab or Path("vocabulario_nuevo.json")
+        destino_vocab.parent.mkdir(parents=True, exist_ok=True)
+        destino_vocab.write_text(
+            json.dumps({"conceptos": vocab_acumulado}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(
+            f"Vocabulario nuevo consolidado en {destino_vocab} "
+            f"({len(vocab_acumulado)} concepto(s), sin repetir entre condiciones).\n"
+            f"Mézclalo en `conceptos` de {ruta_semilla.name} y recarga:\n"
+            f"  python scripts/importar_terminologia.py --semilla",
+            file=sys.stderr,
+        )
+
+    print(
+        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_SKILLS}. Ninguno se "
+        f"auto-completa: cada uno necesita prosa (rol, contexto fisiopatológico, "
+        f"banderas rojas), fijar `probabilidad_base` y `factores_riesgo` si aplica, "
+        f"pasar `holonmed skills --validar` y subirse como pull request — uno por "
+        f"uno o juntos, pero siempre revisados por un humano antes de fusionar.",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main() -> int:
     _consola_en_utf8()
     parser = argparse.ArgumentParser(
@@ -1449,9 +1554,16 @@ def main() -> int:
     parser.add_argument("--vocabulario", type=Path, metavar="ARCHIVO",
                         help="Escribe los conceptos que faltan en el vocabulario semilla")
     parser.add_argument("--listar", action="store_true", help="Qué hay en el índice")
+    parser.add_argument(
+        "--sync-all", action="store_true",
+        help="Convierte toda condición del índice que no tenga ya protocolo en backend/skills/",
+    )
     args = parser.parse_args()
 
     indice = cargar_indice(args.indice.resolve())
+
+    if args.sync_all:
+        return sync_all(indice, args.forzar, args.vocabulario)
 
     if args.listar or not args.condicion:
         return listar(indice)
