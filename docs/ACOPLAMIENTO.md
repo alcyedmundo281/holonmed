@@ -497,9 +497,10 @@ confianza.
 - **No se usa `ambito_grafo` todavía.** Un hallazgo que cae en una rama que
   el protocolo reconoce pero no cuantifica cuenta hoy como resto entero;
   podría contar como resto parcial.
-- **Φ no se persiste.** La tabla `tics` guarda `inferencia` pero no
-  `acoplamiento`: al recargar el historial, Φ se pierde. Es una columna
-  nueva, y es el requisito de la fase 3.
+- ~~**Φ no se persiste.**~~ Resuelto: `tic.acoplamiento` guarda el objeto
+  entero —componentes y traza incluidas— junto a `tic.skill_version`, que es
+  lo que permite auditar un Φ de hace meses en vez de sólo recalcularlo con
+  el protocolo de hoy. Ver `VEREDICTO.md` §8. Era el requisito de la fase 3.
 
 ---
 

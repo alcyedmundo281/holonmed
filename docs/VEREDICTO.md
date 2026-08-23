@@ -200,50 +200,73 @@ sobre la que se midieron.**
 
 ---
 
-## 8. Persistencia: la limitación más urgente
+## 8. Persistencia: cerrada
 
-La tabla `tic` tiene **una sola columna para el razonamiento**:
+Esta sección declaraba la limitación más urgente del módulo. Ya no lo es: la
+tabla `tic` registra el razonamiento entero, y lo que sigue queda escrito
+porque el argumento de por qué hacía falta no ha caducado.
+
+### 8.1 Lo que se guarda, y por qué cada cosa
 
 ```sql
-inferencia  TEXT   -- JSON de la inferencia bayesiana
+skill              TEXT NOT NULL,
+skill_version      TEXT,          -- la versión, junto al nombre
+inferencia         TEXT,          -- JSON: la probabilidad
+acoplamiento       TEXT,          -- JSON: Φ, con componentes y traza
+veredicto          TEXT,          -- JSON: el criterio publicado, contado
+competencia        TEXT,          -- JSON: la lista entera de candidatas
+ganadora_abductiva TEXT,
+triaje_coincide    INTEGER,       -- 1, 0 o NULL, y los tres son distintos
+aviso_competencia  TEXT
 ```
 
-Ni `acoplamiento` ni `veredicto` aparecen en `schema.sql` ni en `store.py`.
-Al recargar el historial se pierden los dos.
+**`veredicto` era la urgente.** El sistema promete que una hipótesis vetada se
+descarta con su motivo visible, para que el próximo clínico no rehaga el
+razonamiento. Sin la columna, esa promesa duraba lo que la sesión.
 
-**Lo que sí está a favor:** los infones se persisten completos —con su
-`estado`, su `polaridad`, su `confianza` y su `razon_auditoria`— así que el
-veredicto **es recomputable** volviendo a llamar al evaluador con los infones
-guardados de ese tic.
+**`skill_version` es la que convierte recomputar en auditar.** Los infones se
+persisten completos, así que el veredicto siempre fue *recomputable* — pero
+recomputar sin la versión da *el protocolo de hoy aplicado a los infones de
+aquel día*. Si alguien añadió una exclusión desde entonces, el veto
+recomputado no es el que se le mostró al clínico. **Recomputable no es lo
+mismo que registrado.**
 
-**Y por qué eso no basta.** El tic guarda `skill TEXT` —el **nombre** del
-protocolo— y no su **versión**, que sí existe en el frontmatter. De modo que
-recomputar da *el protocolo de hoy aplicado a los infones de aquel día*. Si
-alguien añadió una exclusión desde entonces, el veto recomputado no es el que
-se le mostró al clínico.
+**`competencia` guarda a las perdedoras a propósito.** «Se consideró
+diverticulitis y sacó 0.25» *es* la traza: sin ella el sistema muestra una
+conclusión sin poder decir contra qué compitió. Y `aviso_competencia` guarda
+la vez que la compuerta de α actuó, porque una compuerta callada hace que el
+sistema trate otra cosa sin dejar constancia del motivo.
 
-Para una traza de auditoría clínica, **recomputable no es lo mismo que
-registrado**.
+### 8.2 Los tres estados de `triaje_coincide`
 
-Y hay una asimetría entre las tres piezas que decide la prioridad:
+```
+1      el grafo eligió lo mismo que el prompt
+0      eligieron distinto
+NULL   no hubo competencia con la que comparar
+```
 
-| pieza | qué pasa al perderla |
-|---|---|
-| `inferencia` | ya se persiste |
-| `acoplamiento` | hay que recalcular; el número no cambia lo que el clínico decidió |
-| `veredicto` | **un diagnóstico retirado reaparece sin su motivo** |
+`NULL` no es un 0. Aparece cuando el grafo no propuso candidatas —sin infones
+validados, o sin protocolo que cubra sus conceptos— y meterlo en el
+denominador diría que el prompt falló donde nadie le llevó la contraria. Es
+una tasa de error inventada, y es la misma distinción que gobierna
+`SIN_MEDIR` en `ACOPLAMIENTO.md` y `Historia.sin_ubicar`: no es ausencia, es
+vacío.
 
-La última es la grave. El sistema promete que una hipótesis vetada se
-descarta **con su motivo visible**, para que el próximo clínico no rehaga el
-razonamiento; si el veto no sobrevive a una recarga, esa promesa dura lo que
-dura la sesión.
+`TicRepo.acuerdo_del_triaje()` los devuelve en su propia clave, y da
+`acuerdo: None` —no `0.0`— cuando no hay nada comparable.
 
-**Lo que hace falta**, por orden: una columna `veredicto` en `tic`, una
-columna `acoplamiento`, y el **número de versión de la skill** junto a su
-nombre. La tercera es la que convierte la recomputación en auditoría.
+### 8.3 Lo que esto habilita
 
-`docs/ACOPLAMIENTO.md` §12 declara la falta de persistencia de Φ como
-requisito de la fase 3. Para el veredicto es más urgente que eso.
+La competencia abductiva corre en paralelo al triaje desde el ciclo 6, y su
+resultado era una línea de log por tic: legible sólo por quien mirase la
+consola en ese momento. Agregado sobre el histórico es la medida que el paso
+faltaba producir —**cuánto se equivoca el prompt**— y que es lo que hay que
+saber antes de sustituirlo por nada.
+
+Las columnas están fijadas por tests que caen bajo mutación: guardar sólo la
+ganadora, omitir la versión, colapsar `NULL` a 0 al escribir, meter los `NULL`
+en el denominador, o devolver `0.0` en vez de `None` — cada una tira al menos
+un test.
 
 ---
 

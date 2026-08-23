@@ -42,6 +42,42 @@ def _ahora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# Las columnas del tic que guardan un objeto entero en JSON. Se listan una
+# vez porque se usan en los dos sentidos —al escribir y al leer— y tenerlas
+# en dos sitios es cómo una acaba guardándose y no leyéndose.
+COLUMNAS_JSON_DEL_TIC = (
+    "inferencia",
+    "acoplamiento",
+    "veredicto",
+    "competencia",
+)
+
+
+def _json(valor: Any) -> str | None:
+    """Serializa un modelo pydantic, o una lista de ellos, o nada.
+
+    Devuelve None y no `"null"` cuando no hay nada que guardar: la columna
+    vacía dice «no se calculó», y la cadena `"null"` diría que se calculó y
+    dio nulo. Son cosas distintas y sólo una es cierta.
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, list):
+        return json.dumps(
+            [v.model_dump(mode="json") for v in valor], ensure_ascii=False
+        )
+    return json.dumps(valor.model_dump(mode="json"), ensure_ascii=False)
+
+
+def _desde_json(registro: dict[str, Any]) -> dict[str, Any]:
+    """Decodifica in situ las columnas JSON de un tic leído."""
+    for columna in COLUMNAS_JSON_DEL_TIC:
+        if columna in registro:
+            crudo = registro[columna]
+            registro[columna] = json.loads(crudo) if crudo else None
+    return registro
+
+
 class Database:
     """Conexión a SQLite y creación idempotente del esquema."""
 
@@ -72,6 +108,13 @@ class Database:
     MIGRACIONES: tuple[tuple[str, str, str], ...] = (
         ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
         ("tic", "actor", "TEXT"),
+        ("tic", "skill_version", "TEXT"),
+        ("tic", "acoplamiento", "TEXT"),
+        ("tic", "veredicto", "TEXT"),
+        ("tic", "competencia", "TEXT"),
+        ("tic", "ganadora_abductiva", "TEXT"),
+        ("tic", "triaje_coincide", "INTEGER"),
+        ("tic", "aviso_competencia", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
@@ -414,19 +457,32 @@ class TicRepo:
                 )
                 cursor = cx.execute(
                     """INSERT INTO tic (paciente_id, timestamp, origen, actor,
-                                        skill, texto_original, resumen, inferencia)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                        skill, skill_version, texto_original,
+                                        resumen, inferencia, acoplamiento,
+                                        veredicto, competencia,
+                                        ganadora_abductiva, triaje_coincide,
+                                        aviso_competencia)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
                         resultado.origen.value,
                         resultado.actor,
                         resultado.skill_activa,
+                        resultado.skill_version,
                         resultado.texto_original,
                         resultado.resumen,
-                        json.dumps(resultado.inferencia.model_dump(mode="json"))
-                        if resultado.inferencia
-                        else None,
+                        _json(resultado.inferencia),
+                        _json(resultado.acoplamiento),
+                        _json(resultado.veredicto_declarado),
+                        _json(resultado.competencia) if resultado.competencia else None,
+                        resultado.ganadora_abductiva,
+                        # None se guarda como NULL y no como 0: «no hubo
+                        # competencia» no es «el triaje se equivocó».
+                        None
+                        if resultado.triaje_coincide is None
+                        else int(resultado.triaje_coincide),
+                        resultado.aviso_competencia,
                     ),
                 )
                 tic_id = cursor.lastrowid
@@ -527,13 +583,54 @@ class TicRepo:
         infones = cx.execute(
             "SELECT * FROM infon WHERE tic_id = ? ORDER BY id", (tic_id,)
         ).fetchall()
-        registro = dict(cabecera)
+        registro = _desde_json(dict(cabecera))
         registro["id"] = str(registro["id"])
-        registro["inferencia"] = (
-            json.loads(registro["inferencia"]) if registro["inferencia"] else None
-        )
         registro["infones"] = [dict(i) for i in infones]
         return registro
+
+    def acuerdo_del_triaje(self, paciente_id: str | None = None) -> dict[str, Any]:
+        """Cuántas veces el prompt de triaje eligió lo mismo que el grafo.
+
+        Es la cifra que la competencia abductiva existe para producir. Sin
+        persistencia era una línea de log por tic, legible sólo por quien
+        estuviera mirando la consola en ese momento; agregada sobre el
+        histórico es una medida de cuánto se equivoca el prompt, que es lo
+        que hay que saber antes de sustituirlo por nada.
+
+        LOS TICS SIN COMPETENCIA SE CUENTAN APARTE, NO COMO DESACUERDO.
+        `triaje_coincide` es NULL cuando el grafo no propuso candidatas —sin
+        infones validados, o sin protocolo que cubra sus conceptos—. Meterlos
+        en el denominador diría que el prompt falló donde nadie le llevó la
+        contraria, y eso es inventar una tasa de error. Se devuelven en su
+        propia clave para que el consumidor no pueda confundirlos con un
+        cero, igual que `Historia.sin_ubicar`.
+        """
+        sql = """SELECT
+                     SUM(CASE WHEN triaje_coincide = 1 THEN 1 ELSE 0 END) AS coinciden,
+                     SUM(CASE WHEN triaje_coincide = 0 THEN 1 ELSE 0 END) AS discrepan,
+                     SUM(CASE WHEN triaje_coincide IS NULL THEN 1 ELSE 0 END)
+                         AS sin_competencia,
+                     COUNT(*) AS tics
+                 FROM tic"""
+        binds: list[Any] = []
+        if paciente_id:
+            sql += " WHERE paciente_id = ?"
+            binds.append(paciente_id)
+
+        fila = self._db.conexion().execute(sql, binds).fetchone()
+        coinciden = int(fila["coinciden"] or 0)
+        discrepan = int(fila["discrepan"] or 0)
+        comparables = coinciden + discrepan
+        return {
+            "tics": int(fila["tics"] or 0),
+            "comparables": comparables,
+            "coinciden": coinciden,
+            "discrepan": discrepan,
+            "sin_competencia": int(fila["sin_competencia"] or 0),
+            # None y no 0.0: sin nada comparable no hay tasa que dar, y un
+            # cero se leería como «el prompt nunca acierta».
+            "acuerdo": (coinciden / comparables) if comparables else None,
+        }
 
     def por_origen(self, paciente_id: str) -> list[dict[str, Any]]:
         """Cuántos tics ha aportado cada actor del entorno clínico."""
