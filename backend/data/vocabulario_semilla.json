@@ -12,9 +12,9 @@
     "y rechaza lo que no reconoce. Para codificar de verdad (facturación,",
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help",
-    "v1.5.0: unifica los conceptos acuñados por medsemiotics-db —el índice compartido— al modelar condiciones con cociente de verosimilitud verificado contra PubMed, y los que trajo el traslado del protocolo de síndrome coronario agudo."
+    "v1.6.0: suma los conceptos acuñados por medsemiotics-db al modelar embarazo ectópico (HM:6016), conjuntivitis bacteriana (HM:6017) y apnea obstructiva del sueño (HM:6018), todas con cociente de verosimilitud verificado contra PubMed."
   ],
-  "version": "1.5.0",
+  "version": "1.6.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1818,6 +1818,132 @@
       "sinonimos": [
         "SCA",
         "angina inestable e infarto"
+      ]
+    },
+    {
+      "codigo": "HM:3064",
+      "termino": "Masa anexial sin gestación intrauterina en ecografía transvaginal",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "masa anexial ecográfica sin saco gestacional intrauterino",
+        "masa anexial con útero vacío"
+      ]
+    },
+    {
+      "codigo": "HM:3065",
+      "termino": "Anomalía anexial en ecografía transvaginal",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "alteración anexial ecográfica"
+      ]
+    },
+    {
+      "codigo": "HM:3066",
+      "termino": "Dolor a la movilización cervical",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "dolor a la movilización del cuello uterino",
+        "signo de Chandelier"
+      ]
+    },
+    {
+      "codigo": "HM:3067",
+      "termino": "Masa anexial en la exploración bimanual",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "masa anexial palpable"
+      ]
+    },
+    {
+      "codigo": "HM:3068",
+      "termino": "Dolor a la palpación anexial",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "dolor anexial a la exploración"
+      ]
+    },
+    {
+      "codigo": "HM:3069",
+      "termino": "Sangrado vaginal en la gestación precoz",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "metrorragia del primer trimestre",
+        "sangrado vaginal del primer trimestre"
+      ]
+    },
+    {
+      "codigo": "HM:6016",
+      "termino": "Embarazo ectópico",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "gestación ectópica",
+        "embarazo extrauterino",
+        "embarazo tubárico"
+      ]
+    },
+    {
+      "codigo": "HM:3070",
+      "termino": "Secreción ocular mucopurulenta",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "secreción purulenta ocular",
+        "descarga mucopurulenta conjuntival"
+      ]
+    },
+    {
+      "codigo": "HM:3071",
+      "termino": "Otitis media concomitante",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "síndrome otitis-conjuntivitis",
+        "otitis media asociada a conjuntivitis"
+      ]
+    },
+    {
+      "codigo": "HM:6017",
+      "termino": "Conjuntivitis bacteriana",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "conjuntivitis bacteriana aguda"
+      ]
+    },
+    {
+      "codigo": "HM:3072",
+      "termino": "Ahogo o jadeo nocturno",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "episodios de asfixia nocturna",
+        "despertar con sensación de ahogo"
+      ]
+    },
+    {
+      "codigo": "HM:3073",
+      "termino": "Ronquido",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "roncar durante el sueño"
+      ]
+    },
+    {
+      "codigo": "HM:6018",
+      "termino": "Apnea obstructiva del sueño",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "SAOS",
+        "apnea del sueño"
       ]
     }
   ]
