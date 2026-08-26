@@ -254,9 +254,14 @@ class MedidorDeAcoplamiento:
         if not dimensiones and phi_cat is not None:
             phi_para_bandas = max(-1.0, min(1.0, phi_cat * anclaje))
 
+        direccion, cobertura, explicacion, traza_desc = self._descomponer(componentes)
+
         return Acoplamiento(
             phi=round(phi, 4),
             coseno=round(coseno, 4),
+            direccion=None if direccion is None else round(direccion, 4),
+            cobertura=None if cobertura is None else round(cobertura, 4),
+            explicacion=None if explicacion is None else round(explicacion, 4),
             phi_categorico=(
                 None if phi_cat is None else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
             ),
@@ -269,7 +274,7 @@ class MedidorDeAcoplamiento:
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
-            traza=traza_geom + traza_anc + traza_cat,
+            traza=traza_geom + traza_desc + traza_anc + traza_cat,
         )
 
     # --- El vector categórico -----------------------------------------
@@ -634,6 +639,80 @@ class MedidorDeAcoplamiento:
         coseno = max(-1.0, min(1.0, coseno))
         traza.append(f"cos(h,e) = {producto:.3f} / ({norma_h:.3f} × {norma_e:.3f}) = {coseno:.4f}")
         return coseno, traza
+
+    @staticmethod
+    def _descomponer(
+        componentes: Sequence[ComponenteAcoplamiento],
+    ) -> tuple[float | None, float | None, float | None, list[str]]:
+        """Parte cos(h,e) en los tres factores que ya lo componían.
+
+        No calcula nada nuevo: reagrupa la misma suma. Llamando `S` a las
+        dimensiones que aportan a **los dos** vectores —declaradas por el
+        protocolo y medidas en el registro—, el coseno se factoriza sin
+        aproximar nada:
+
+                          h_S·e_S           ‖h_S‖       ‖e_S‖
+            cos(h, e) = ───────────────  ·  ───────  ·  ───────
+                         ‖h_S‖ · ‖e_S‖       ‖h‖         ‖e‖
+
+            cos = dirección · √cobertura · √explicación
+
+        El numerador no cambia porque fuera de `S` todo término se anula:
+        una dimensión que nadie miró lleva `observado = 0` y un hallazgo no
+        simbolizado lleva `esperado = 0`. Lo que cambia son las normas, y
+        cada una por su lado: las no medidas suben ‖h‖ y el resto sube ‖e‖.
+
+        **Por qué hacen falta los tres.** Una identidad de dos factores
+        —`cos = dirección · √cobertura`— sólo vale cuando el resto está
+        vacío, y se comprobó contra tres casos que no tenían resto. Con
+        resto yerra hasta 0.32. El resto no es superficie de la hipótesis,
+        así que no va en la cobertura; pero no desaparece: sale por su
+        propio lado, el del paciente.
+
+        **Y por qué se informan y no se aplican.** Los tres ya están dentro
+        de `coseno`. Multiplicar cualquiera de ellos otra vez lo contaría
+        dos veces. El orden entre candidatas lo decide el coseno completo.
+
+        Partirlo importa porque el número fundido no distingue dos estados
+        clínicos distintos: `(dirección 1.00, cobertura 25 %)` es *nada la
+        contradice todavía* y `(dirección 0.50, cobertura 100 %)` es *se ha
+        puesto a prueba y aguanta a medias*.
+
+        `None` donde el factor no está definido, nunca 0. Es la distinción
+        que `medir` ya hace al devolver `None` en vez de un Φ de 0.
+        """
+        sub = [c for c in componentes if c.esperado and c.observado]
+
+        producto = sum(c.esperado * c.observado for c in sub)
+        norma_h_s = math.sqrt(sum(c.esperado**2 for c in sub))
+        norma_e_s = math.sqrt(sum(c.observado**2 for c in sub))
+        norma_h = math.sqrt(sum(c.esperado**2 for c in componentes))
+        norma_e = math.sqrt(sum(c.observado**2 for c in componentes))
+
+        # Sin ninguna dimensión medida no hay ángulo: un 0 diría que lo
+        # mirado no concuerda, y no se ha mirado nada.
+        direccion = (
+            None
+            if norma_h_s == 0 or norma_e_s == 0
+            else max(-1.0, min(1.0, producto / (norma_h_s * norma_e_s)))
+        )
+        # Con ‖h‖ = 0 el protocolo no declara ni un LR: no hay hipótesis
+        # que cubrir. Con ‖h‖ ≠ 0 y `S` vacío, la cobertura **sí** es 0, y
+        # es una afirmación cierta: no se ha mirado nada de lo que exige.
+        cobertura = None if norma_h == 0 else (norma_h_s**2) / (norma_h**2)
+        explicacion = None if norma_e == 0 else (norma_e_s**2) / (norma_e**2)
+
+        def _fmt(valor: float | None) -> str:
+            return "n/d" if valor is None else f"{valor:.4f}"
+
+        traza = [
+            f"Dimensiones a la vez declaradas y medidas: {len(sub)}",
+            f"dirección = {_fmt(direccion)} · cobertura = {_fmt(cobertura)} · "
+            f"explicación = {_fmt(explicacion)}",
+            "cos = dirección · √cobertura · √explicación; los tres se informan "
+            "y ninguno se vuelve a aplicar",
+        ]
+        return direccion, cobertura, explicacion, traza
 
     # --- Anclaje ------------------------------------------------------
 

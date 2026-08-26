@@ -257,6 +257,37 @@ class Acoplamiento(BaseModel):
 
     phi: float = Field(description="Φ ∈ [−1, +1]. Armonía con el contexto.")
     coseno: float = Field(description="cos(h,e) antes de aplicar el anclaje")
+
+    # Los tres factores de `coseno`, informados por separado para poder leer
+    # *por qué* salió ese número. El orden entre candidatas lo decide el
+    # coseno completo y nunca un factor suelto: ver §3.5 de ACOPLAMIENTO.md.
+    #
+    # `None` no es 0, y la distinción es la misma que `medir` hace al
+    # devolver `None` en vez de un Φ de 0: un 0 afirma algo sobre el caso
+    # —«lo mirado no concuerda», «nada de la hipótesis se ha mirado»— y
+    # `None` dice que no hay con qué preguntarlo.
+    direccion: float | None = Field(
+        default=None,
+        description=(
+            "cos(h_S, e_S): si lo que se ha mirado concuerda con la hipótesis. "
+            "None cuando no hay ninguna dimensión a la vez declarada y medida: "
+            "no hay ángulo del que hablar."
+        ),
+    )
+    cobertura: float | None = Field(
+        default=None,
+        description=(
+            "‖h_S‖²/‖h‖²: cuánto de la hipótesis se ha mirado. None cuando el "
+            "protocolo no declara ningún LR y no hay hipótesis que cubrir."
+        ),
+    )
+    explicacion: float | None = Field(
+        default=None,
+        description=(
+            "‖e_S‖²/‖e‖²: cuánto del paciente le habla la hipótesis. None "
+            "cuando no consta nada validado: no hay paciente que explicar."
+        ),
+    )
     phi_categorico: float | None = Field(
         default=None,
         description=(

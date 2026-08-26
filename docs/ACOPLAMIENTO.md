@@ -149,6 +149,75 @@ se afirma para que nadie la «arregle» creyendo que corrige un fallo:
 | `test_la_identidad_exige_un_infon_por_dimension` | el factor 2 del doble emparejamiento |
 | `test_el_peso_declarado_excluye_el_residuo_por_construccion` | que la invariante viva en el código |
 
+### 3.4 Los tres factores de cos(h, e)
+
+El coseno no es un número atómico: es el producto de tres cosas que se
+pueden leer por separado. Llamando `S` a las dimensiones que aportan a
+**los dos** vectores —declaradas por el protocolo y medidas en el
+registro—, la factorización es exacta:
+
+```
+                  h_S·e_S           ‖h_S‖       ‖e_S‖
+    cos(h, e) = ───────────────  ·  ───────  ·  ───────
+                 ‖h_S‖ · ‖e_S‖       ‖h‖         ‖e‖
+
+    cos = dirección · √cobertura · √explicación
+```
+
+| factor | fórmula | qué mide | de quién habla |
+|---|---|---|---|
+| dirección | cos(h_S, e_S) | si lo mirado concuerda | — |
+| cobertura | ‖h_S‖² / ‖h‖² | cuánto de la hipótesis se ha mirado | **la hipótesis** |
+| explicación | ‖e_S‖² / ‖e‖² | cuánto del paciente le habla la hipótesis | **el paciente** |
+
+El numerador no cambia al restringirse a `S`, porque fuera de `S` todo
+término se anula: una dimensión que nadie miró lleva `observado = 0` y un
+hallazgo no simbolizado lleva `esperado = 0`. Lo que cambia son las normas,
+y cada una por su lado — las no medidas suben ‖h‖, el resto sube ‖e‖.
+
+**Por qué tres y no dos.** Una identidad de dos factores
+—`cos = dirección · √cobertura`— es cierta sólo cuando el resto no
+simbolizado está vacío, y se comprobó en su día contra tres casos que no lo
+tenían. Con resto yerra:
+
+```
+caso                cos real     dir     cob    expl   2 factores   3 factores
+sin resto             0.8597  1.0000  0.7391  1.0000       0.8597       0.8597
++1 ajeno              0.7019  1.0000  0.7391  0.6667       0.8597       0.7019
++3 ajenos             0.5437  1.0000  0.7391  0.4000       0.8597       0.5437
+```
+
+El resto no es superficie de la hipótesis, así que no va en la cobertura;
+pero no desaparece por eso. Sale por el lado del paciente.
+
+**Por qué partirlo importa.** El número fundido no distingue dos estados
+clínicos distintos. `(dirección 1.00, cobertura 25 %)` es *nada la
+contradice todavía*; `(dirección 0.50, cobertura 100 %)` es *se ha puesto a
+prueba y aguanta a medias*. Fundidos pueden dar el mismo Φ.
+
+**Y nunca se vuelven a aplicar.** Los tres ya están dentro de `coseno`.
+Multiplicar cualquiera de ellos otra vez lo contaría dos veces. Se informan
+para poder leer *por qué* salió ese número; el orden entre candidatas lo
+decide el coseno completo.
+
+**Los tres factores se publican redondeados a cuatro decimales y el
+producto se calcula sin redondear.** Quien recomponga la multiplicación
+desde lo que ve en pantalla obtendrá un número ligeramente distinto del
+`coseno` que lee al lado: en el caso «+1 ajeno» de la tabla, `1.0000 ×
+√0.7391 × √0.6667` da **0.7020** y el coseno publicado es **0.7019**. No
+hay discrepancia real —la cobertura exacta es 0.7390618… y la explicación
+0.6666701…—, sólo el redondeo de la presentación. El número que manda es
+`coseno`.
+
+**`None` no es 0.** Cuando un factor no está definido se publica `None`,
+que es la misma distinción que `medir` hace al devolver `None` en vez de un
+Φ de 0, y la que `SIN_MEDIR` hace un nivel más abajo: no es ausencia, es
+vacío. Sin ninguna dimensión medida no hay ángulo entre h y e, de modo que
+la dirección no vale 0: no existe. La cobertura, en cambio, **sí** vale 0
+en ese caso, y es una afirmación cierta —no se ha mirado nada de lo que la
+hipótesis exige—. Un 0 sería una afirmación sobre el caso; `None` dice que
+no hay con qué preguntarlo.
+
 ---
 
 ## 4. Los tres polos salen de la geometría

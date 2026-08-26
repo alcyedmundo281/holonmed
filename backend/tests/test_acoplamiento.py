@@ -566,3 +566,130 @@ def test_phi_siempre_dentro_del_intervalo(medidor, skill):
         assert -1.0 <= res.phi <= 1.0
         assert -1.0 <= res.coseno <= 1.0
         assert 0.0 <= res.anclaje <= 1.0
+
+
+# --- Los tres factores de cos(h,e) -----------------------------------
+
+
+def test_los_tres_factores_reconstruyen_el_coseno_derivandolos_a_mano(medidor, skill):
+    """Deriva los tres factores desde los LR del protocolo, no desde `componentes`.
+
+    La derivación se escribe entera aquí —con los cocientes del
+    frontmatter y nada más— en vez de recorrer `acoplamiento.componentes`.
+    La diferencia no es de estilo. Un test que lee `componentes` recorre la
+    misma ruta que la implementación con otra redacción, y pasaría igual si
+    el vector que se descompone no fuera el que Φ usa. Coincidiendo las
+    tres columnas se afirman dos cosas a la vez: que la identidad es
+    cierta, y que el vector descompuesto es el que produjo `coseno`.
+    """
+    lipasa, amilasa, dolor, vomitos = (
+        math.log(26.6),
+        math.log(12.5),
+        math.log(2.1),
+        math.log(1.6),
+    )
+
+    # Dos dimensiones declaradas constan; dos nadie las miró. Y un hallazgo
+    # validado que el protocolo no explica, que es lo que separa la
+    # identidad de tres factores de la de dos.
+    res = medidor.medir(
+        skill,
+        [infon("Hiperlipasemia"), infon("Dolor epigastrico"), infon("Hematuria")],
+    )
+
+    medido = lipasa**2 + dolor**2
+    declarado = medido + amilasa**2 + vomitos**2
+    # El resto pesa la media cuadrática de lo que este caso sí explicó.
+    peso_resto = math.sqrt(medido / 2)
+
+    assert res.direccion == pytest.approx(1.0, abs=1e-4)
+    assert res.cobertura == pytest.approx(medido / declarado, abs=1e-4)
+    assert res.explicacion == pytest.approx(
+        medido / (medido + peso_resto**2), abs=1e-4
+    )
+
+    reconstruido = (
+        res.direccion * math.sqrt(res.cobertura) * math.sqrt(res.explicacion)
+    )
+    assert reconstruido == pytest.approx(res.coseno, abs=1e-4)
+
+
+def test_dos_factores_no_bastan_en_cuanto_hay_resto(medidor, skill):
+    """La identidad de dos factores yerra, y por eso el tercero existe.
+
+    `cos = dirección · √cobertura` se comprobó en su día contra tres casos
+    que no tenían resto no simbolizado, donde las dos identidades
+    coinciden. Se afirma aquí la divergencia para que nadie vuelva a
+    quitarla creyendo que simplifica.
+    """
+    sin_resto = medidor.medir(
+        skill, [infon("Hiperlipasemia"), infon("Dolor epigastrico")]
+    )
+    con_resto = medidor.medir(
+        skill,
+        [infon("Hiperlipasemia"), infon("Dolor epigastrico"), infon("Hematuria")],
+    )
+
+    dos = sin_resto.direccion * math.sqrt(sin_resto.cobertura)
+    assert dos == pytest.approx(sin_resto.coseno, abs=1e-4)
+
+    # Con resto, los dos factores dan el mismo número de antes —no ven el
+    # residuo— y el coseno real ha bajado.
+    dos_con_resto = con_resto.direccion * math.sqrt(con_resto.cobertura)
+    assert dos_con_resto == pytest.approx(dos, abs=1e-4)
+    assert con_resto.coseno < sin_resto.coseno - 0.1
+
+
+def test_un_hallazgo_ajeno_baja_la_explicacion_y_deja_la_cobertura_intacta(
+    medidor, skill
+):
+    """La propiedad, sin mirar dentro de la fórmula.
+
+    Un hallazgo que la hipótesis no explica es del lado del paciente: no
+    cambia cuánto de la hipótesis se ha mirado. Afirmarlo como propiedad
+    —y no comparando contra la fórmula— es lo que hace que quitar el
+    residuo del denominador tumbe el test.
+    """
+    base = [infon("Hiperlipasemia"), infon("Dolor epigastrico")]
+    sin = medidor.medir(skill, base)
+    con = medidor.medir(skill, base + [infon("Hematuria")])
+
+    assert con.explicacion < sin.explicacion
+    assert con.cobertura == pytest.approx(sin.cobertura, abs=1e-4)
+    assert con.direccion == pytest.approx(sin.direccion, abs=1e-4)
+
+
+def test_una_dimension_sin_mirar_baja_la_cobertura_y_deja_la_explicacion_intacta(
+    medidor, skill
+):
+    """La simétrica: lo no mirado es del lado de la hipótesis."""
+    poco = medidor.medir(skill, [infon("Hiperlipasemia")])
+    mas = medidor.medir(skill, [infon("Hiperlipasemia"), infon("Hiperamilasemia")])
+
+    assert mas.cobertura > poco.cobertura
+    assert mas.explicacion == pytest.approx(poco.explicacion, abs=1e-4)
+
+
+def test_los_factores_son_None_y_no_cero_cuando_no_hay_con_que_preguntarlos(
+    medidor, skill
+):
+    """Un 0 afirmaría algo sobre el caso; None dice que no hay pregunta.
+
+    Es la misma distinción que `medir` hace al devolver None en vez de un
+    Φ de 0, y la que `SIN_MEDIR` hace un nivel más abajo. Sin ninguna
+    dimensión medida no hay ángulo entre h y e: la dirección no es 0, no
+    existe. La cobertura sí es 0, y es una afirmación cierta —no se ha
+    mirado nada de lo que la hipótesis exige—, de modo que 0 y None no se
+    reparten por comodidad sino por lo que cada uno dice.
+    """
+    vacio = medidor.medir(skill, [])
+    assert vacio.direccion is None
+    assert vacio.cobertura == 0.0
+    assert vacio.explicacion is None
+
+    # Con sólo un hallazgo ajeno hay paciente pero no hay nada de la
+    # hipótesis medido: sigue sin haber ángulo, y ya hay algo que explicar.
+    ajeno = medidor.medir(skill, [infon("Hematuria")])
+    assert ajeno.direccion is None
+    assert ajeno.cobertura == 0.0
+    assert ajeno.explicacion == 0.0
