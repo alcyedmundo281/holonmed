@@ -286,21 +286,30 @@ class CrystallizationPipeline:
             skill_version=triaje.version,
         )
 
-        # --- ETAPA 2: PASADA 1, la extracción genérica ----------------
-        # Sin protocolo, porque el protocolo es lo que se está eligiendo.
-        # Y sin interpretar números: los cortes son por protocolo y sin
-        # ellos el modelo se los inventa, de modo que un corte inventado
-        # aquí no desvía una hipótesis sino la competencia entera.
+        # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
+        # El interruptor gobierna la FORMA del tic y no sólo quién vota.
+        # Encendido: se lee primero con el vocabulario genérico, porque el
+        # protocolo es lo que se está eligiendo y no se puede leer con él.
+        # Apagado: se lee con el del triaje y una sola vez, que es como
+        # corría antes del ciclo 7 — apagar la inversión no puede costar
+        # la llamada de más que la inversión necesita.
+        #
+        # La competencia mide en los dos modos. Apagada, mide sobre el
+        # conjunto que extrajo el triaje, que es exactamente lo que medía
+        # antes; la lectura neutral llega con la inversión.
+        decide = self.settings.abduccion_decide
         generico = self.skills.cargar_o_defecto(None)
-        extraidos, resumen = await self._extraer(texto, generico, generica=True)
+        base = generico if decide else triaje
+
+        extraidos, resumen = await self._extraer(texto, base, generica=decide)
         resultado.resumen = resumen
         if not extraidos:
             logger.info("Sin hallazgos extraíbles en el tic")
             return resultado
 
-        hints_genericos = generico.hints_snomed()
+        hints_base = base.hints_snomed()
         for crudo in extraidos:
-            infon = await self._validar_hallazgo(crudo, texto, generico, hints_genericos)
+            infon = await self._validar_hallazgo(crudo, texto, base, hints_base)
             if infon:
                 resultado.infones.append(infon)
 
@@ -324,7 +333,11 @@ class CrystallizationPipeline:
         logger.info("Tic para %s — hipótesis: %s", holon.paciente_id, skill.nombre)
 
         # --- ETAPA 4: PASADA 2, la deducción sobre el texto -----------
-        if skill.nombre != generico.nombre:
+        # La condición es «la hipótesis difiere de aquello con lo que ya
+        # se leyó», y vale en los dos modos: apagada, `base` ES el triaje
+        # y la ganadora también, de modo que no hay nada que releer y no
+        # hace falta consultar el interruptor otra vez.
+        if skill.nombre != base.nombre:
             await self._segunda_pasada(texto, skill, resultado)
 
         # --- ETAPA 5: CLASIFICACIÓN ------------------------------------

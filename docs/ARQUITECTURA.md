@@ -13,8 +13,8 @@ ruido en vez de dejarlo pasar.
 
 ```mermaid
 flowchart TD
-    A[Narrativa clínica] --> B{Triaje<br/>ya no decide: se mide}
-    B -.->|red si el grafo no propone| C[Protocolo de respaldo]
+    A[Narrativa clínica] --> B{Triaje<br/>decide hoy; se mide contra el grafo}
+    B --> C[Protocolo activo]
 
     A --> D[Pasada 1: extracción genérica<br/>sin interpretar números]
     D -->|hallazgos en bruto| E{Capa 0: skill-hints}
@@ -40,7 +40,8 @@ flowchart TD
     K -->|resto| R
 
     V --> CA[Competencia abductiva<br/>VETO · α>0 · argmax cos]
-    CA -->|hipótesis| P2[Pasada 2: relectura<br/>con los hints de la ganadora]
+    CA -.->|mide: triaje_coincide| M
+    CA -.->|si ABDUCCION_DECIDE| P2[Pasada 2: relectura<br/>con los hints de la ganadora]
     CA -.->|todas vetadas| TV[Ninguna hipótesis en pie]
     P2 --> M
 
@@ -51,12 +52,15 @@ flowchart TD
     V --> G2[Grafo del paciente]
 ```
 
-## La competencia abductiva, que ahora decide
+## La competencia abductiva, construida y esperando su cifra
 
-Hasta el ciclo 7 el protocolo activo lo elegía un prompt de triaje, en la
-primera etapa, y todo lo demás colgaba de esa conjetura: la validación de
-tres capas, el veto, los cocientes con su cita y el coseno. Era la pieza
-menos medida del sistema y estaba en el sitio más temprano.
+El protocolo activo lo elige un prompt de triaje, en la primera etapa, y
+todo lo demás cuelga de esa conjetura: la validación de tres capas, el veto,
+los cocientes con su cita y el coseno. Es la pieza menos medida del sistema
+y está en el sitio más temprano.
+
+Desde el ciclo 7 existe la alternativa entera —la inversión, con sus dos
+pasadas y su veto por candidata— y **viene apagada**. Por qué, más abajo.
 
 Peirce lo llamaría abducción: *se observa el hecho sorprendente C; si A
 fuera verdadera, C sería de curso natural; luego hay razón para sospechar
@@ -64,23 +68,45 @@ A*. Un coseno alto es exactamente eso, así que **elegir la A que maximiza
 `cos(h,e)` es la regla abductiva y no una analogía de ella** — y el grafo
 del paciente puede proponer las candidatas sin preguntarle nada al modelo.
 
-La competencia elige ahora la hipótesis, y el triaje sigue corriendo para
-medirse contra ella: `triaje_coincide` se registra en cada tic y
-`TicRepo.acuerdo_del_triaje()` lo agrega sobre el histórico. Dejar de
-calcularlo sería quedarse sin la prueba justo cuando empieza a importar.
+**Antes de sustituir el prompt por esa regla hay que saber cuánto se
+equivoca.** Ésa es la precondición del diseño y hoy no está satisfecha: la
+cifra sale de `TicRepo.acuerdo_del_triaje()` sobre el histórico, y no hay
+histórico. Por eso la inversión está construida y apagada.
 
-**Sobre la precondición.** El diseño decía «antes de sustituir el prompt por
-esa regla hay que saber cuánto se equivoca», y esa cifra necesita histórico
-que hoy no existe. Por eso la inversión tiene interruptor:
-`HOLONMED_ABDUCCION_DECIDE=false` devuelve la decisión al triaje **sin
-apagar la medición** — los dos siguen corriendo y el acuerdo se sigue
-registrando. Un centro que prefiera medir antes de cambiar de mecanismo
-puede hacerlo sin revertir código.
+```
+HOLONMED_ABDUCCION_DECIDE=false   (defecto) decide el triaje, mide el grafo
+HOLONMED_ABDUCCION_DECIDE=true              decide el grafo
+```
+
+Apagada **no se pierde la medición**, que es el punto: el triaje y la
+competencia corren los dos en cualquiera de los dos modos, y
+`triaje_coincide` se registra en cada tic. De ahí sale el número que
+autoriza encenderla. Un interruptor que apagara también la medida haría
+imposible justificar nunca el cambio.
+
+**Y apagada cuesta lo de antes.** El interruptor gobierna la forma del tic y
+no sólo quién vota: apagada se lee una vez, con el protocolo del triaje, y no
+hay segunda pasada que dar; encendida se lee primero con el vocabulario
+genérico —porque el protocolo es lo que se está eligiendo— y se relee después
+con el de la ganadora. El modo conservador tiene que ser también el barato, o
+nadie lo elegiría por las razones correctas.
+
+|  | apagada (defecto) | encendida |
+|---|---|---|
+| decide | el triaje | el grafo |
+| lecturas | 1, con el protocolo del triaje | 2: genérica y de la ganadora |
+| competencia | mide | mide y decide |
+| `triaje_coincide` | se registra | se registra |
+| todas vetadas | no aplica | termina el tic y lo dice |
+
+El defecto está fijado como test —`test_la_inversion_viene_apagada_y_es_una_decision`—
+para que subirlo sea algo que alguien tenga que defender, y no un descuido.
 
 ### Las dos pasadas
 
-Φ necesita infones, los infones necesitan la skill, y la skill es lo que se
-está eligiendo. El bloqueo se rompe leyendo dos veces:
+Corren cuando la inversión está encendida. Φ necesita infones, los infones
+necesitan la skill, y la skill es lo que se está eligiendo. El bloqueo se
+rompe leyendo dos veces:
 
 ```
 pasada 1   extracción con el vocabulario genérico  -> conjunto COMÚN

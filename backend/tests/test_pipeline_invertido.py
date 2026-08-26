@@ -61,10 +61,19 @@ class IndexEco:
         return {self.codigo} if list(concepto_ids) else set()
 
 
-def construir(tmp_path, llm, index, **protocolos):
+def construir(tmp_path, llm, index, decide=True, **protocolos):
+    """`decide` se pasa siempre y no se hereda del defecto.
+
+    El defecto es False —la inversión viene apagada hasta que haya
+    histórico con el que justificarla— así que un test de la inversión que
+    no lo dijera estaría probando el modo contrario sin enterarse. Decirlo
+    en cada caso también documenta cuál se está ejercitando.
+    """
     for nombre, texto in protocolos.items():
         (tmp_path / f"{nombre}.md").write_text(texto, encoding="utf-8")
-    settings = Settings(skills_dir=tmp_path, docs_dir=tmp_path / "docs")
+    settings = Settings(
+        skills_dir=tmp_path, docs_dir=tmp_path / "docs", abduccion_decide=decide
+    )
     return CrystallizationPipeline(
         llm=llm,
         skills=SkillManager(settings),
@@ -163,17 +172,29 @@ class LLMPorPasada(LLMFalso):
     interpretar números y el del protocolo se los da.
     """
 
-    def __init__(self, generica, especifica):
+    def __init__(self, generica, especifica, triaje="general_triage"):
         super().__init__()
         self._generica = generica
         self._especifica = especifica
+        self._triaje = triaje
         self.pasadas: list[str] = []
+        self.prompts: list[str] = []
+
+    async def elegir_opcion(self, prompt, *, opciones_validas, defecto, **kwargs):
+        """Deja que el triaje elija un protocolo DISTINTO del genérico.
+
+        Con el triaje eligiendo siempre `general_triage`, «leer con el del
+        triaje» y «leer con el genérico» son la misma cosa y el modo
+        apagado no se puede distinguir del encendido a medias.
+        """
+        return self._triaje if self._triaje in opciones_validas else defecto
 
     async def generar_json(self, prompt, **kwargs):
         if "Auditor Médico" in prompt:
             return {"valido": True, "analisis": "ok", "confianza": 92}
         generica = "LOS NÚMEROS NO SE INTERPRETAN" in prompt
         self.pasadas.append("generica" if generica else "especifica")
+        self.prompts.append(prompt)
         return self._generica if generica else self._especifica
 
 
@@ -301,17 +322,13 @@ async def test_el_interruptor_devuelve_la_decision_al_triaje(tmp_path):
     vuelve a decidir y la competencia sigue corriendo: sin eso, apagar la
     inversión costaría también la medida que justifica encenderla.
     """
-    for nombre, texto in (("general_triage", TRIAJE_QUE_ACUNA), ("citada", CITADA)):
-        (tmp_path / f"{nombre}.md").write_text(texto, encoding="utf-8")
-    settings = Settings(
-        skills_dir=tmp_path, docs_dir=tmp_path / "docs", abduccion_decide=False
-    )
-    pipeline = CrystallizationPipeline(
-        llm=LLMFalso(),
-        skills=SkillManager(settings),
-        validador=OntologyValidator(IndexEco(), LLMFalso(), settings),
-        verificador=ClinicalVerifier(LLMFalso(), settings),
-        settings=settings,
+    pipeline = construir(
+        tmp_path,
+        LLMFalso(),
+        IndexEco(),
+        decide=False,
+        general_triage=TRIAJE_QUE_ACUNA,
+        citada=CITADA,
     )
     resultado = await pipeline.ejecutar(
         "Temperatura 38.5", HolonPaciente(paciente_id="t")
@@ -321,3 +338,84 @@ async def test_el_interruptor_devuelve_la_decision_al_triaje(tmp_path):
     # La competencia sigue midiendo, que es el punto.
     assert resultado.ganadora_abductiva == "citada"
     assert resultado.triaje_coincide is False
+
+
+def test_la_inversion_viene_apagada_y_es_una_decision(tmp_path):
+    """El defecto es `False`, y eso se fija aquí porque es deliberado.
+
+    No está a medias: está esperando su cifra. El diseño pone la
+    precondición —«antes de sustituir el prompt por esa regla hay que
+    saber cuánto se equivoca»— y esa cifra sale de `acuerdo_del_triaje()`
+    sobre el histórico, que hoy no existe. Encenderla sin ella sería
+    cambiar el mecanismo que elige el diagnóstico apoyándose en una
+    intuición, que es justo lo que el paso 2 existía para evitar.
+
+    Se fija como test y no como comentario para que subirla sea un cambio
+    que alguien tenga que defender, y no un descuido.
+    """
+    assert Settings(skills_dir=tmp_path).abduccion_decide is False
+
+
+def test_apagada_cuesta_una_sola_lectura(tmp_path):
+    """El modo conservador tiene que ser también el barato.
+
+    Apagar la inversión no puede costar la llamada de más que la inversión
+    necesita: sin ella no hay segunda pasada que dar, y la primera se hace
+    ya con el protocolo del triaje. La competencia sigue midiendo, sobre
+    ese mismo conjunto, que es exactamente lo que medía antes del ciclo 7.
+    """
+    import asyncio
+
+    # El triaje elige «citada», que NO es el protocolo genérico: si no,
+    # leer con el del triaje y leer con el genérico serían lo mismo y el
+    # modo apagado no se distinguiría de un encendido a medias.
+    llm = LLMPorPasada(
+        generica=extraccion_de("Fiebre", "38.5 grados"),
+        especifica=extraccion_de("Tos", "tos seca"),
+        triaje="citada",
+    )
+    pipeline = construir(
+        tmp_path,
+        llm,
+        IndexEco(),
+        decide=False,
+        general_triage=TRIAJE_QUE_ACUNA,
+        citada=CITADA,
+    )
+    resultado = asyncio.run(
+        pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    )
+
+    # Una sola lectura, y con el protocolo del triaje.
+    assert llm.pasadas == ["especifica"]
+    # «Tos» sólo la declara `citada`; el genérico de esta arena declara
+    # únicamente «Fiebre». Es lo que distingue con qué se leyó.
+    assert "«Tos»" in llm.prompts[0]
+    assert resultado.skill_activa == "citada"
+    # Y la medición no se pierde: el grafo compitió igual.
+    assert resultado.ganadora_abductiva == "citada"
+    assert resultado.triaje_coincide is True
+
+
+def test_encendida_cuesta_dos_y_la_primera_es_la_generica(tmp_path):
+    """La simétrica: la inversión paga la deducción, y se ve cuál es cuál."""
+    import asyncio
+
+    llm = LLMPorPasada(
+        generica=extraccion_de("Fiebre", "38.5 grados"),
+        especifica=extraccion_de("Tos", "tos seca"),
+    )
+    pipeline = construir(
+        tmp_path,
+        llm,
+        IndexEco(),
+        decide=True,
+        general_triage=TRIAJE_QUE_ACUNA,
+        citada=CITADA,
+    )
+    resultado = asyncio.run(
+        pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    )
+
+    assert llm.pasadas == ["generica", "especifica"]
+    assert resultado.skill_activa == "citada"

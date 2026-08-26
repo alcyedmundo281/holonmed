@@ -340,13 +340,23 @@ Cuerpo.
 
 @pytest.fixture
 def arena(tmp_path):
-    """El mismo entorno, más candidatas que el grafo puede proponer."""
-    (tmp_path / "general_triage.md").write_text(SKILL, encoding="utf-8")
-    settings = Settings(skills_dir=tmp_path, docs_dir=tmp_path / "docs")
+    """El mismo entorno, más candidatas que el grafo puede proponer.
 
-    def construir(**protocolos):
+    `decide` se declara en cada caso porque el defecto es `False`: la
+    inversión viene apagada hasta que haya histórico que la justifique, y
+    un test que no lo dijera estaría probando el modo contrario sin
+    enterarse.
+    """
+    (tmp_path / "general_triage.md").write_text(SKILL, encoding="utf-8")
+
+    def construir(decide=True, **protocolos):
         for nombre, texto in protocolos.items():
             (tmp_path / f"{nombre}.md").write_text(texto, encoding="utf-8")
+        settings = Settings(
+            skills_dir=tmp_path,
+            docs_dir=tmp_path / "docs",
+            abduccion_decide=decide,
+        )
         return CrystallizationPipeline(
             llm=LLMFalso(),
             skills=SkillManager(settings),
@@ -361,7 +371,7 @@ def arena(tmp_path):
 
 
 async def test_la_competencia_decide_y_el_triaje_pasa_a_medirse(arena):
-    """La inversión: la hipótesis la elige el grafo, no el prompt.
+    """Con la inversión encendida, la hipótesis la elige el grafo.
 
     Este test decía lo contrario y era correcto entonces: mientras la
     competencia sólo medía, que `skill_activa` cambiara habría sido una
@@ -386,7 +396,7 @@ async def test_la_competencia_decide_y_el_triaje_pasa_a_medirse(arena):
 
 async def test_un_protocolo_forzado_gana_al_grafo(arena):
     """Una orden explícita no la discute ni el grafo ni el prompt."""
-    pipeline = arena(citada=CITADA)
+    pipeline = arena(decide=True, citada=CITADA)
     resultado = await pipeline.ejecutar(
         "Temperatura 38.5",
         HolonPaciente(paciente_id="t"),
