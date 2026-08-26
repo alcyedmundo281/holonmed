@@ -22,12 +22,20 @@ from holonmed.models import (
     TrayectoriaDeLaCreencia,
 )
 
+# El protocolo genérico de las pruebas declara su corte de temperatura,
+# igual que el  real. Sin él, la pasada genérica no puede
+# volver concepto un «38.5 °C» —no tendría con qué— y la fixture dejaría
+# de ejercitar el validador, que es lo que estos tests miran.
 SKILL = """# SKILL: PRUEBA
 
 {
     "name": "Condición de prueba",
     "modelo_bayesiano": {"probabilidad_base": 0.1},
-    "signDetected": [{"name": "Fiebre", "snomed_id": "386661006", "bayes_lr": 3.0}]
+    "signDetected": [{"name": "Fiebre", "snomed_id": "386661006", "bayes_lr": 3.0}],
+    "criterios_laboratorio": {"reglas": [
+        {"parametro": "Temperatura", "corte_superior": 38.0,
+         "termino_si_alto": "Fiebre", "snomed_id": "386661006"}
+    ]}
 }
 """
 
@@ -289,6 +297,13 @@ signos:
   - nombre: Fiebre
     lr: 3.0
     fuente: "Wagner JM et al, JAMA 1996"
+# Su corte, como lo declara el general_triage real: sin él, la pasada
+# genérica no puede volver concepto un «38.5 °C» y la fixture se queda
+# sin hallazgos que darle a la competencia.
+laboratorio:
+  - parametro: Temperatura
+    corte_superior: 38.0
+    termino_si_alto: Fiebre
 clasificacion:
   nombre: Criterio de prueba
   fuente: "criterio de prueba"
@@ -345,22 +360,41 @@ def arena(tmp_path):
     return construir
 
 
-async def test_la_competencia_mide_y_no_decide(arena):
-    """La invariante del paso: el protocolo que se USA no cambia.
+async def test_la_competencia_decide_y_el_triaje_pasa_a_medirse(arena):
+    """La inversión: la hipótesis la elige el grafo, no el prompt.
 
-    Si esto cae, el paso dejó de ser medición y pasó a ser una inversión
-    del pipeline a medias — que es otra conversación y otro riesgo.
+    Este test decía lo contrario y era correcto entonces: mientras la
+    competencia sólo medía, que `skill_activa` cambiara habría sido una
+    inversión a medias. Ahora la inversión es el paso, así que la
+    invariante se da la vuelta — y con ella la razón de que el triaje
+    siga corriendo: comparar lo que dice el prompt con lo que elige el
+    grafo es la cifra que justifica haberlo sustituido, y dejar de
+    calcularla sería quedarse sin la prueba justo cuando empieza a
+    importar.
     """
     pipeline = arena(citada=CITADA)
     resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
 
-    assert resultado.skill_activa == "general_triage"
     assert resultado.ganadora_abductiva == "citada"
+    assert resultado.skill_activa == "citada"
+    # El triaje se sigue midiendo, y aquí discrepa.
     assert resultado.triaje_coincide is False
-    # Y lo que se publica sigue saliendo de la skill del triaje.
-    assert resultado.acoplamiento is None or (
-        resultado.acoplamiento.hipotesis != "Condicion citada"
+    # Y lo que se publica sale ya de la ganadora.
+    assert resultado.acoplamiento is not None
+    assert resultado.acoplamiento.hipotesis == "Condicion citada"
+
+
+async def test_un_protocolo_forzado_gana_al_grafo(arena):
+    """Una orden explícita no la discute ni el grafo ni el prompt."""
+    pipeline = arena(citada=CITADA)
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5",
+        HolonPaciente(paciente_id="t"),
+        skill_forzada="general_triage",
     )
+
+    assert resultado.ganadora_abductiva == "citada"
+    assert resultado.skill_activa == "general_triage"
 
 
 async def test_la_competencia_guarda_a_las_perdedoras(arena):
@@ -450,7 +484,16 @@ async def test_la_competencia_corre_sobre_el_paciente_de_antes_de_clasificar(tmp
         verificador=ClinicalVerifier(LLMFalso(), settings),
         settings=settings,
     )
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    # Se fuerza el protocolo que acuña para reproducir el escenario: con
+    # la inversión, la clasificación corre después de competir y sobre la
+    # ganadora, de modo que el orden peligroso ya no existe por
+    # construcción. El test lo fija de todas formas — que una garantía sea
+    # estructural hoy no impide que un refactor la deshaga mañana.
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5",
+        HolonPaciente(paciente_id="t"),
+        skill_forzada="general_triage",
+    )
 
     acunado = [i for i in resultado.infones if i.derivado_de]
     assert acunado, "la fixture ya no sirve: el triaje tiene que acuñar algo"

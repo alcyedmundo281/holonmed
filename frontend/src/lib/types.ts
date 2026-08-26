@@ -326,6 +326,15 @@ export interface ResultadoTic {
 
   /** `null` si la creencia sigue siendo operable. */
   reapertura: ReaperturaDeIndagacion | null;
+
+  /**
+   * Se rellena cuando el grafo propuso candidatas y el veto las retiró
+   * TODAS. No es «no encontré hipótesis»: es que todo lo que este
+   * paciente sugiere es estructuralmente imposible, y eso o pide ampliar
+   * el ámbito de los protocolos o dice que los antecedentes están mal.
+   * Es un estado clínico propio y se muestra como tal.
+   */
+  todas_vetadas: string | null;
 }
 
 export interface Paciente {

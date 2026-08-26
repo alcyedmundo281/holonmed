@@ -262,6 +262,19 @@ export default function App() {
                         se leen JUNTOS —probabilidad y acoplamiento— y nunca
                         uno en lugar del otro. La duda cierra, porque es lo
                         que queda por hacer. */}
+                    {/* Ninguna hipótesis en pie. No es «no encontré
+                        nada»: es que todo lo que el grafo propone para
+                        este paciente es imposible, y eso o pide ampliar
+                        el ámbito o dice que los antecedentes están mal. */}
+                    {tic.todas_vetadas && (
+                      <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          Ninguna hipótesis en pie
+                        </h3>
+                        <p className="text-sm text-amber-900">{tic.todas_vetadas}</p>
+                      </section>
+                    )}
+
                     {tic.veredicto_declarado && (
                       <VerdictPanel veredicto={tic.veredicto_declarado} />
                     )}

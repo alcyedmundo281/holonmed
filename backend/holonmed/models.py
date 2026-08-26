@@ -613,6 +613,16 @@ class ResultadoTic(BaseModel):
     # dejó de ser operable. None cuando no hay duda que reabrir.
     reapertura: ReaperturaDeIndagacion | None = None
 
+    todas_vetadas: str | None = Field(
+        default=None,
+        description=(
+            'Se rellena cuando el grafo propuso candidatas y el veto las retiró '
+            'TODAS. No es «no encontré hipótesis»: es que todo lo que este '
+            'paciente sugiere es estructuralmente imposible, y eso o pide '
+            'ampliar el ámbito o dice que los antecedentes están mal.'
+        ),
+    )
+
     aviso_competencia: str | None = Field(
         default=None,
         description=(

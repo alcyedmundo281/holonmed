@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     # extracción.
     formato_protocolo: str = "prosa"
 
+    # --- Quién elige la hipótesis ------------------------------------
+    # True: la elige la competencia abductiva sobre el grafo del paciente.
+    # False: la elige el prompt de triaje y la competencia sólo mide, que
+    # es como corría hasta el ciclo 7.
+    #
+    # El interruptor existe porque el diseño pone una precondición que hoy
+    # NO está satisfecha: «antes de sustituir el prompt por esa regla hay
+    # que saber cuánto se equivoca». Esa cifra la produce
+    # `TicRepo.acuerdo_del_triaje()` sobre el histórico, y hasta que haya
+    # histórico suficiente no hay con qué decidir. Un centro que prefiera
+    # medir primero pone esto en False y no pierde la medición: el triaje
+    # y la competencia siguen corriendo los dos, y `triaje_coincide` se
+    # sigue registrando en cualquiera de los dos modos.
+    abduccion_decide: bool = True
+
     # --- Facturación --------------------------------------------------
     # Qué catálogo de precios se usa. Cada hospital o aseguradora carga el
     # suyo con scripts/importar_tarifario.py; 'demo' trae importes
