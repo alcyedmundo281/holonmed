@@ -399,6 +399,81 @@ modo que **un caso a medio estudiar da armonía parcial, no desarmonía**. Que
 es exactamente lo que es. No hizo falta programar esa distinción: la
 geometría la produce.
 
+### 9.1 Quién lee la duda, y qué abre
+
+`Acoplamiento.duda` existía desde el primer día y **nadie la leía**. El
+sistema calculaba que su hipótesis había dejado de funcionar como regla de
+acción y terminaba el tic igual que si todo hubiera encajado. `core/duda.py`
+es lo que la consume, y la etapa 8 del pipeline lo que la llama.
+
+**No es un veto.** Una exclusión absoluta dice que el diagnóstico es
+imposible y termina la pregunta; la duda dice que el argumento dejó de
+sostenerse con lo que hay, y la reabre. Tampoco resuelve nada dentro del
+tic: la deducción produce preguntas o una orden de prueba, y la respuesta
+llega en otro tic. La reapertura es una **salida accionable**, no un
+recálculo.
+
+**La duda tiene tres clases, y se resuelven por caminos opuestos.** Esto es
+lo que se ganó al partir cos(h,e) en tres (§3.4): el número fundido dice que
+la creencia no funciona y no dice por qué.
+
+| causa | qué pasó | qué hacer |
+|---|---|---|
+| **dirección** | lo que se miró **disiente** | no se arregla mirando más: cambiar de hipótesis |
+| **cobertura** | casi nada se ha puesto a prueba | indagar, y `indagacion` ya dice por dónde |
+| **explicación** | no explica al paciente | volver a la abducción: lo que falta está fuera |
+
+La tercera es la forma que toma el sesgo de anclaje —la hipótesis puede ser
+cierta y no ser la pregunta— y es el polo que Φ define como Φ = 0: argumento
+internamente ordenado pero aislado.
+
+**Cuál de los tres manda se decide en la escala del producto.** Como
+`cos = dirección · √cobertura · √explicación`, cada factor lastra con
+`dirección`, `√cobertura` y `√explicación`, y se compara en esa escala.
+No es un tecnicismo: con dirección 0.2533 y cobertura 0.2108, el número
+crudo menor es la cobertura y el que más lastra es la dirección —«mira
+más» frente a «esto no encaja»—, que son consejos clínicos opuestos.
+
+La dirección entra **con su signo** y no en valor absoluto. Una dirección
+negativa es el registro contradiciendo, la duda más fuerte que hay, y ser la
+menor de las tres es exactamente lo que le toca.
+
+Un factor `None` no compite: no es un cero disfrazado, dice que ese factor
+no está definido, y un factor indefinido no puede ser la causa de nada.
+
+**La vuelta a la abducción no se recalcula.** La competencia ya corrió en la
+etapa 3b sobre el mismo paciente, así que la reapertura sólo tiene que decir
+a dónde apunta. Si la competencia prefiere la hipótesis que ya se estaba
+usando, no hay alternativa que ofrecer y no se inventa una.
+
+### 9.2 `phi_legible`: la duda leía el número equivocado
+
+`duda` leía `phi`, y para un protocolo que declara categorías y no cocientes
+`phi` vale 0 porque no hay vector ponderado que proyectar. Medido, sobre
+apendicitis con tres signos a favor de cuatro:
+
+```
+phi            = 0.0
+phi_categorico = 0.8513
+veredicto      = ARMONIA
+duda           = True
+```
+
+ARMONIA y duda a la vez, sobre el mismo objeto. Las bandas ya sabían leer el
+categórico cuando la ponderada no existe, pero lo hacían con una variable
+local de `medir`, de modo que ninguna propiedad del modelo podía hacer lo
+mismo. `phi_legible` le da nombre a ese número.
+
+Y explica por qué la propiedad llevaba tanto sin consumirse: MDS, Atlanta,
+Duke y ACR/EULAR declaran categorías, así que la duda saltaba siempre en la
+mayor parte del índice. Cablear una reapertura a la versión anterior habría
+reabierto la indagación en todos los protocolos categóricos, acoplados o no.
+
+**El categórico es el suplente, no el preferido.** Cuando existen las dos
+lecturas manda la ponderada: un solo vómito —LR 1.6— da Φ ponderado 0.1092 y
+Φ categórico 0.4915, porque la lectura de ±1 cuenta ese vómito igual que una
+lipasa con LR de 26.6.
+
 ---
 
 ## 10. Comportamiento verificado

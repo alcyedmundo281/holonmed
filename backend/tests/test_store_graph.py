@@ -489,6 +489,68 @@ def test_el_acoplamiento_y_el_veredicto_sobreviven_al_viaje(entorno):
     assert leido["acoplamiento"]["componentes"][0]["dimension"] == "Fiebre"
 
 
+PROTOCOLO_DE_DOS_SIGNOS = """---
+titulo: Apendicitis
+signos:
+  - nombre: Fiebre
+    lr: 3.0
+    fuente: y
+  - nombre: Leucocitosis
+    lr: 4.0
+    fuente: y
+---
+
+Cuerpo.
+"""
+
+
+def test_la_reapertura_de_la_indagacion_sobrevive_al_viaje(entorno):
+    """Un tic que terminó en duda no puede leerse mañana como concluido.
+
+    La reapertura es la salida accionable del tic: de qué clase fue el
+    fallo, hacia dónde indagar y qué prefiere la abducción. Sin
+    persistirla, la duda sería una línea de log legible sólo por quien
+    estuviera mirando la consola, que es exactamente el argumento con el
+    que se persistieron el acoplamiento y la competencia.
+    """
+    from holonmed.core.acoplamiento import MedidorDeAcoplamiento
+    from holonmed.core.duda import ReabridorDeIndagacion
+    from holonmed.core.skills import Skill
+
+    protocolo = Skill("apendicitis", PROTOCOLO_DE_DOS_SIGNOS)
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    r = _resultado_con_competencia()
+    # Una dimensión declarada sin mirar y un hallazgo que nadie explica:
+    # Φ cae y el tic tiene que decirlo.
+    r.infones = [_infon("Coluria", None, codigo="T:9")]
+    r.acoplamiento = MedidorDeAcoplamiento().medir(protocolo, r.infones)
+    r.reapertura = ReabridorDeIndagacion().reabrir(
+        r.acoplamiento, r.ganadora_abductiva
+    )
+    assert r.reapertura is not None
+
+    leido = tics.tic_completo(tics.guardar(r))
+    assert leido["reapertura"]["hipotesis"] == r.reapertura.hipotesis
+    assert leido["reapertura"]["causa"] == r.reapertura.causa.value
+    assert leido["reapertura"]["motivo"]
+    assert leido["reapertura"]["traza"]
+
+
+def test_un_tic_sin_duda_guarda_NULL_y_no_una_reapertura_vacia(entorno):
+    """None y un objeto vacío dirían cosas distintas al leerlos mañana."""
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    r = _resultado_con_competencia()
+    assert r.reapertura is None
+
+    leido = tics.tic_completo(tics.guardar(r))
+    assert leido["reapertura"] is None
+
+
 # --- La cifra que el paso 2 buscaba ------------------------------------
 
 

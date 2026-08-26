@@ -402,6 +402,57 @@ class Acoplamiento(BaseModel):
         return self.phi_legible < 0.20
 
 
+class CausaDeLaDuda(str, Enum):
+    """De qué clase es la duda, según qué factor de cos(h,e) la produjo.
+
+    No son tres intensidades de lo mismo: son tres situaciones clínicas
+    distintas, y cada una se resuelve por un camino distinto. Poder
+    nombrarlas es lo que se ganó al partir el coseno en tres — el número
+    fundido dice que la creencia no funciona y no dice por qué.
+    """
+
+    DIRECCION = "direccion"      # lo que se miró disiente: cambiar de hipótesis
+    COBERTURA = "cobertura"      # casi nada se ha puesto a prueba: indagar
+    EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
+
+
+class ReaperturaDeIndagacion(BaseModel):
+    """Lo que la duda abre cuando la creencia deja de ser operable.
+
+    Peirce cierra el ciclo aquí: la creencia falsa genera duda y por eso
+    motiva nueva indagación. Hasta ahora `Acoplamiento.duda` existía y
+    nadie la leía, de modo que el sistema calculaba que su hipótesis había
+    dejado de funcionar y seguía adelante sin decirlo.
+
+    No decide nada ni retira la hipótesis: eso es el veto, y es otra cosa.
+    Dice que el argumento dejó de sostenerse, de qué clase es el fallo, y
+    hacia dónde mirar.
+    """
+
+    hipotesis: str
+    phi: float = Field(description="El Φ legible que quedó bajo el mínimo")
+    causa: CausaDeLaDuda | None = Field(
+        default=None,
+        description=(
+            "None cuando no hay ningún factor definido con el que responder: "
+            "no es que ninguno falle, es que no hay con qué preguntarlo."
+        ),
+    )
+    motivo: str = ""
+    preguntas: list[str] = Field(
+        default_factory=list,
+        description="Hacia dónde indagar, heredado de `Acoplamiento.indagacion`",
+    )
+    alternativa: str | None = Field(
+        default=None,
+        description=(
+            "La hipótesis que la competencia abductiva prefiere, si difiere de "
+            "la que se estaba usando. Es la vuelta a la abducción hecha número."
+        ),
+    )
+    traza: list[str] = Field(default_factory=list)
+
+
 class CandidataAbductiva(BaseModel):
     """Un protocolo que compitió por explicar a este paciente, y con qué.
 
@@ -520,6 +571,10 @@ class ResultadoTic(BaseModel):
         default=None,
         description="None si no hubo competencia con la que comparar",
     )
+    # El cierre del bucle: qué abre la duda cuando Φ dice que la creencia
+    # dejó de ser operable. None cuando no hay duda que reabrir.
+    reapertura: ReaperturaDeIndagacion | None = None
+
     aviso_competencia: str | None = Field(
         default=None,
         description=(
