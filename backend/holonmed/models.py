@@ -356,14 +356,50 @@ class Acoplamiento(BaseModel):
         )
 
     @property
+    def phi_legible(self) -> float:
+        """El Φ que este protocolo permite leer de verdad.
+
+        `phi` es la lectura ponderada, y para un protocolo que declara
+        categorías y no cocientes vale 0 porque no hay vector que
+        proyectar. Ese 0 no dice «ortogonal»: dice «aquí no se mide así».
+        Las bandas ya lo saben —leen el categórico cuando la ponderada no
+        existe— pero lo hacían con una variable local de `medir`, de modo
+        que ninguna propiedad del modelo podía hacer lo mismo.
+
+        El discriminante es `cobertura is None`, que es el que la
+        competencia abductiva ya usa para decidir en qué unidad compara:
+        vale None exactamente cuando el protocolo no declara ni un
+        likelihood ratio.
+        """
+        if self.cobertura is None and self.phi_categorico is not None:
+            return self.phi_categorico
+        return self.phi
+
+    @property
     def duda(self) -> bool:
         """Hay duda cuando la creencia ha perdido su armonía con el contexto.
 
         No es un umbral cosmético: por debajo del acoplamiento mínimo la
         hipótesis ha dejado de funcionar como regla de acción fiable, y eso
         es exactamente lo que debe reabrir la indagación.
+
+        Se lee sobre `phi_legible` y no sobre `phi`. Sobre `phi` esta
+        propiedad **mentía en la mayoría del índice**: un protocolo
+        categórico con tres signos a favor de cuatro daba `veredicto =
+        ARMONIA` y `duda = True` a la vez, que es una contradicción
+        literal. Es el modo de fallo de `4421fa1` repetido en la propiedad
+        que las bandas ya habían aprendido a evitar — y la razón de que
+        nadie pudiera consumirla: MDS, Atlanta, Duke y ACR/EULAR declaran
+        categorías, así que la duda saltaba siempre justo donde más
+        importa.
+
+        El 0.20 está escrito aquí y en `UMBRAL_ACOPLAMIENTO`. La
+        duplicación no es un descuido: `models` no importa de `core`, para
+        no cerrar un ciclo de importación. Lo que impide que se separen es
+        `test_la_duda_usa_el_mismo_umbral_que_la_banda`, que compara los
+        dos números.
         """
-        return self.phi < 0.20
+        return self.phi_legible < 0.20
 
 
 class CandidataAbductiva(BaseModel):

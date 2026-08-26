@@ -5,6 +5,7 @@ produce la semiótica que se le pide. Cada uno corresponde a una afirmación
 del diseño, y si alguno cae, lo que falla es la teoría, no el código.
 """
 
+import inspect
 import math
 
 import pytest
@@ -751,3 +752,65 @@ def test_phi_siempre_dentro_del_intervalo(medidor, skill):
         assert -1.0 <= res.phi <= 1.0
         assert -1.0 <= res.coseno <= 1.0
         assert 0.0 <= res.anclaje <= 1.0
+
+
+# --- La duda ----------------------------------------------------------
+
+
+def test_la_duda_no_puede_contradecir_a_su_propia_banda(medidor, skill):
+    """El invariante: `duda` y `veredicto` leen el mismo número.
+
+    Antes no lo hacían. `duda` leía `phi` y las bandas leían el categórico
+    cuando la ponderada no existía, así que un protocolo de categorías
+    podía informar ARMONIA y duda a la vez. Se afirma como invariante y no
+    como caso, porque el fallo no estaba en un valor sino en que dos
+    lecturas del mismo objeto usaban vectores distintos.
+    """
+    sin_duda = {VeredictoSemiotico.ARMONIA, VeredictoSemiotico.ACOPLAMIENTO_PARCIAL}
+    escenarios = [
+        [],
+        [infon("Hiperlipasemia")],
+        [infon("Hiperlipasemia"), infon("Dolor epigastrico")],
+        [infon("Hiperlipasemia", presente=False)],
+        [infon("Cefalea")],
+        [infon("Hiperlipasemia"), infon("Hematuria"), infon("Soplo sistolico")],
+    ]
+    for infones in escenarios:
+        res = medidor.medir(skill, infones)
+        assert res.duda is (res.veredicto not in sin_duda), (
+            f"{infones}: banda {res.veredicto.value} con duda={res.duda}"
+        )
+
+
+def test_la_duda_usa_el_mismo_umbral_que_la_banda():
+    """El 0.20 está escrito dos veces, y este test es lo que las ata.
+
+    `models` no importa de `core` para no cerrar un ciclo, así que la
+    constante no se puede compartir. Lo que impide que se separen en
+    silencio es esta comparación.
+    """
+    from holonmed.core.acoplamiento import UMBRAL_ACOPLAMIENTO
+    from holonmed.models import Acoplamiento
+
+    fuente = inspect.getsource(Acoplamiento.duda.fget)
+    assert f"< {UMBRAL_ACOPLAMIENTO}" in fuente
+
+
+def test_con_las_dos_lecturas_manda_la_ponderada(medidor, skill):
+    """El categórico es el suplente, no el preferido.
+
+    Un solo vómito —LR 1.6, el signo que menos discrimina del protocolo—
+    da Φ ponderado 0.1092 y Φ categórico 0.4915: la lectura de ±1 cuenta
+    ese vómito igual que una lipasa con LR de 26.6, y por eso infla. Donde
+    hay cocientes publicados la ponderada es la medida y la categórica una
+    aproximación que existe para cuando no los hay.
+
+    El caso está elegido porque las dos lecturas **discrepan sobre la
+    duda**: preferir el categórico la apagaría.
+    """
+    res = medidor.medir(skill, [infon("Vomitos")])
+
+    assert res.cobertura is not None          # la ponderada existe
+    assert res.phi_categorico > 0.20          # y el categórico diría que no hay duda
+    assert res.phi_legible == res.phi
+    assert res.duda
