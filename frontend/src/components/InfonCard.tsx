@@ -62,6 +62,13 @@ export function InfonCard({ infon, resaltado = false, onSeleccionar }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
             <h4 className={`font-semibold ${estilo.texto} truncate`}>
+              {/* La polaridad va delante del término y no en una etiqueta
+                  al final: invierte el sentido del dato —una ausencia
+                  documentada resta peso de evidencia en vez de sumarlo— y
+                  leerla después del nombre llega tarde. */}
+              {infon.polaridad === 'ausente' && (
+                <span className="font-normal text-slate-500">no · </span>
+              )}
               {infon.termino}
             </h4>
             <span className="text-xs font-mono text-slate-500 shrink-0">
@@ -70,6 +77,23 @@ export function InfonCard({ infon, resaltado = false, onSeleccionar }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {infon.polaridad === 'ausente' && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300">
+                ausencia documentada
+              </span>
+            )}
+            {/* Un infón derivado no es evidencia nueva: es la hipótesis
+                misma, acuñada por el clasificador. Φ lo excluye de su
+                vector para que el diagnóstico no figure como evidencia
+                contra sí mismo, y aquí se marca por la misma razón. */}
+            {infon.derivado_de.length > 0 && (
+              <span
+                className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200"
+                title={`Derivado de: ${infon.derivado_de.join(', ')}`}
+              >
+                derivado
+              </span>
+            )}
             {infon.codigo && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200 font-mono">
                 {infon.sistema}:{infon.codigo}
@@ -115,6 +139,19 @@ export function InfonCard({ infon, resaltado = false, onSeleccionar }: Props) {
           </div>
 
           <p className="text-slate-600 leading-relaxed">{infon.razon_auditoria}</p>
+
+          {infon.derivado_de.length > 0 && (
+            <p className="text-slate-600">
+              <span className="text-slate-500">Derivado de:</span>{' '}
+              {infon.derivado_de.join(', ')}
+              {infon.criterio && (
+                <>
+                  {' · criterio '}
+                  <code>{infon.criterio}</code>
+                </>
+              )}
+            </p>
+          )}
 
           <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200">
             {LEYENDA[infon.estado]} · protocolo <code>{infon.origen_skill}</code>
