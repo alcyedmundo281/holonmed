@@ -9,7 +9,10 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ChatPanel } from './components/ChatPanel';
+import { CompetitionPanel } from './components/CompetitionPanel';
 import { ConceptGraph } from './components/ConceptGraph';
+import { CouplingPanel } from './components/CouplingPanel';
+import { DoubtPanel } from './components/DoubtPanel';
 import { EvidenceText } from './components/EvidenceText';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
@@ -19,6 +22,7 @@ import { PlanOrders } from './components/PlanOrders';
 import { ProblemList } from './components/ProblemList';
 import { SystemStatus } from './components/SystemStatus';
 import { TicComposer } from './components/TicComposer';
+import { VerdictPanel } from './components/VerdictPanel';
 import { api } from './lib/api';
 import type {
   EntradaHistorial,
@@ -54,6 +58,11 @@ export default function App() {
   const [historial, setHistorial] = useState<EntradaHistorial[]>([]);
   const [grafo, setGrafo] = useState<Grafo>({ nodos: [], aristas: [] });
   const [chatAbierto, setChatAbierto] = useState(false);
+
+  // Un veto retira la hipótesis, así que todo lo que se diga después sobre
+  // ella sobra. Se calcula aquí para que la vista no tenga que preguntarlo
+  // dos veces.
+  const vetada = Boolean(tic?.veredicto_declarado?.veto);
 
   const cargarPacientes = useCallback(async () => {
     try {
@@ -247,7 +256,39 @@ export default function App() {
                       )}
                     </section>
 
-                    {tic.inferencia && <InferencePanel inferencia={tic.inferencia} />}
+                    {/* El orden es el de la lectura, y no es arbitrario.
+                        Un veto retira el diagnóstico, así que va antes que
+                        cualquier número sobre él. Después los dos ejes que
+                        se leen JUNTOS —probabilidad y acoplamiento— y nunca
+                        uno en lugar del otro. La duda cierra, porque es lo
+                        que queda por hacer. */}
+                    {tic.veredicto_declarado && (
+                      <VerdictPanel veredicto={tic.veredicto_declarado} />
+                    )}
+
+                    {/* Con un veto no se pinta nada más sobre esa hipótesis.
+                        El pipeline termina el tic antes de medir Φ, así que
+                        normalmente no habría nada que pintar; pero si
+                        llegara, diría «la hipótesis es operable» debajo de
+                        «hipótesis retirada», que es la misma contradicción
+                        que Φ existe para delatar. La guarda va aquí y no en
+                        cada panel: es una decisión de lectura, no de
+                        cálculo. */}
+                    {!vetada && (
+                      <>
+                        {tic.inferencia && (
+                          <InferencePanel inferencia={tic.inferencia} />
+                        )}
+
+                        {tic.acoplamiento && (
+                          <CouplingPanel acoplamiento={tic.acoplamiento} />
+                        )}
+
+                        {tic.reapertura && <DoubtPanel reapertura={tic.reapertura} />}
+
+                        <CompetitionPanel tic={tic} />
+                      </>
+                    )}
 
                     {tic.infones.length > 0 ? (
                       <section>
