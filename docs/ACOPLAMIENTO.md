@@ -275,6 +275,82 @@ regresión concreta —cuatro hallazgos sin explicar dejando el coseno en 0.55�
 en `test_una_prueba_estelar_no_compra_armonia_ilimitada`. Volver a escalar
 el residuo al protocolo hace caer los dos; comprobado por mutación.
 
+### 5.1 La lectura categórica era ciega al resto
+
+`_categorico` es la lectura que existe para los criterios que declaran
+categorías en vez de cocientes —MDS, Atlanta, Duke, ACR/EULAR—, con peso ±1
+sobre todos los signos declarados. Recorría los signos y emparejaba infones
+contra ellos; **un infón que no emparejaba con ninguno se saltaba**. El resto
+nunca entraba.
+
+Medido, sobre un protocolo que declara dos signos, los dos presentes, en un
+paciente con seis hallazgos que no explica:
+
+```
+Φ_cat = 0.8729   resto = 6
+```
+
+**Armonía perfecta con seis hallazgos sin explicar.** Es literalmente el polo
+que Φ define como Φ = 0 —«argumento internamente ordenado pero aislado e
+irrelevante»— informado como +1.
+
+Y no era un caso raro: era el caso normal. Los criterios que la clínica usa a
+diario declaran categorías, ésa fue la razón de existir del vector
+categórico. De modo que la capacidad insignia del coeficiente —delatar la
+hipótesis probable pero ajena al paciente, el sesgo de anclaje— funcionaba
+**sólo en la minoría ponderada del índice**.
+
+**El arreglo es un símbolo.** El resto son dimensiones ortogonales con `h = 0`
+y `e = ±1`, así que sólo cambian ‖e‖:
+
+```
+              Σ eᵢ                              Σ eᵢ
+    Φ_cat = ─────────────      →      Φ_cat = ───────────────────
+              √(D · m)                          √(D · (m + r))
+```
+
+con `r` = hallazgos validados presentes que ningún signo declarado explica.
+
+**Y no es una analogía del factor ponderado: es el mismo factor.**
+`m/(m+r)` es `‖e_S‖²/‖e‖²` cuando cada dimensión pesa 1, porque el resto
+aporta `e = ±1` por hallazgo. Las dos lecturas quedan con la misma
+descomposición de tres términos que la §3.4:
+
+| lectura | dirección | cobertura | explicación |
+|---|---|---|---|
+| ponderada | cos(h_S, e_S) | ‖h_S‖² / ‖h‖² | ‖e_S‖² / ‖e‖² |
+| categórica | Σeᵢ / m | m / D | m / (m + r) |
+
+`m` y `r` no pueden contar el mismo infón: `_resto_no_simbolizado` salta los
+que emparejan con **cualquier** signo declarado, lleve likelihood ratio o no.
+
+Medido antes y después:
+
+```
+                          antes    después
+grueso, sin resto        0.6172     0.6172
+grueso,  + 6 ajenos      0.6172     0.3086
+delgado, sin resto       0.8729     0.8729
+delgado, + 6 ajenos      0.8729     0.4364
+```
+
+Se reduce a la fórmula de antes cuando `r = 0`, pero **no es cierto que
+ningún caso actual cambie**: cambian los que tenían resto, que es justamente
+lo que se pretendía.
+
+**`resto` no lleva valor por defecto**, y es deliberado. Un 0 devuelve la
+fórmula ciega, de modo que sería el valor *permisivo* — y lo permisivo por
+omisión es la forma exacta del fallo que dejaba un protocolo sin validar por
+una errata en `tipo`. Quien llame a `_categorico` tiene que decir cuánto
+resto hay.
+
+**El test que sostiene esto no mira dentro de la fórmula.** El test de
+accesibilidad pasa `resto` a las dos rutas —la directa y la pública—, así
+que las dos se mueven juntas y quitar el `+ resto` del denominador lo dejaría
+verde; comprobado por mutación. Lo que mata esa mutación es la propiedad
+afirmada sin mencionar la fórmula: *un hallazgo validado que ninguna
+dimensión declarada explica tiene que bajar la armonía*.
+
 ---
 
 ## 6. Parsimonia y diversidad

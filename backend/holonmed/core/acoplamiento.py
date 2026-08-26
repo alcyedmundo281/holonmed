@@ -235,7 +235,7 @@ class MedidorDeAcoplamiento:
         componentes.extend(self._componer_residuo(residuo, peso_tipico))
 
         coseno, traza_geom = self._coseno(componentes)
-        phi_cat, dims_cat, traza_cat = self._categorico(skill, infones)
+        phi_cat, dims_cat, traza_cat = self._categorico(skill, infones, len(residuo))
         if not dimensiones:
             traza_geom.append(
                 "El protocolo no declara ningún LR: la lectura ponderada no "
@@ -281,7 +281,7 @@ class MedidorDeAcoplamiento:
 
     @staticmethod
     def _categorico(
-        skill: "Skill", infones: Sequence[Infon]
+        skill: "Skill", infones: Sequence[Infon], resto: int
     ) -> tuple[float | None, int, list[str]]:
         """Φ sobre TODOS los signos declarados, con peso ±1 en vez de ln(LR).
 
@@ -301,13 +301,40 @@ class MedidorDeAcoplamiento:
                  −1  la contradice
                   0  nadie lo ha mirado
 
-                     Σ eᵢ
-            Φ_cat = ───────────────      ∈ [−1, +1]
-                    √(D · medidos)
+                            Σ eᵢ
+            Φ_cat = ─────────────────────────      ∈ [−1, +1]
+                    √(D · (medidos + resto))
 
         que es el coseno de esos dos vectores, escrito sin cancelar. Los
         tres polos salen igual que en la lectura ponderada: todo confirma
         da +1, todo contradice da −1, y mitad y mitad da 0.
+
+        `resto` son los hallazgos validados y presentes que ningún signo
+        declarado explica. Sin él esta lectura era **ciega al resto**: un
+        protocolo que declara dos signos, los dos presentes, daba armonía
+        perfecta en un paciente con seis hallazgos que no explicaba. Es
+        literalmente el polo que Φ define como Φ = 0 —«argumento
+        internamente ordenado pero aislado e irrelevante»— informado como
+        +1, y no en un caso raro: MDS, Atlanta, Duke y ACR/EULAR declaran
+        categorías, así que la capacidad insignia del coeficiente
+        —delatar la hipótesis probable pero ajena al paciente— funcionaba
+        sólo en la minoría ponderada del índice.
+
+        El arreglo es un símbolo y no una fórmula nueva. El resto son
+        dimensiones ortogonales con h = 0 y e = ±1, de modo que sólo
+        cambian ‖e‖, y `medidos/(medidos + resto)` **es** el factor de
+        explicación de la lectura ponderada —‖e_S‖²/‖e‖²— cuando cada
+        dimensión pesa 1. Las dos lecturas quedan con la misma
+        descomposición de tres términos.
+
+        `medidos` y `resto` no pueden contar el mismo infón:
+        `_resto_no_simbolizado` salta los que emparejan con cualquier
+        signo declarado, con LR o sin él.
+
+        `resto` no lleva valor por defecto. Un 0 es el valor permisivo
+        —devuelve la fórmula de antes, la que no ve el resto— y lo
+        permisivo por omisión es exactamente lo que dejaba un protocolo
+        sin validar por una errata en `tipo`.
 
         Las exclusiones absolutas **no son dimensiones**: no restan, vetan,
         y para cuando esto se calcula la hipótesis ya se habrá retirado.
@@ -347,13 +374,18 @@ class MedidorDeAcoplamiento:
             ]
 
         suma = sum(contribuciones.values())
-        phi = suma / math.sqrt(len(dimensiones) * medidos)
+        phi = suma / math.sqrt(len(dimensiones) * (medidos + resto))
         favor = sum(1 for v in contribuciones.values() if v > 0)
         traza = [
             f"Φ categórico: {favor} a favor, {medidos - favor} en contra, "
             f"sobre {len(dimensiones)} dimensiones declaradas",
-            f"Φ_cat = {suma} / √({len(dimensiones)} × {medidos}) = {phi:.4f}",
+            f"Φ_cat = {suma} / √({len(dimensiones)} × ({medidos} + {resto})) = {phi:.4f}",
         ]
+        if resto:
+            traza.append(
+                f"{resto} hallazgo(s) validado(s) que ningún signo declarado "
+                f"explica: bajan la armonía por el lado del paciente"
+            )
         return phi, len(dimensiones), traza
 
     # --- Construcción del espacio ------------------------------------

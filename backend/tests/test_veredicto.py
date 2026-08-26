@@ -5,6 +5,8 @@ fosa ilíaca derecha puede cumplir criterios de apendicitis, pero si el
 paciente está apendicectomizado no tiene ese diagnóstico y se descarta.
 """
 
+import math
+
 import pytest
 
 from holonmed.core.acoplamiento import MedidorDeAcoplamiento
@@ -256,12 +258,24 @@ def test_el_categorico_se_alcanza_por_el_camino_publico(skill):
     el pipeline.
     """
     med = MedidorDeAcoplamiento()
-    directo, _, _ = med._categorico(skill, [infon("Fiebre"), infon("Anemia")])
-    publico = med.medir(skill, [infon("Fiebre"), infon("Anemia")])
+    # `Anemia` no la explica ningún signo declarado: es resto, y la llamada
+    # directa tiene que recibirlo o las dos rutas no medirían lo mismo.
+    caso = [infon("Fiebre"), infon("Anemia")]
+    directo, _, _ = med._categorico(skill, caso, 1)
+    publico = med.medir(skill, caso)
 
     assert publico is not None
+    assert publico.resto_no_simbolizado == ["Anemia"]
+    # La tolerancia no es decorativa y antes estaba en el filo del cuchillo.
+    # `medir` multiplica por el α SIN redondear y expone `anclaje` ya
+    # redondeado, así que reconstruir el producto desde fuera arrastra hasta
+    # un cuanto de redondeo. La versión anterior comparaba contra
+    # `round(directo * publico.anclaje, 4)` con `abs=1e-4` —exactamente el
+    # tamaño del error— y pasaba por suerte, con `directo = 0.5` redondo.
+    # Cualquier cambio que moviera los valores la tumbaba sin que nada
+    # estuviera roto.
     assert publico.phi_categorico == pytest.approx(
-        round(directo * publico.anclaje, 4), abs=1e-4
+        directo * publico.anclaje, abs=1e-3
     )
 
 
@@ -301,9 +315,9 @@ def test_los_tres_polos_del_vector_categorico(skill):
                       infon("Signo de Blumberg", presente=False),
                       infon("Dolor en fosa ilíaca derecha", presente=False)]
 
-    phi_mas, _, _ = med._categorico(skill, todo_a_favor)
-    phi_menos, _, _ = med._categorico(skill, todo_en_contra)
-    phi_cero, _, _ = med._categorico(skill, [])
+    phi_mas, _, _ = med._categorico(skill, todo_a_favor, 0)
+    phi_menos, _, _ = med._categorico(skill, todo_en_contra, 0)
+    phi_cero, _, _ = med._categorico(skill, [], 0)
 
     assert len(dims) == 4
     assert phi_mas == pytest.approx(1.0, abs=1e-9)
@@ -313,9 +327,11 @@ def test_los_tres_polos_del_vector_categorico(skill):
 
 def test_la_bandera_resta_y_el_apoyo_suma(skill):
     med = MedidorDeAcoplamiento()
-    solo_apoyo, _, _ = med._categorico(skill, [infon("Fiebre")])
+    solo_apoyo, _, _ = med._categorico(skill, [infon("Fiebre")], 0)
     con_bandera, _, _ = med._categorico(
-        skill, [infon("Fiebre"), infon("Dolor en fosa ilíaca derecha", presente=False)]
+        skill,
+        [infon("Fiebre"), infon("Dolor en fosa ilíaca derecha", presente=False)],
+        0,
     )
     assert solo_apoyo > 0
     assert con_bandera == pytest.approx(0.0, abs=1e-9)
@@ -323,8 +339,100 @@ def test_la_bandera_resta_y_el_apoyo_suma(skill):
 
 def test_la_exclusion_no_es_una_dimension(skill):
     """No resta: veta. Y para cuando esto se calcula, ya se retiró."""
-    _, dims, _ = MedidorDeAcoplamiento()._categorico(skill, [infon("Fiebre")])
+    _, dims, _ = MedidorDeAcoplamiento()._categorico(skill, [infon("Fiebre")], 0)
     assert dims == 4          # cinco signos declarados, uno es exclusión
+
+
+# --- El categórico y el resto no simbolizado --------------------------
+
+# Un protocolo delgado: dos signos declarados y nada más. Es el caso que
+# vuelve grave la ceguera al resto, porque cuanto menos declara un
+# protocolo más fácil le resulta declararlo todo satisfecho.
+DELGADO = """---
+titulo: Hipotesis delgada
+condicion:
+  nombre: Hipotesis delgada
+signos:
+  - nombre: Bradicinesia
+    fuente: "Postuma 2015"
+  - nombre: Rigidez parkinsoniana
+    fuente: "Postuma 2015"
+---
+
+Cuerpo.
+"""
+
+
+def test_un_hallazgo_que_ninguna_dimension_declarada_explica_baja_la_armonia(skill):
+    """La propiedad, afirmada sin mirar dentro de la fórmula.
+
+    Éste es el test que tiene dientes. El de accesibilidad de más arriba
+    pasa `resto` a las dos rutas, así que las dos se mueven juntas y
+    quitar el `+ resto` del denominador lo dejaría verde. Comprobado por
+    mutación. La propiedad —una anemia que nadie explica no puede dejar la
+    armonía intacta— no menciona la fórmula y por eso la mutación cae.
+    """
+    med = MedidorDeAcoplamiento()
+    sin = med.medir(skill, [infon("Fiebre")])
+    con = med.medir(skill, [infon("Fiebre"), infon("Anemia")])
+
+    assert con.resto_no_simbolizado == ["Anemia"]
+    assert con.phi_categorico < sin.phi_categorico
+
+
+def test_el_protocolo_delgado_ya_no_da_armonia_perfecta_con_el_paciente_sin_explicar():
+    """El caso que motivó el arreglo, y el polo que Φ existe para delatar.
+
+    Un protocolo que declara dos signos, los dos presentes, en un paciente
+    con seis hallazgos que no explica daba armonía **perfecta**: el
+    «argumento internamente ordenado pero aislado e irrelevante» que Φ
+    define como Φ = 0, informado como +1. Y no era un caso raro: MDS,
+    Atlanta, Duke y ACR/EULAR declaran categorías, de modo que la
+    capacidad insignia del coeficiente funcionaba sólo en la minoría
+    ponderada del índice.
+    """
+    med = MedidorDeAcoplamiento()
+    delgado = Skill("delgado", DELGADO)
+    vistos = [infon("Bradicinesia"), infon("Rigidez parkinsoniana")]
+    ajenos = [
+        infon(t)
+        for t in ("Cefalea", "Artralgia", "Prurito", "Disuria", "Epistaxis", "Acufenos")
+    ]
+
+    sin_resto = med.medir(delgado, vistos)
+    con_resto = med.medir(delgado, vistos + ajenos)
+
+    # Sin resto, la armonía categórica sigue siendo la máxima que el
+    # anclaje permite: el arreglo se reduce a la fórmula de antes.
+    assert sin_resto.phi_categorico == pytest.approx(sin_resto.anclaje, abs=1e-3)
+
+    # Con seis hallazgos sin explicar, ya no.
+    assert len(con_resto.resto_no_simbolizado) == 6
+    assert con_resto.phi_categorico < sin_resto.phi_categorico / 1.9
+
+
+def test_el_resto_baja_la_categorica_por_el_mismo_lado_que_la_ponderada(skill):
+    """`m/(m+r)` no es una analogía del factor ponderado: es el mismo factor.
+
+    El resto son dimensiones ortogonales con h = 0 y e = ±1, así que sólo
+    cambian ‖e‖. Cuando cada dimensión pesa 1, `‖e_S‖²/‖e‖²` es
+    exactamente `m/(m+r)`. Se afirma la razón, que es lo que hace que las
+    dos lecturas queden con la misma descomposición de tres términos.
+    """
+    med = MedidorDeAcoplamiento()
+    # Dos dimensiones declaradas constan; se añaden dos hallazgos ajenos.
+    vistos = [infon("Fiebre"), infon("Leucocitosis")]
+    ajenos = [infon("Anemia"), infon("Cefalea")]
+
+    sin = med.medir(skill, vistos)
+    con = med.medir(skill, vistos + ajenos)
+
+    assert len(con.resto_no_simbolizado) == 2
+    # m = 2, r = 2  ->  el factor vale √(2/4), y la dirección y la
+    # cobertura no se han movido: los mismos signos, las mismas dimensiones.
+    assert con.phi_categorico == pytest.approx(
+        sin.phi_categorico * math.sqrt(2 / 4), abs=1e-3
+    )
 
 
 # --- El núcleo --------------------------------------------------------
