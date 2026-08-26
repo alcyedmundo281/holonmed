@@ -62,6 +62,7 @@ ENUMS = {
     "EstadoDimension": m.EstadoDimension,
     "VeredictoSemiotico": m.VeredictoSemiotico,
     "CausaDeLaDuda": m.CausaDeLaDuda,
+    "TrayectoriaDeLaCreencia": m.TrayectoriaDeLaCreencia,
 }
 
 

@@ -551,6 +551,126 @@ def test_un_tic_sin_duda_guarda_NULL_y_no_una_reapertura_vacia(entorno):
     assert leido["reapertura"] is None
 
 
+PROTOCOLO_CATEGORICO = """---
+titulo: Apendicitis por categorias
+condicion:
+  nombre: Apendicitis categorica
+signos:
+  - nombre: Fiebre
+    fuente: y
+  - nombre: Leucocitosis
+    fuente: y
+---
+
+Cuerpo.
+"""
+
+
+def test_el_phi_previo_sale_del_tic_anterior_de_la_misma_hipotesis(entorno):
+    """La consulta que convierte la duda en trayectoria.
+
+    Sin ella dΦ/dt no existe: el pipeline no habla con la base de datos, y
+    el Φ anterior tiene que llegarle en el holón igual que la línea de
+    tiempo.
+    """
+    from holonmed.core.acoplamiento import MedidorDeAcoplamiento
+    from holonmed.core.skills import Skill
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    med = MedidorDeAcoplamiento()
+    protocolo = Skill("apendicitis", PROTOCOLO_DE_DOS_SIGNOS)
+
+    # Primer tic: los dos signos constan, la hipótesis funciona.
+    primero = _resultado_con_competencia()
+    primero.infones = [
+        _infon("Fiebre", None, codigo="T:5"),
+        _infon("Leucocitosis", None, codigo="T:6"),
+    ]
+    primero.acoplamiento = med.medir(protocolo, primero.infones)
+    tics.guardar(primero)
+
+    previo = tics.phi_por_hipotesis(primero.paciente_id)
+    assert previo[primero.acoplamiento.hipotesis] == pytest.approx(
+        primero.acoplamiento.phi_legible, abs=1e-4
+    )
+
+
+def test_el_phi_previo_es_el_mas_reciente_y_no_el_primero(entorno):
+    """Se recorre de nuevo a viejo y se conserva el primero de cada hipótesis.
+
+    Un Φ de hace cinco tics no es la trayectoria: la pregunta es de dónde
+    venía la creencia la última vez que se midió.
+    """
+    from holonmed.core.acoplamiento import MedidorDeAcoplamiento
+    from holonmed.core.skills import Skill
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    med = MedidorDeAcoplamiento()
+    protocolo = Skill("apendicitis", PROTOCOLO_DE_DOS_SIGNOS)
+
+    for indice, infones in enumerate(
+        (
+            [_infon("Fiebre", None, codigo="T:5"),
+             _infon("Leucocitosis", None, codigo="T:6")],
+            [_infon("Coluria", None, codigo="T:9")],
+        )
+    ):
+        r = _resultado_con_competencia()
+        r.timestamp = f"2026-08-2{indice + 1}T10:00:00Z"
+        r.infones = infones
+        r.acoplamiento = med.medir(protocolo, infones)
+        tics.guardar(r)
+
+    hipotesis = r.acoplamiento.hipotesis
+    previo = tics.phi_por_hipotesis(r.paciente_id)
+
+    # El segundo tic —el desacoplado— es el que manda.
+    assert previo[hipotesis] == pytest.approx(r.acoplamiento.phi_legible, abs=1e-4)
+    assert previo[hipotesis] < 0.20
+
+
+def test_el_phi_previo_de_un_protocolo_categorico_no_es_cero(entorno):
+    """La trayectoria tiene que leer el mismo número que decide la duda.
+
+    Para un protocolo que declara categorías y no cocientes, `phi` vale 0
+    porque no hay vector ponderado que proyectar. Guardando ese 0 como Φ
+    anterior, **toda hipótesis categórica volvería como «nunca arraigó»**
+    aunque hubiera estado perfectamente acoplada — el mismo modo de fallo
+    que `duda` tenía al leer `phi`, reaparecido un nivel más abajo. Y son
+    la mayoría del índice.
+    """
+    from holonmed.core.acoplamiento import MedidorDeAcoplamiento
+    from holonmed.core.skills import Skill
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    protocolo = Skill("categorico", PROTOCOLO_CATEGORICO)
+
+    r = _resultado_con_competencia()
+    r.infones = [
+        _infon("Fiebre", None, codigo="T:5"),
+        _infon("Leucocitosis", None, codigo="T:6"),
+    ]
+    r.acoplamiento = MedidorDeAcoplamiento().medir(protocolo, r.infones)
+    assert r.acoplamiento.phi == 0.0            # no hay lectura ponderada
+    assert r.acoplamiento.phi_categorico > 0.20  # y la categórica va bien
+    tics.guardar(r)
+
+    previo = tics.phi_por_hipotesis(r.paciente_id)
+    assert previo[r.acoplamiento.hipotesis] == pytest.approx(
+        r.acoplamiento.phi_categorico, abs=1e-4
+    )
+    assert previo[r.acoplamiento.hipotesis] > 0.20
+
+
+def test_sin_tics_anteriores_no_hay_phi_previo(entorno):
+    """Un diccionario vacío, que el reabridor lee como «no hay trayectoria»."""
+    db, grafo, _ = entorno
+    assert TicRepo(db, grafo).phi_por_hipotesis("nadie") == {}
+
+
 # --- La cifra que el paso 2 buscaba ------------------------------------
 
 

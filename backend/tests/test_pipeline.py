@@ -19,6 +19,7 @@ from holonmed.models import (
     HolonPaciente,
     Infon,
     Polaridad,
+    TrayectoriaDeLaCreencia,
 )
 
 SKILL = """# SKILL: PRUEBA
@@ -555,3 +556,46 @@ async def test_una_hipotesis_que_no_explica_al_paciente_reabre_la_indagacion(ent
     assert resultado.reapertura is not None
     assert resultado.reapertura.hipotesis == resultado.acoplamiento.hipotesis
     assert resultado.reapertura.motivo
+
+
+async def test_el_pipeline_pasa_el_phi_previo_del_holon_a_la_reapertura(entorno):
+    """dΦ/dt entra por donde entra la línea de tiempo: por el holón.
+
+    El pipeline no habla con la base de datos y no va a empezar por aquí,
+    así que el Φ anterior lo carga quien construye el holón. Este test
+    fija ese camino: si el pipeline dejara de leerlo, la trayectoria se
+    quedaría muda sin que nada más fallara.
+    """
+    llm = LLMFalso(extraccion=extraccion_de(TERMINO_SIN_HINT, "orina oscura"))
+    pipeline = entorno(llm, IndexFalso(score=95.0, termino=TERMINO_SIN_HINT,
+                                       codigo="167223003", exacto=True))
+
+    holon = HolonPaciente(paciente_id="t")
+    sin_historia = await pipeline.ejecutar("Orina oscura", holon)
+    assert sin_historia.reapertura is not None
+    assert sin_historia.reapertura.trayectoria is None
+
+    # El mismo caso, pero esta hipótesis venía funcionando.
+    holon.phi_previo = {sin_historia.acoplamiento.hipotesis: 0.77}
+    con_historia = await pipeline.ejecutar("Orina oscura", holon)
+
+    assert con_historia.reapertura.trayectoria is TrayectoriaDeLaCreencia.SE_ROMPIO
+    assert con_historia.reapertura.phi_previo == pytest.approx(0.77)
+
+
+async def test_el_phi_previo_de_otra_hipotesis_no_contamina(entorno):
+    """La trayectoria es de ESTA hipótesis, no del paciente.
+
+    El holón trae el Φ anterior de cada hipótesis por separado, y coger
+    el de otra diría que se rompió algo que nunca se midió aquí.
+    """
+    llm = LLMFalso(extraccion=extraccion_de(TERMINO_SIN_HINT, "orina oscura"))
+    pipeline = entorno(llm, IndexFalso(score=95.0, termino=TERMINO_SIN_HINT,
+                                       codigo="167223003", exacto=True))
+
+    holon = HolonPaciente(paciente_id="t", phi_previo={"Otra condición": 0.91})
+    resultado = await pipeline.ejecutar("Orina oscura", holon)
+
+    assert resultado.reapertura is not None
+    assert resultado.reapertura.trayectoria is None
+    assert resultado.reapertura.phi_previo is None

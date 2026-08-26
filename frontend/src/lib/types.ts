@@ -164,6 +164,18 @@ export interface Acoplamiento {
 export type CausaDeLaDuda = 'direccion' | 'cobertura' | 'explicacion';
 
 /**
+ * Si la creencia se rompió o si nunca llegó a arraigar. Un Φ bajo hoy no
+ * distingue las dos, y no son la misma situación clínica: `se_rompio` es
+ * la creencia establecida que la experiencia desbarató —lo que la
+ * disparó está en los hallazgos nuevos— y `nunca_arraigo` es una
+ * hipótesis que se viene midiendo y nunca funcionó.
+ *
+ * No hay valor para «no hay tic anterior»: eso es `null`. Un literal que
+ * dijera «estable» afirmaría una trayectoria que nadie ha medido.
+ */
+export type TrayectoriaDeLaCreencia = 'se_rompio' | 'nunca_arraigo';
+
+/**
  * Lo que la duda abre cuando Φ dice que la creencia dejó de funcionar
  * como regla de acción. No retira la hipótesis —eso es el veto— ni
  * resuelve nada dentro del tic: la respuesta a lo que pregunta llega en
@@ -182,6 +194,16 @@ export interface ReaperturaDeIndagacion {
   preguntas: string[];
   /** La hipótesis que la abducción prefiere, si difiere de la que corrió. */
   alternativa: string | null;
+
+  /**
+   * dΦ/dt. `phi_previo` es lo que esta misma hipótesis dio la última vez
+   * que se midió sobre este paciente, y `trayectoria` lo interpreta.
+   * Ambos `null` si nunca se midió antes: no es que la creencia estuviera
+   * estable, es que no hay con qué compararla.
+   */
+  phi_previo: number | null;
+  trayectoria: TrayectoriaDeLaCreencia | null;
+
   traza: string[];
 }
 

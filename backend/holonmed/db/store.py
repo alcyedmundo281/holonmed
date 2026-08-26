@@ -654,6 +654,48 @@ class TicRepo:
         )
         return [_fila_a_infon(f) for f in filas]
 
+    def phi_por_hipotesis(self, paciente_id: str, limite: int = 50) -> dict[str, float]:
+        """El Φ más reciente de cada hipótesis medida sobre este paciente.
+
+        Es lo que convierte la duda en una trayectoria. Un Φ bajo hoy
+        puede ser dos cosas muy distintas: una creencia que funcionaba y
+        se rompió, o una que nunca llegó a arraigar. La primera es la duda
+        peirceana propiamente dicha —algo nuevo desbarató la regla de
+        acción— y sólo se puede ver comparando con el tic anterior.
+
+        Se devuelve `phi_legible` y no `phi` a propósito: es el número que
+        decide si hay duda, y el único comparable entre un protocolo con
+        cocientes y uno de categorías. Se reconstruye el modelo desde el
+        JSON en vez de leer la columna a mano para que la regla de cuál
+        de las dos lecturas manda viva en un solo sitio.
+
+        Se recorren los tics de más nuevo a más viejo y se conserva el
+        primero de cada hipótesis, que es el más reciente. El límite
+        acota el barrido: una hipótesis que no aparece en los últimos
+        cincuenta tics no tiene trayectoria útil que ofrecer, y decir
+        «no hay Φ previo» es más honesto que desenterrar uno de hace un
+        año y llamarlo tendencia.
+        """
+        from ..models import Acoplamiento
+
+        filas = self._db.conexion().execute(
+            """SELECT acoplamiento FROM tic
+               WHERE paciente_id = ? AND acoplamiento IS NOT NULL
+               ORDER BY timestamp DESC, id DESC LIMIT ?""",
+            (paciente_id, limite),
+        )
+
+        previo: dict[str, float] = {}
+        for fila in filas:
+            try:
+                acoplamiento = Acoplamiento.model_validate_json(fila["acoplamiento"])
+            except Exception:  # noqa: BLE001 — un tic viejo con otra forma no rompe el tic de hoy
+                logger.debug("Acoplamiento ilegible al leer la trayectoria")
+                continue
+            # El primero que se ve de cada hipótesis es el más reciente.
+            previo.setdefault(acoplamiento.hipotesis, acoplamiento.phi_legible)
+        return previo
+
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
         """Lista de problemas: conceptos validados, agrupados y fechados.
 

@@ -416,6 +416,26 @@ class CausaDeLaDuda(str, Enum):
     EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
 
 
+class TrayectoriaDeLaCreencia(str, Enum):
+    """Si la creencia se rompió o si nunca llegó a arraigar.
+
+    Un Φ bajo hoy no dice cuál de las dos es, y no son la misma
+    situación clínica. Peirce habla de la creencia **establecida** que la
+    experiencia desbarata: eso es `SE_ROMPIO`, y significa que algo nuevo
+    entró en el registro y dejó de encajar. `NUNCA_ARRAIGO` es una
+    hipótesis que se viene midiendo y nunca funcionó — la indagación no
+    se reabre, es que sigue abierta.
+
+    No hay un tercer valor para «no hay tic anterior»: eso es `None`, y
+    es la misma distinción que `medir` hace al devolver None en vez de un
+    Φ de 0. Un enum que dijera «estable» sobre un primer tic afirmaría
+    una trayectoria que nadie ha medido.
+    """
+
+    SE_ROMPIO = "se_rompio"        # venía por encima del mínimo y cayó
+    NUNCA_ARRAIGO = "nunca_arraigo"  # ya estaba por debajo la vez anterior
+
+
 class ReaperturaDeIndagacion(BaseModel):
     """Lo que la duda abre cuando la creencia deja de ser operable.
 
@@ -450,6 +470,24 @@ class ReaperturaDeIndagacion(BaseModel):
             "la que se estaba usando. Es la vuelta a la abducción hecha número."
         ),
     )
+
+    # dΦ/dt: la fase 3. Sin esto la duda es una foto; con esto es un
+    # movimiento, y el movimiento es lo que Peirce llama duda.
+    phi_previo: float | None = Field(
+        default=None,
+        description=(
+            "El Φ legible que esta misma hipótesis dio la última vez que se "
+            "midió sobre este paciente. None si nunca se midió antes."
+        ),
+    )
+    trayectoria: TrayectoriaDeLaCreencia | None = Field(
+        default=None,
+        description=(
+            "None cuando no hay tic anterior con esta hipótesis: no es que la "
+            "creencia esté estable, es que no hay con qué compararla."
+        ),
+    )
+
     traza: list[str] = Field(default_factory=list)
 
 
@@ -604,6 +642,10 @@ class HolonPaciente(BaseModel):
     antecedentes: str = ""
 
     linea_tiempo: list[Infon] = Field(default_factory=list)
+    # El Φ legible de cada hipótesis la última vez que se midió sobre este
+    # paciente. Lo carga quien construye el holón, igual que `linea_tiempo`:
+    # el pipeline no habla con la base de datos, y no va a empezar por aquí.
+    phi_previo: dict[str, float] = Field(default_factory=dict)
     resumen_vivo: str = "Paciente nuevo sin antecedentes registrados."
 
     def absorber(self, nuevos: list[Infon]) -> None:

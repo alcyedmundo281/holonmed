@@ -13,7 +13,13 @@ from test_veredicto import APENDICITIS
 from holonmed.core.acoplamiento import MedidorDeAcoplamiento
 from holonmed.core.duda import ReabridorDeIndagacion
 from holonmed.core.skills import Skill
-from holonmed.models import CausaDeLaDuda, EstadoInfon, Infon, Polaridad
+from holonmed.models import (
+    CausaDeLaDuda,
+    EstadoInfon,
+    Infon,
+    Polaridad,
+    TrayectoriaDeLaCreencia,
+)
 
 # Hallazgos que ninguno de los dos protocolos declara: sirven para subir
 # el resto no simbolizado sin tocar ninguna dimensión.
@@ -291,3 +297,81 @@ def test_los_factores_se_comparan_en_la_escala_en_que_entran_al_producto(
     assert acoplamiento.cobertura < acoplamiento.direccion
     # …y aun así la causa es la dirección, porque √0.2108 > 0.2533.
     assert reapertura.causa is CausaDeLaDuda.DIRECCION
+
+
+# --- dΦ/dt: la trayectoria de la creencia -----------------------------
+
+
+def test_sin_medida_anterior_no_hay_trayectoria(medidor, reabridor, skill):
+    """`None`, y no un tercer valor que dijera «estable».
+
+    Es la misma distinción que `medir` hace al devolver None en vez de un
+    Φ de 0: decir «estable» sobre un primer tic afirmaría una trayectoria
+    que nadie ha medido.
+    """
+    reapertura = reabridor.reabrir(medidor.medir(skill, [infon("Vomitos")]))
+
+    assert reapertura.trayectoria is None
+    assert reapertura.phi_previo is None
+    assert any("No hay medida anterior" in t for t in reapertura.traza)
+
+
+def test_una_creencia_que_funcionaba_y_cayo_se_rompio(medidor, reabridor, skill):
+    """La duda peirceana propiamente dicha: la experiencia desbarató la regla.
+
+    Lo que la disparó está en los hallazgos nuevos, y ésa es la
+    diferencia práctica: hay algo que mirar en este tic.
+    """
+    reapertura = reabridor.reabrir(
+        medidor.medir(skill, [infon("Vomitos")]), phi_previo=0.83
+    )
+
+    assert reapertura.trayectoria is TrayectoriaDeLaCreencia.SE_ROMPIO
+    assert reapertura.phi_previo == pytest.approx(0.83)
+    assert any("se rompió" in t for t in reapertura.traza)
+
+
+def test_una_hipotesis_que_ya_estaba_baja_nunca_arraigo(medidor, reabridor, skill):
+    """No se ha roto nada: la indagación no se reabre, sigue abierta."""
+    reapertura = reabridor.reabrir(
+        medidor.medir(skill, [infon("Vomitos")]), phi_previo=0.05
+    )
+
+    assert reapertura.trayectoria is TrayectoriaDeLaCreencia.NUNCA_ARRAIGO
+    assert any("nunca llegó a sostenerse" in t for t in reapertura.traza)
+
+
+def test_la_trayectoria_corta_por_el_mismo_umbral_que_la_duda(medidor, reabridor, skill):
+    """Justo encima y justo debajo del mínimo, que es donde vive la distinción.
+
+    El estado que se quiere nombrar es «cruzó la raya», así que tiene que
+    ser la misma raya. Con dos umbrales distintos habría una franja en la
+    que una creencia se rompe sin haber estado nunca por encima.
+    """
+    from holonmed.core.acoplamiento import UMBRAL_ACOPLAMIENTO
+
+    acoplamiento = medidor.medir(skill, [infon("Vomitos")])
+    justo_encima = reabridor.reabrir(acoplamiento, phi_previo=UMBRAL_ACOPLAMIENTO)
+    justo_debajo = reabridor.reabrir(
+        acoplamiento, phi_previo=UMBRAL_ACOPLAMIENTO - 0.0001
+    )
+
+    assert justo_encima.trayectoria is TrayectoriaDeLaCreencia.SE_ROMPIO
+    assert justo_debajo.trayectoria is TrayectoriaDeLaCreencia.NUNCA_ARRAIGO
+
+
+def test_la_trayectoria_no_cambia_la_causa_ni_las_preguntas(medidor, reabridor, skill):
+    """dΦ/dt informa; no reinterpreta lo que el tic de hoy mide.
+
+    La causa sale de los tres factores de este acoplamiento y las
+    preguntas de su indagación. Que la creencia venga de arriba o de
+    abajo añade una lectura, no altera las otras — igual que la cobertura
+    se informa y no se aplica.
+    """
+    acoplamiento = medidor.medir(skill, [infon("Vomitos")])
+    sin_historia = reabridor.reabrir(acoplamiento)
+    rota = reabridor.reabrir(acoplamiento, phi_previo=0.83)
+
+    assert rota.causa is sin_historia.causa
+    assert rota.preguntas == sin_historia.preguntas
+    assert rota.phi == sin_historia.phi

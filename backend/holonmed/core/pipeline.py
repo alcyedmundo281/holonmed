@@ -246,9 +246,18 @@ class CrystallizationPipeline:
         # competencia: la competencia ya corrió en la etapa 3b, sobre el
         # mismo paciente, así que la vuelta a la abducción está calculada
         # y sólo hay que decir a dónde apunta.
+        # El Φ anterior de esta misma hipótesis viene en el holón, cargado
+        # por quien lo construyó: el pipeline no habla con la base de datos.
+        # Sin él la duda sería una foto; con él se puede decir si la
+        # creencia se rompió o si nunca llegó a arraigar, que son dos
+        # situaciones clínicas distintas.
         try:
             resultado.reapertura = self.duda.reabrir(
-                resultado.acoplamiento, resultado.ganadora_abductiva
+                resultado.acoplamiento,
+                resultado.ganadora_abductiva,
+                holon.phi_previo.get(
+                    resultado.acoplamiento.hipotesis if resultado.acoplamiento else ""
+                ),
             )
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Reabridor de indagación falló; el tic sigue en pie")

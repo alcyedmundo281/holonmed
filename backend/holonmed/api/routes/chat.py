@@ -116,6 +116,7 @@ async def chat(req: ChatRequest, ctx: AppContext = Depends(get_context)) -> dict
 
     if intencion == "cristalizar":
         holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
+        holon.phi_previo = ctx.tics.phi_por_hipotesis(req.paciente_id)
         resultado = await ctx.pipeline.ejecutar(req.mensaje, holon)
         resultado.origen = OrigenTic.CONSULTA
         resultado.tic_id = ctx.tics.guardar(resultado)
