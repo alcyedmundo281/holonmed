@@ -494,3 +494,35 @@ def test_sin_ningun_signo_que_dispare_no_hay_nivel(evaluador):
     assert res.apoyos == []
     assert res.banderas_rojas == []
     assert res.nivel is None, "un nivel no puede alcanzarse sin nada que lo sostenga"
+
+
+def test_la_duda_no_salta_en_un_protocolo_categorico_bien_acoplado(skill):
+    """El caso concreto que la propiedad rompía, y que es la mayoría del índice.
+
+    Tres signos declarados a favor de cuatro sobre un protocolo que no
+    declara ni un likelihood ratio: `phi` vale 0 porque no hay vector
+    ponderado que proyectar, y sobre `phi` la duda saltaba mientras la
+    banda decía ARMONIA. Los criterios que la clínica usa a diario
+    declaran categorías, así que la duda era falsa justo donde tenía que
+    servir.
+    """
+    res = MedidorDeAcoplamiento().medir(
+        skill, [infon("Fiebre"), infon("Leucocitosis"), infon("Signo de Blumberg")]
+    )
+
+    assert res.phi == 0.0                    # no hay lectura ponderada
+    assert res.phi_legible == res.phi_categorico
+    assert res.veredicto is VeredictoSemiotico.ARMONIA
+    assert not res.duda
+
+
+def test_la_duda_si_salta_en_un_protocolo_categorico_desacoplado(skill):
+    """Y no se ha silenciado: cuando el categórico baja, la duda vuelve."""
+    res = MedidorDeAcoplamiento().medir(
+        skill,
+        [infon("Fiebre"), infon("Leucocitosis", presente=False),
+         infon("Signo de Blumberg", presente=False)],
+    )
+
+    assert res.phi_legible < 0.20
+    assert res.duda

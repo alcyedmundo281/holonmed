@@ -19,6 +19,7 @@ from holonmed.models import (
     HolonPaciente,
     Infon,
     Polaridad,
+    TrayectoriaDeLaCreencia,
 )
 
 SKILL = """# SKILL: PRUEBA
@@ -520,3 +521,81 @@ def test_sin_ninguna_admitida_no_hay_ganadora():
     )
     assert ganadora is None
     assert aviso is None
+
+
+async def test_el_pipeline_lee_la_duda_y_reabre_la_indagacion(entorno):
+    """La etapa 8 está viva: nadie leía `duda` y ahora algo la lee.
+
+    Se afirma como equivalencia y no como valor: la reapertura existe
+    exactamente cuando Φ dice que hay duda. Un test que comprobara un
+    caso concreto pasaría igual con la etapa desconectada si ese caso no
+    dudara.
+    """
+    pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    hay_duda = bool(resultado.acoplamiento and resultado.acoplamiento.duda)
+    assert (resultado.reapertura is not None) is hay_duda
+
+
+async def test_una_hipotesis_que_no_explica_al_paciente_reabre_la_indagacion(entorno):
+    """El caso con duda de verdad, entrando por el pipeline entero.
+
+    El protocolo de prueba declara un solo signo —Fiebre— y lo extraído es
+    otra cosa, así que la dimensión declarada queda sin mirar y lo que
+    consta no lo explica nadie. Φ cae, y el tic tiene que decirlo en vez
+    de terminar como si hubiera concluido.
+    """
+    llm = LLMFalso(extraccion=extraccion_de(TERMINO_SIN_HINT, "orina oscura"))
+    pipeline = entorno(llm, IndexFalso(score=95.0, termino=TERMINO_SIN_HINT,
+                                       codigo="167223003", exacto=True))
+    resultado = await pipeline.ejecutar("Orina oscura", HolonPaciente(paciente_id="t"))
+
+    assert resultado.acoplamiento is not None
+    assert resultado.acoplamiento.duda
+    assert resultado.reapertura is not None
+    assert resultado.reapertura.hipotesis == resultado.acoplamiento.hipotesis
+    assert resultado.reapertura.motivo
+
+
+async def test_el_pipeline_pasa_el_phi_previo_del_holon_a_la_reapertura(entorno):
+    """dΦ/dt entra por donde entra la línea de tiempo: por el holón.
+
+    El pipeline no habla con la base de datos y no va a empezar por aquí,
+    así que el Φ anterior lo carga quien construye el holón. Este test
+    fija ese camino: si el pipeline dejara de leerlo, la trayectoria se
+    quedaría muda sin que nada más fallara.
+    """
+    llm = LLMFalso(extraccion=extraccion_de(TERMINO_SIN_HINT, "orina oscura"))
+    pipeline = entorno(llm, IndexFalso(score=95.0, termino=TERMINO_SIN_HINT,
+                                       codigo="167223003", exacto=True))
+
+    holon = HolonPaciente(paciente_id="t")
+    sin_historia = await pipeline.ejecutar("Orina oscura", holon)
+    assert sin_historia.reapertura is not None
+    assert sin_historia.reapertura.trayectoria is None
+
+    # El mismo caso, pero esta hipótesis venía funcionando.
+    holon.phi_previo = {sin_historia.acoplamiento.hipotesis: 0.77}
+    con_historia = await pipeline.ejecutar("Orina oscura", holon)
+
+    assert con_historia.reapertura.trayectoria is TrayectoriaDeLaCreencia.SE_ROMPIO
+    assert con_historia.reapertura.phi_previo == pytest.approx(0.77)
+
+
+async def test_el_phi_previo_de_otra_hipotesis_no_contamina(entorno):
+    """La trayectoria es de ESTA hipótesis, no del paciente.
+
+    El holón trae el Φ anterior de cada hipótesis por separado, y coger
+    el de otra diría que se rompió algo que nunca se midió aquí.
+    """
+    llm = LLMFalso(extraccion=extraccion_de(TERMINO_SIN_HINT, "orina oscura"))
+    pipeline = entorno(llm, IndexFalso(score=95.0, termino=TERMINO_SIN_HINT,
+                                       codigo="167223003", exacto=True))
+
+    holon = HolonPaciente(paciente_id="t", phi_previo={"Otra condición": 0.91})
+    resultado = await pipeline.ejecutar("Orina oscura", holon)
+
+    assert resultado.reapertura is not None
+    assert resultado.reapertura.trayectoria is None
+    assert resultado.reapertura.phi_previo is None

@@ -101,6 +101,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     ctx = AppContext()
     holon = ctx.pacientes.obtener_o_efimero(paciente)
     holon.linea_tiempo = ctx.tics.linea_tiempo(paciente)
+    holon.phi_previo = ctx.tics.phi_por_hipotesis(paciente)
 
     resultado = await ctx.pipeline.ejecutar(texto, holon, skill_forzada=skill)
     await ctx.cerrar()

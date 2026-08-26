@@ -356,14 +356,139 @@ class Acoplamiento(BaseModel):
         )
 
     @property
+    def phi_legible(self) -> float:
+        """El Φ que este protocolo permite leer de verdad.
+
+        `phi` es la lectura ponderada, y para un protocolo que declara
+        categorías y no cocientes vale 0 porque no hay vector que
+        proyectar. Ese 0 no dice «ortogonal»: dice «aquí no se mide así».
+        Las bandas ya lo saben —leen el categórico cuando la ponderada no
+        existe— pero lo hacían con una variable local de `medir`, de modo
+        que ninguna propiedad del modelo podía hacer lo mismo.
+
+        El discriminante es `cobertura is None`, que es el que la
+        competencia abductiva ya usa para decidir en qué unidad compara:
+        vale None exactamente cuando el protocolo no declara ni un
+        likelihood ratio.
+        """
+        if self.cobertura is None and self.phi_categorico is not None:
+            return self.phi_categorico
+        return self.phi
+
+    @property
     def duda(self) -> bool:
         """Hay duda cuando la creencia ha perdido su armonía con el contexto.
 
         No es un umbral cosmético: por debajo del acoplamiento mínimo la
         hipótesis ha dejado de funcionar como regla de acción fiable, y eso
         es exactamente lo que debe reabrir la indagación.
+
+        Se lee sobre `phi_legible` y no sobre `phi`. Sobre `phi` esta
+        propiedad **mentía en la mayoría del índice**: un protocolo
+        categórico con tres signos a favor de cuatro daba `veredicto =
+        ARMONIA` y `duda = True` a la vez, que es una contradicción
+        literal. Es el modo de fallo de `4421fa1` repetido en la propiedad
+        que las bandas ya habían aprendido a evitar — y la razón de que
+        nadie pudiera consumirla: MDS, Atlanta, Duke y ACR/EULAR declaran
+        categorías, así que la duda saltaba siempre justo donde más
+        importa.
+
+        El 0.20 está escrito aquí y en `UMBRAL_ACOPLAMIENTO`. La
+        duplicación no es un descuido: `models` no importa de `core`, para
+        no cerrar un ciclo de importación. Lo que impide que se separen es
+        `test_la_duda_usa_el_mismo_umbral_que_la_banda`, que compara los
+        dos números.
         """
-        return self.phi < 0.20
+        return self.phi_legible < 0.20
+
+
+class CausaDeLaDuda(str, Enum):
+    """De qué clase es la duda, según qué factor de cos(h,e) la produjo.
+
+    No son tres intensidades de lo mismo: son tres situaciones clínicas
+    distintas, y cada una se resuelve por un camino distinto. Poder
+    nombrarlas es lo que se ganó al partir el coseno en tres — el número
+    fundido dice que la creencia no funciona y no dice por qué.
+    """
+
+    DIRECCION = "direccion"      # lo que se miró disiente: cambiar de hipótesis
+    COBERTURA = "cobertura"      # casi nada se ha puesto a prueba: indagar
+    EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
+
+
+class TrayectoriaDeLaCreencia(str, Enum):
+    """Si la creencia se rompió o si nunca llegó a arraigar.
+
+    Un Φ bajo hoy no dice cuál de las dos es, y no son la misma
+    situación clínica. Peirce habla de la creencia **establecida** que la
+    experiencia desbarata: eso es `SE_ROMPIO`, y significa que algo nuevo
+    entró en el registro y dejó de encajar. `NUNCA_ARRAIGO` es una
+    hipótesis que se viene midiendo y nunca funcionó — la indagación no
+    se reabre, es que sigue abierta.
+
+    No hay un tercer valor para «no hay tic anterior»: eso es `None`, y
+    es la misma distinción que `medir` hace al devolver None en vez de un
+    Φ de 0. Un enum que dijera «estable» sobre un primer tic afirmaría
+    una trayectoria que nadie ha medido.
+    """
+
+    SE_ROMPIO = "se_rompio"        # venía por encima del mínimo y cayó
+    NUNCA_ARRAIGO = "nunca_arraigo"  # ya estaba por debajo la vez anterior
+
+
+class ReaperturaDeIndagacion(BaseModel):
+    """Lo que la duda abre cuando la creencia deja de ser operable.
+
+    Peirce cierra el ciclo aquí: la creencia falsa genera duda y por eso
+    motiva nueva indagación. Hasta ahora `Acoplamiento.duda` existía y
+    nadie la leía, de modo que el sistema calculaba que su hipótesis había
+    dejado de funcionar y seguía adelante sin decirlo.
+
+    No decide nada ni retira la hipótesis: eso es el veto, y es otra cosa.
+    Dice que el argumento dejó de sostenerse, de qué clase es el fallo, y
+    hacia dónde mirar.
+    """
+
+    hipotesis: str
+    phi: float = Field(description="El Φ legible que quedó bajo el mínimo")
+    causa: CausaDeLaDuda | None = Field(
+        default=None,
+        description=(
+            "None cuando no hay ningún factor definido con el que responder: "
+            "no es que ninguno falle, es que no hay con qué preguntarlo."
+        ),
+    )
+    motivo: str = ""
+    preguntas: list[str] = Field(
+        default_factory=list,
+        description="Hacia dónde indagar, heredado de `Acoplamiento.indagacion`",
+    )
+    alternativa: str | None = Field(
+        default=None,
+        description=(
+            "La hipótesis que la competencia abductiva prefiere, si difiere de "
+            "la que se estaba usando. Es la vuelta a la abducción hecha número."
+        ),
+    )
+
+    # dΦ/dt: la fase 3. Sin esto la duda es una foto; con esto es un
+    # movimiento, y el movimiento es lo que Peirce llama duda.
+    phi_previo: float | None = Field(
+        default=None,
+        description=(
+            "El Φ legible que esta misma hipótesis dio la última vez que se "
+            "midió sobre este paciente. None si nunca se midió antes."
+        ),
+    )
+    trayectoria: TrayectoriaDeLaCreencia | None = Field(
+        default=None,
+        description=(
+            "None cuando no hay tic anterior con esta hipótesis: no es que la "
+            "creencia esté estable, es que no hay con qué compararla."
+        ),
+    )
+
+    traza: list[str] = Field(default_factory=list)
 
 
 class CandidataAbductiva(BaseModel):
@@ -484,6 +609,10 @@ class ResultadoTic(BaseModel):
         default=None,
         description="None si no hubo competencia con la que comparar",
     )
+    # El cierre del bucle: qué abre la duda cuando Φ dice que la creencia
+    # dejó de ser operable. None cuando no hay duda que reabrir.
+    reapertura: ReaperturaDeIndagacion | None = None
+
     aviso_competencia: str | None = Field(
         default=None,
         description=(
@@ -513,6 +642,10 @@ class HolonPaciente(BaseModel):
     antecedentes: str = ""
 
     linea_tiempo: list[Infon] = Field(default_factory=list)
+    # El Φ legible de cada hipótesis la última vez que se midió sobre este
+    # paciente. Lo carga quien construye el holón, igual que `linea_tiempo`:
+    # el pipeline no habla con la base de datos, y no va a empezar por aquí.
+    phi_previo: dict[str, float] = Field(default_factory=dict)
     resumen_vivo: str = "Paciente nuevo sin antecedentes registrados."
 
     def absorber(self, nuevos: list[Infon]) -> None:

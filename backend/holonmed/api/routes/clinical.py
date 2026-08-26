@@ -26,6 +26,7 @@ async def cristalizar(
     """
     holon = ctx.pacientes.obtener_o_efimero(req.paciente_id)
     holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
+    holon.phi_previo = ctx.tics.phi_por_hipotesis(req.paciente_id)
 
     resultado = await ctx.pipeline.ejecutar(req.texto, holon, skill_forzada=req.skill)
     resultado.origen = req.origen
@@ -58,6 +59,7 @@ async def subir_laboratorio(
 
     holon = ctx.pacientes.obtener_o_efimero(paciente_id)
     holon.linea_tiempo = ctx.tics.linea_tiempo(paciente_id)
+    holon.phi_previo = ctx.tics.phi_por_hipotesis(paciente_id)
 
     resultado = await ctx.pipeline.ejecutar(texto, holon)
     resultado.origen = OrigenTic.LABORATORIO
@@ -112,6 +114,7 @@ async def holon_completo(paciente_id: str, ctx: AppContext = Depends(get_context
     """El holón: datos del paciente más su línea de tiempo de infones."""
     holon = ctx.pacientes.obtener_o_efimero(paciente_id)
     holon.linea_tiempo = ctx.tics.linea_tiempo(paciente_id)
+    holon.phi_previo = ctx.tics.phi_por_hipotesis(paciente_id)
     return holon
 
 

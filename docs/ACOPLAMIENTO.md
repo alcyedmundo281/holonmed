@@ -399,6 +399,129 @@ modo que **un caso a medio estudiar da armonía parcial, no desarmonía**. Que
 es exactamente lo que es. No hizo falta programar esa distinción: la
 geometría la produce.
 
+### 9.1 Quién lee la duda, y qué abre
+
+`Acoplamiento.duda` existía desde el primer día y **nadie la leía**. El
+sistema calculaba que su hipótesis había dejado de funcionar como regla de
+acción y terminaba el tic igual que si todo hubiera encajado. `core/duda.py`
+es lo que la consume, y la etapa 8 del pipeline lo que la llama.
+
+**No es un veto.** Una exclusión absoluta dice que el diagnóstico es
+imposible y termina la pregunta; la duda dice que el argumento dejó de
+sostenerse con lo que hay, y la reabre. Tampoco resuelve nada dentro del
+tic: la deducción produce preguntas o una orden de prueba, y la respuesta
+llega en otro tic. La reapertura es una **salida accionable**, no un
+recálculo.
+
+**La duda tiene tres clases, y se resuelven por caminos opuestos.** Esto es
+lo que se ganó al partir cos(h,e) en tres (§3.4): el número fundido dice que
+la creencia no funciona y no dice por qué.
+
+| causa | qué pasó | qué hacer |
+|---|---|---|
+| **dirección** | lo que se miró **disiente** | no se arregla mirando más: cambiar de hipótesis |
+| **cobertura** | casi nada se ha puesto a prueba | indagar, y `indagacion` ya dice por dónde |
+| **explicación** | no explica al paciente | volver a la abducción: lo que falta está fuera |
+
+La tercera es la forma que toma el sesgo de anclaje —la hipótesis puede ser
+cierta y no ser la pregunta— y es el polo que Φ define como Φ = 0: argumento
+internamente ordenado pero aislado.
+
+**Cuál de los tres manda se decide en la escala del producto.** Como
+`cos = dirección · √cobertura · √explicación`, cada factor lastra con
+`dirección`, `√cobertura` y `√explicación`, y se compara en esa escala.
+No es un tecnicismo: con dirección 0.2533 y cobertura 0.2108, el número
+crudo menor es la cobertura y el que más lastra es la dirección —«mira
+más» frente a «esto no encaja»—, que son consejos clínicos opuestos.
+
+La dirección entra **con su signo** y no en valor absoluto. Una dirección
+negativa es el registro contradiciendo, la duda más fuerte que hay, y ser la
+menor de las tres es exactamente lo que le toca.
+
+Un factor `None` no compite: no es un cero disfrazado, dice que ese factor
+no está definido, y un factor indefinido no puede ser la causa de nada.
+
+**La vuelta a la abducción no se recalcula.** La competencia ya corrió en la
+etapa 3b sobre el mismo paciente, así que la reapertura sólo tiene que decir
+a dónde apunta. Si la competencia prefiere la hipótesis que ya se estaba
+usando, no hay alternativa que ofrecer y no se inventa una.
+
+### 9.2 `phi_legible`: la duda leía el número equivocado
+
+`duda` leía `phi`, y para un protocolo que declara categorías y no cocientes
+`phi` vale 0 porque no hay vector ponderado que proyectar. Medido, sobre
+apendicitis con tres signos a favor de cuatro:
+
+```
+phi            = 0.0
+phi_categorico = 0.8513
+veredicto      = ARMONIA
+duda           = True
+```
+
+ARMONIA y duda a la vez, sobre el mismo objeto. Las bandas ya sabían leer el
+categórico cuando la ponderada no existe, pero lo hacían con una variable
+local de `medir`, de modo que ninguna propiedad del modelo podía hacer lo
+mismo. `phi_legible` le da nombre a ese número.
+
+Y explica por qué la propiedad llevaba tanto sin consumirse: MDS, Atlanta,
+Duke y ACR/EULAR declaran categorías, así que la duda saltaba siempre en la
+mayor parte del índice. Cablear una reapertura a la versión anterior habría
+reabierto la indagación en todos los protocolos categóricos, acoplados o no.
+
+**El categórico es el suplente, no el preferido.** Cuando existen las dos
+lecturas manda la ponderada: un solo vómito —LR 1.6— da Φ ponderado 0.1092 y
+Φ categórico 0.4915, porque la lectura de ±1 cuenta ese vómito igual que una
+lipasa con LR de 26.6.
+
+### 9.3 dΦ/dt: la duda es un movimiento, no una foto
+
+La especificación del primer día dice que *la creencia falsa genera duda y
+por eso motiva nueva indagación*, y el verbo importa: Peirce habla de la
+creencia **establecida** que la experiencia desbarata. Un Φ bajo hoy no
+distingue eso de una hipótesis que nunca funcionó, y no son la misma
+situación clínica.
+
+| trayectoria | qué pasó | qué significa |
+|---|---|---|
+| **se rompió** | venía por encima del mínimo y cayó | algo entró en el registro y desbarató la regla de acción; lo que la disparó está en los hallazgos nuevos |
+| **nunca arraigó** | la vez anterior ya estaba por debajo | no se ha roto nada: la indagación no se reabre, sigue abierta |
+| `null` | no hay medida anterior | no es que la creencia esté estable: es que no hay con qué compararla |
+
+El tercer estado es `None` y no un literal que diga «estable», por la misma
+razón por la que `medir` devuelve `None` en vez de un Φ de 0: afirmar
+estabilidad sobre un primer tic sería inventar una trayectoria que nadie ha
+medido.
+
+**El corte es el mismo umbral que decide la duda.** El estado que se quiere
+nombrar es «cruzó la raya», así que tiene que ser la raya. Con dos umbrales
+distintos habría una franja en la que una creencia se rompe sin haber estado
+nunca por encima.
+
+**Y no reinterpreta nada.** La causa sigue saliendo de los tres factores de
+este acoplamiento y las preguntas de su indagación. Que la creencia venga de
+arriba o de abajo **añade** una lectura, igual que la cobertura se informa y
+no se aplica.
+
+#### De dónde sale el Φ anterior
+
+`TicRepo.phi_por_hipotesis` recorre los tics de más nuevo a más viejo y
+conserva el primero de cada hipótesis. El pipeline no habla con la base de
+datos, así que el resultado llega en `HolonPaciente.phi_previo`, cargado por
+quien construye el holón — el mismo camino que `linea_tiempo`.
+
+Devuelve **`phi_legible` y no `phi`**, y no es un detalle. Para un protocolo
+de categorías `phi` vale 0, de modo que guardar ese 0 haría que **toda
+hipótesis categórica volviera como «nunca arraigó»** aunque hubiera estado
+perfectamente acoplada: el modo de fallo de §9.2 reaparecido un nivel más
+abajo, y otra vez sobre la mayoría del índice. El modelo se reconstruye desde
+el JSON en vez de leer la columna a mano precisamente para que la regla de
+cuál de las dos lecturas manda viva en un solo sitio.
+
+El barrido está acotado a los últimos tics: una hipótesis que no aparece en
+ese tramo no tiene trayectoria útil que ofrecer, y decir «no hay Φ previo» es
+más honesto que desenterrar uno de hace un año y llamarlo tendencia.
+
 ---
 
 ## 10. Comportamiento verificado

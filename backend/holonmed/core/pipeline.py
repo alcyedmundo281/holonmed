@@ -33,6 +33,7 @@ from ..models import (
 from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
+from .duda import ReabridorDeIndagacion
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
 from .veredicto import EvaluadorDeVeredicto
@@ -100,6 +101,7 @@ class CrystallizationPipeline:
         clasificador: Clasificador | None = None,
         acoplamiento: MedidorDeAcoplamiento | None = None,
         veredicto: EvaluadorDeVeredicto | None = None,
+        duda: ReabridorDeIndagacion | None = None,
     ):
         self.llm = llm
         self.skills = skills
@@ -109,6 +111,7 @@ class CrystallizationPipeline:
         self.clasificador = clasificador or Clasificador()
         self.acoplamiento = acoplamiento or MedidorDeAcoplamiento()
         self.veredicto = veredicto or EvaluadorDeVeredicto()
+        self.duda = duda or ReabridorDeIndagacion()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -231,6 +234,33 @@ class CrystallizationPipeline:
             )
         except Exception:  # noqa: BLE001 — un fallo de Φ no anula el tic
             logger.exception("Medidor de acoplamiento falló; el tic sigue en pie")
+
+        # --- ETAPA 8: LA DUDA REABRE LA INDAGACIÓN --------------------
+        # El cierre del bucle de Peirce, y la única etapa que puede decir
+        # que el tic no llegó a ninguna parte. Φ ya calculó que la
+        # hipótesis dejó de funcionar como regla de acción; hasta aquí
+        # nadie leía ese número y el tic terminaba igual que si todo
+        # hubiera encajado.
+        #
+        # No retira nada —eso es el veto— y no vuelve a correr la
+        # competencia: la competencia ya corrió en la etapa 3b, sobre el
+        # mismo paciente, así que la vuelta a la abducción está calculada
+        # y sólo hay que decir a dónde apunta.
+        # El Φ anterior de esta misma hipótesis viene en el holón, cargado
+        # por quien lo construyó: el pipeline no habla con la base de datos.
+        # Sin él la duda sería una foto; con él se puede decir si la
+        # creencia se rompió o si nunca llegó a arraigar, que son dos
+        # situaciones clínicas distintas.
+        try:
+            resultado.reapertura = self.duda.reabrir(
+                resultado.acoplamiento,
+                resultado.ganadora_abductiva,
+                holon.phi_previo.get(
+                    resultado.acoplamiento.hipotesis if resultado.acoplamiento else ""
+                ),
+            )
+        except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
+            logger.exception("Reabridor de indagación falló; el tic sigue en pie")
 
         return resultado
 

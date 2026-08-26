@@ -158,7 +158,14 @@ CREATE TABLE IF NOT EXISTS tic (
     -- competencia con la que comparar. Colapsarlo a 0 contaría como
     -- desacuerdo un tic donde nadie compitió.
     triaje_coincide    INTEGER,
-    aviso_competencia  TEXT
+    aviso_competencia  TEXT,
+
+    -- Lo que la duda abre cuando Φ dice que la creencia dejó de ser
+    -- operable: de qué clase es el fallo, hacia dónde indagar, y qué
+    -- prefiere la abducción. Se guarda porque es la salida accionable del
+    -- tic, y un tic que terminó en duda sin dejar rastro se lee mañana
+    -- como un tic que concluyó.
+    reapertura         TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tic_paciente ON tic(paciente_id, timestamp DESC);
