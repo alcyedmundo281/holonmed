@@ -13,12 +13,10 @@ ruido en vez de dejarlo pasar.
 
 ```mermaid
 flowchart TD
-    A[Narrativa clínica] --> B{Triaje}
-    B -->|modelo rápido| C[Protocolo activo]
-    B -.->|LLM caído| C2[general_triage]
-    C2 --> C
+    A[Narrativa clínica] --> B{Triaje<br/>decide hoy; se mide contra el grafo}
+    B --> C[Protocolo activo]
 
-    C --> D[Extracción guiada]
+    A --> D[Pasada 1: extracción genérica<br/>sin interpretar números]
     D -->|hallazgos en bruto| E{Capa 0: skill-hints}
 
     E -->|coincidencia| V[VALIDADO<br/>score 100]
@@ -41,8 +39,11 @@ flowchart TD
     K -->|score ≥ 75| AL[ALERTA]
     K -->|resto| R
 
-    V --> CA[Competencia abductiva<br/>sólo mide]
-    CA -.->|no cambia el protocolo| M
+    V --> CA[Competencia abductiva<br/>VETO · α>0 · argmax cos]
+    CA -.->|mide: triaje_coincide| M
+    CA -.->|si ABDUCCION_DECIDE| P2[Pasada 2: relectura<br/>con los hints de la ganadora]
+    CA -.->|todas vetadas| TV[Ninguna hipótesis en pie]
+    P2 --> M
 
     V --> M[Motor bayesiano]
     AL -.->|no cuenta como prueba| M
@@ -51,12 +52,15 @@ flowchart TD
     V --> G2[Grafo del paciente]
 ```
 
-## La competencia abductiva, que hoy sólo mide
+## La competencia abductiva, construida y esperando su cifra
 
 El protocolo activo lo elige un prompt de triaje, en la primera etapa, y
 todo lo demás cuelga de esa conjetura: la validación de tres capas, el veto,
 los cocientes con su cita y el coseno. Es la pieza menos medida del sistema
 y está en el sitio más temprano.
+
+Desde el ciclo 7 existe la alternativa entera —la inversión, con sus dos
+pasadas y su veto por candidata— y **viene apagada**. Por qué, más abajo.
 
 Peirce lo llamaría abducción: *se observa el hecho sorprendente C; si A
 fuera verdadera, C sería de curso natural; luego hay razón para sospechar
@@ -64,9 +68,99 @@ A*. Un coseno alto es exactamente eso, así que **elegir la A que maximiza
 `cos(h,e)` es la regla abductiva y no una analogía de ella** — y el grafo
 del paciente puede proponer las candidatas sin preguntarle nada al modelo.
 
-Antes de sustituir el prompt por esa regla hay que saber cuánto se equivoca.
-Por eso la competencia corre **en paralelo** y no decide: registra qué
-protocolo habría elegido el grafo y si coincide con el del triaje.
+**Antes de sustituir el prompt por esa regla hay que saber cuánto se
+equivoca.** Ésa es la precondición del diseño y hoy no está satisfecha: la
+cifra sale de `TicRepo.acuerdo_del_triaje()` sobre el histórico, y no hay
+histórico. Por eso la inversión está construida y apagada.
+
+```
+HOLONMED_ABDUCCION_DECIDE=false   (defecto) decide el triaje, mide el grafo
+HOLONMED_ABDUCCION_DECIDE=true              decide el grafo
+```
+
+Apagada **no se pierde la medición**, que es el punto: el triaje y la
+competencia corren los dos en cualquiera de los dos modos, y
+`triaje_coincide` se registra en cada tic. De ahí sale el número que
+autoriza encenderla. Un interruptor que apagara también la medida haría
+imposible justificar nunca el cambio.
+
+**Y apagada cuesta lo de antes.** El interruptor gobierna la forma del tic y
+no sólo quién vota: apagada se lee una vez, con el protocolo del triaje, y no
+hay segunda pasada que dar; encendida se lee primero con el vocabulario
+genérico —porque el protocolo es lo que se está eligiendo— y se relee después
+con el de la ganadora. El modo conservador tiene que ser también el barato, o
+nadie lo elegiría por las razones correctas.
+
+|  | apagada (defecto) | encendida |
+|---|---|---|
+| decide | el triaje | el grafo |
+| lecturas | 1, con el protocolo del triaje | 2: genérica y de la ganadora |
+| competencia | mide | mide y decide |
+| `triaje_coincide` | se registra | se registra |
+| todas vetadas | no aplica | termina el tic y lo dice |
+
+El defecto está fijado como test —`test_la_inversion_viene_apagada_y_es_una_decision`—
+para que subirlo sea algo que alguien tenga que defender, y no un descuido.
+
+### Las dos pasadas
+
+Corren cuando la inversión está encendida. Φ necesita infones, los infones
+necesitan la skill, y la skill es lo que se está eligiendo. El bloqueo se
+rompe leyendo dos veces:
+
+```
+pasada 1   extracción con el vocabulario genérico  -> conjunto COMÚN
+competencia sobre ese conjunto                     -> la hipótesis
+pasada 2   relectura con los hints de la ganadora  -> la deducción
+```
+
+La pasada 2 **es** el paso deductivo aplicado al texto que ya está en la
+mano: antes de preguntarle nada al paciente, se relee la nota buscando lo
+que la hipótesis predice y la lectura genérica no supo ver. Se fusiona por
+término y gana la pasada 2, cuya normalización es mejor; lo que sólo vio la
+genérica se conserva, porque la 2 lee con la hipótesis puesta y puede
+desatender lo que no le concierne — y eso es justamente el resto no
+simbolizado que Φ necesita para delatar una hipótesis ajena al paciente.
+
+Si gana el propio protocolo genérico no hay segunda pasada: sería una
+llamada al modelo para releer lo mismo.
+
+### La pasada 1 no puede interpretar números
+
+Es la restricción dura, y la razón es que lo que salga de ahí es el conjunto
+contra el que compiten **todas** las candidatas: un corte inventado no
+desvía una hipótesis, desvía la competencia entera.
+
+La regla no es «hay un número». `general_triage` sí declara los cortes
+universales —Temperatura 38.0, FC 100/60, leucocitos— y convertirlos es lo
+que se le pide. Lo que no declara son los de cada enfermedad, y ahí el
+modelo se los inventa: está medido en `VALIDACION.md` y el conversor
+documenta el suyo, «lipasa 890» auditada como «>3x el límite normal (aprox.
+250-300)» cuando el protocolo declara 60.
+
+De modo que la pasada genérica puede volver concepto una cifra **sólo si el
+término resultante es uno cuyo corte ella misma declara**. Se retira el
+hallazgo cuando se cumplen las tres: la cita trae un número, el término no
+aparece en esa misma cita, y el protocolo no lo autoriza. Se compara contra
+la cita y no contra la narrativa entera, que es la evidencia que el propio
+modelo alega — con el texto completo bastaría que la palabra saliera en otra
+frase para colar una invención.
+
+Retirar de más es barato: la pasada 1 sólo necesita conceptos con los que
+buscar candidatas, y lo que se pierda lo recupera la pasada 2 con los cortes
+del protocolo ganador delante. Retirar de menos no lo es. **Consecuencia
+operativa:** el bloque `laboratorio:` del protocolo genérico decide qué
+puede ver la pasada 1, así que recortarlo estrecha la competencia.
+
+### Todas vetadas
+
+Un veto ya no termina el tic: retira una candidata. El tic termina sólo si
+el conjunto se vacía, y entonces no se cae al triaje. «Todas vetadas» no es
+«no encontré hipótesis»: dice que *todo lo que el grafo propone para este
+paciente es estructuralmente imposible*, y eso o pide ampliar el ámbito de
+los protocolos o dice que los antecedentes que las excluyen están mal
+registrados. Caer al triaje lo taparía con el comportamiento de siempre, y
+el clínico no vería nunca que el índice se le queda corto.
 
 ```
 1. VETO       cada candidata por separado. Un coseno bonito sobre una

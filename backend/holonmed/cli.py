@@ -322,6 +322,16 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     # antes que cualquier número sobre ella; después los dos ejes, que se
     # leen JUNTOS y nunca uno en lugar del otro; y la duda cierra, porque es
     # lo que queda por hacer.
+    # Antes que nada: si el grafo propuso candidatas y el veto las retiró
+    # todas, no hay hipótesis de la que hablar y el motivo es lo único
+    # accionable que queda.
+    if resultado.todas_vetadas:
+        print("")
+        print("NINGUNA HIPÓTESIS EN PIE")
+        print(f"  {resultado.todas_vetadas}")
+        print()
+        return 0
+
     for linea in _lineas_veredicto(resultado.veredicto_declarado):
         print(linea)
 

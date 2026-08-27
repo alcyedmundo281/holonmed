@@ -87,6 +87,126 @@ FORMATO JSON:
 {{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
 
 
+# La pasada genérica extrae con `general_triage`, que no declara ni un
+# corte de laboratorio. Pedirle al modelo que interprete números sin
+# tenerlos es pedirle que se los invente: está medido en VALIDACION.md
+# —el formato `minimo` inventó el corte en 9 de 15 auditorías— y el
+# conversor lo documenta con un caso propio, «lipasa 890» auditada como
+# «>3x el límite normal (aprox. 250-300)» cuando el protocolo declara 60.
+#
+# Aquí importa más que en ninguna otra parte, porque lo que salga de esta
+# pasada es el conjunto COMÚN contra el que compiten TODAS las candidatas.
+# Un corte inventado no desvía una hipótesis: desvía la competencia
+# entera, y todas compiten contra un paciente que no existe.
+PROMPT_EXTRACCION_GENERICA = """ROL: ANALISTA CLÍNICO
+Lee la narrativa del paciente y extrae hallazgos médicos ATÓMICOS.
+
+REGLA DE ORO — LOS NÚMEROS NO SE INTERPRETAN:
+Este protocolo NO declara cortes de laboratorio, así que **no puedes saber
+si un valor es alto o bajo**. No los conviertas en diagnósticos.
+- "Calcio 7.5"          -> NO extraigas nada. No sabes cuál es el corte.
+- "Leucocitos 18.500"   -> NO extraigas nada.
+- "Lipasa 890"          -> NO extraigas nada.
+- "hipocalcemia leve"   -> SÍ: el texto ya trae la interpretación, úsala.
+- "fiebre de 38.5"      -> SÍ: «Fiebre», que el texto afirma con palabras.
+La diferencia es si la interpretación la hace el texto o la harías tú.
+
+REGLAS DE PRECISIÓN:
+1. IDIOMA: español técnico.
+2. ATOMICIDAD: un hallazgo por infón.
+3. GRANULARIDAD: no sustituyas un síntoma por una enfermedad.
+   "Dolor epigástrico" NO es "Pancreatitis". Extrae el síntoma.
+4. LIMPIEZA: sólo el nombre del hallazgo.
+5. POLARIDAD — tres casos y no dos:
+   - El texto AFIRMA el hallazgo -> "presente": true
+   - El texto lo NIEGA o lo da por normal -> "presente": false
+   - El texto NO DICE NADA -> no lo extraigas. No inventes ausencias.
+
+FORMATO JSON:
+{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
+
+
+def _normalizar(texto: str) -> str:
+    """Minúsculas y sin acentos, para comparar lo que dice el texto."""
+    import unicodedata
+
+    plano = unicodedata.normalize("NFKD", texto.lower())
+    return "".join(c for c in plano if not unicodedata.combining(c))
+
+
+def _sin_cortes_inventados(
+    crudos: list[dict], autorizados: set[str]
+) -> tuple[list[dict], list[str]]:
+    """Retira las interpretaciones de números que ningún corte respalda.
+
+    El prompt de la pasada genérica ya se lo pide al modelo, y esto lo
+    comprueba: una regla que sólo vive en un prompt es una recomendación,
+    no una garantía, y el modelo que la incumpla lo hará justo donde más
+    caro sale — el conjunto COMÚN contra el que compite todo el mundo. Un
+    corte inventado ahí no desvía una hipótesis: desvía la competencia
+    entera, y todas compiten contra un paciente que no existe.
+
+    LA REGLA NO ES «HAY UN NÚMERO»
+
+    `general_triage` **sí** declara cortes: Temperatura 38.0 → Fiebre,
+    FC 100/60 → Taquicardia/Bradicardia, Leucocitos → Leucocitosis. Son
+    los universales, y convertirlos es exactamente lo que se le pide. Lo
+    que no declara son los de cada enfermedad —lipasa, amilasa, calcio—,
+    que es donde el modelo se los inventa: está medido en VALIDACION.md
+    y el conversor documenta el suyo, «lipasa 890» auditada como «>3x el
+    límite normal (aprox. 250-300)» cuando el protocolo declara 60.
+
+    De modo que la pasada genérica puede volver concepto un número
+    **sólo si el término resultante es uno que ella misma declara**. Un
+    hallazgo se retira cuando se cumplen las tres:
+
+      · la cita trae un número,
+      · el término no aparece en esa misma cita, y
+      · el protocolo no autoriza ese término.
+
+    Se compara contra **la cita y no contra la narrativa entera**, que es
+    la evidencia que el propio modelo alega. Con la narrativa entera basta
+    que la palabra salga en otra frase para colar una interpretación
+    inventada: un texto que dice «hipocalcemia leve» en la anamnesis
+    dejaría pasar un «Hipocalcemia» derivado del «calcio 6.8» del
+    laboratorio, que es justo el caso que hay que cazar.
+
+    Retirar de más es barato: la pasada 1 sólo necesita conceptos con los
+    que buscar candidatas en el grafo, y lo que se pierda lo recupera la
+    pasada 2, ya con los cortes del protocolo ganador delante. Retirar de
+    menos no lo es.
+    """
+    conservados, retirados = [], []
+    for crudo in crudos:
+        cita = str(crudo.get("texto_origen", ""))
+        termino = str(crudo.get("termino_clinico", "")).strip()
+        plano = _normalizar(termino)
+        if (
+            any(c.isdigit() for c in cita)
+            and plano not in _normalizar(cita)
+            and plano not in autorizados
+        ):
+            retirados.append(termino)
+            continue
+        conservados.append(crudo)
+    return conservados, retirados
+
+
+def _terminos_autorizados(skill: Skill) -> set[str]:
+    """Los conceptos que este protocolo puede derivar de una cifra.
+
+    Salen de sus propios criterios de laboratorio, que son los cortes que
+    alguien declaró con su fuente. Un signo declarado sin corte no
+    autoriza nada: el protocolo dice que le interesa, no en qué cifra
+    empieza.
+    """
+    return {
+        _normalizar(t)
+        for criterio in skill.laboratorio
+        for t in criterio.terminos()
+    }
+
+
 class CrystallizationPipeline:
     """Orquesta el ciclo completo de un tic clínico."""
 
@@ -120,58 +240,108 @@ class CrystallizationPipeline:
         holon: HolonPaciente,
         skill_forzada: str | None = None,
     ) -> ResultadoTic:
-        # --- ETAPA 1: TRIAJE ------------------------------------------
+        """Un tic completo, con la abducción delante.
+
+        El orden invierte el de siempre, y la razón es que el de siempre
+        estaba al revés. La etapa que se llamaba «inferencia abductiva»
+        era Bayes, y Bayes no genera hipótesis: pesa una que ya alguien
+        eligió. La abducción real ocurría en el triaje —un prompt— y de
+        él colgaban la validación, el veto, los cocientes y el coseno.
+
+        Ahora la hipótesis la elige la competencia sobre el grafo del
+        paciente, que es la regla peirceana escrita como argmax: se
+        observa el hecho sorprendente C; si A fuera verdadera, C sería de
+        curso natural; luego hay razón para sospechar A. Un coseno alto
+        es exactamente eso.
+
+        Las dos pasadas son la consecuencia de un bloqueo real: Φ necesita
+        infones, los infones necesitan la skill, y la skill es lo que se
+        está eligiendo. Se rompe extrayendo primero con el vocabulario
+        genérico —el conjunto COMÚN contra el que compiten todas— y
+        volviendo a leer después con los hints de la ganadora. Esa segunda
+        lectura **es** el paso deductivo aplicado al texto que ya está en
+        la mano: antes de preguntarle nada al paciente, se relee la nota
+        buscando lo que la hipótesis predice y la pasada genérica no supo
+        ver.
+        """
+        # --- ETAPA 1: TRIAJE, que ya no decide ------------------------
+        # Sigue corriendo, y no por inercia: comparar lo que dice el
+        # prompt con lo que elige el grafo es la cifra que justifica
+        # haberlo sustituido, y dejar de calcularla sería quedarse sin la
+        # prueba justo cuando empieza a importar. También es la red: si el
+        # grafo no propone nada, aquí está la hipótesis de siempre.
         if skill_forzada:
-            skill = self.skills.cargar_o_defecto(skill_forzada)
+            triaje = self.skills.cargar_o_defecto(skill_forzada)
         else:
             try:
                 nombre = await self.skills.triaje(texto, self.llm)
             except LLMUnavailable:
                 nombre = None
-            skill = self.skills.cargar_o_defecto(nombre)
-        logger.info("Tic para %s — protocolo: %s", holon.paciente_id, skill.nombre)
+            triaje = self.skills.cargar_o_defecto(nombre)
 
         resultado = ResultadoTic(
             paciente_id=holon.paciente_id,
             texto_original=texto,
-            skill_activa=skill.nombre,
-            skill_version=skill.version,
+            skill_activa=triaje.nombre,
+            skill_version=triaje.version,
         )
 
-        # --- ETAPA 2: EXTRACCIÓN --------------------------------------
-        extraidos, resumen = await self._extraer(texto, skill)
+        # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
+        # El interruptor gobierna la FORMA del tic y no sólo quién vota.
+        # Encendido: se lee primero con el vocabulario genérico, porque el
+        # protocolo es lo que se está eligiendo y no se puede leer con él.
+        # Apagado: se lee con el del triaje y una sola vez, que es como
+        # corría antes del ciclo 7 — apagar la inversión no puede costar
+        # la llamada de más que la inversión necesita.
+        #
+        # La competencia mide en los dos modos. Apagada, mide sobre el
+        # conjunto que extrajo el triaje, que es exactamente lo que medía
+        # antes; la lectura neutral llega con la inversión.
+        decide = self.settings.abduccion_decide
+        generico = self.skills.cargar_o_defecto(None)
+        base = generico if decide else triaje
+
+        extraidos, resumen = await self._extraer(texto, base, generica=decide)
         resultado.resumen = resumen
         if not extraidos:
             logger.info("Sin hallazgos extraíbles en el tic")
             return resultado
 
-        # --- ETAPA 3: VALIDACIÓN DE TRES CAPAS ------------------------
-        hints = skill.hints_snomed()
+        hints_base = base.hints_snomed()
         for crudo in extraidos:
-            infon = await self._validar_hallazgo(crudo, texto, skill, hints)
+            infon = await self._validar_hallazgo(crudo, texto, base, hints_base)
             if infon:
                 resultado.infones.append(infon)
 
-        # --- ETAPA 3b: COMPETENCIA ABDUCTIVA (sólo mide) ---------------
-        # Corre AQUÍ y no más abajo por una razón que no es de orden de
-        # escritura: la etapa 4 acuña un infón específico de la hipótesis
-        # y lo mete en la lista. Si las candidatas compitieran después,
-        # cada una competiría contra un paciente distinto —el suyo, con su
-        # propio trastorno inyectado—, que es la forma más literal de usar
-        # el dato dos veces.
-        #
-        # No cambia nada: `skill_activa` sigue siendo la del triaje. Esto
-        # registra cuál habría elegido el grafo, para poder decir con una
-        # cifra —y no con una intuición— cuánto se equivoca el prompt.
+        # --- ETAPA 3: LA COMPETENCIA ABDUCTIVA, que ahora decide ------
+        # Corre sobre el conjunto común y ANTES de la clasificación: la
+        # clasificación acuña un infón específico de la hipótesis y lo
+        # mete en la lista, así que compitiendo después cada candidata
+        # competiría contra un paciente distinto —el suyo, con su propio
+        # trastorno inyectado—, que es la forma más literal de usar el
+        # dato dos veces.
         try:
             self._competir(resultado, holon)
-        except Exception:  # noqa: BLE001 — la medición no puede tumbar el tic
-            logger.exception("La competencia abductiva falló; el tic sigue en pie")
+        except Exception:  # noqa: BLE001 — la competencia no puede tumbar el tic
+            logger.exception("La competencia abductiva falló; decide el triaje")
 
-        # --- ETAPA 4: CLASIFICACIÓN -----------------------------------
-        # De hallazgos a trastorno, por criterios publicados. Es el paso
-        # que acuña un término nuevo, y lo hace Python: es lógica sobre
-        # evidencia validada, no una apreciación del modelo.
+        skill = self._elegir_hipotesis(resultado, triaje, skill_forzada)
+        if skill is None:
+            return resultado
+        resultado.skill_activa = skill.nombre
+        resultado.skill_version = skill.version
+        logger.info("Tic para %s — hipótesis: %s", holon.paciente_id, skill.nombre)
+
+        # --- ETAPA 4: PASADA 2, la deducción sobre el texto -----------
+        # La condición es «la hipótesis difiere de aquello con lo que ya
+        # se leyó», y vale en los dos modos: apagada, `base` ES el triaje
+        # y la ganadora también, de modo que no hay nada que releer y no
+        # hace falta consultar el interruptor otra vez.
+        if skill.nombre != base.nombre:
+            await self._segunda_pasada(texto, skill, resultado)
+
+        # --- ETAPA 5: CLASIFICACIÓN ------------------------------------
+        # Sólo la de la ganadora, y después de competir.
         try:
             resultado.clasificacion = self.clasificador.evaluar(
                 skill, resultado.infones
@@ -181,12 +351,10 @@ class CrystallizationPipeline:
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Clasificador falló; el tic conserva sus infones")
 
-        # --- ETAPA 5: VETO ---------------------------------------------
-        # Va ANTES de Bayes y de Φ, y no por orden de escritura: una
-        # exclusión absoluta no es una probabilidad baja, es una
-        # imposibilidad. Calcular la probabilidad de una apendicitis en un
-        # paciente apendicectomizado no es conservador, es ruido con
-        # formato numérico.
+        # --- ETAPA 6: EL VEREDICTO DECLARADO ---------------------------
+        # El veto de la ganadora ya se evaluó en la competencia y no la
+        # retiró; esto recalcula el veredicto sobre el conjunto final, que
+        # incluye lo que la pasada 2 añadió y el trastorno acuñado.
         try:
             resultado.veredicto_declarado = self.veredicto.evaluar(
                 skill, list(holon.linea_tiempo) + resultado.infones
@@ -194,12 +362,12 @@ class CrystallizationPipeline:
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Evaluador de veredicto falló; el tic sigue en pie")
 
-        vetada = bool(
-            resultado.veredicto_declarado and resultado.veredicto_declarado.veto
-        )
-        if vetada:
+        if resultado.veredicto_declarado and resultado.veredicto_declarado.veto:
+            # Puede aparecer aquí y no en la competencia: la pasada 2 lee
+            # con los hints de la ganadora y puede sacar el antecedente
+            # que la excluye. Es un hallazgo, no una anomalía.
             logger.info(
-                "Hipótesis '%s' retirada: %s",
+                "Hipótesis '%s' retirada tras la segunda pasada: %s",
                 skill.nombre,
                 resultado.veredicto_declarado.veto.motivo,
             )
@@ -263,6 +431,123 @@ class CrystallizationPipeline:
             logger.exception("Reabridor de indagación falló; el tic sigue en pie")
 
         return resultado
+
+    def _elegir_hipotesis(
+        self,
+        resultado: ResultadoTic,
+        triaje: Skill,
+        skill_forzada: str | None,
+    ) -> Skill | None:
+        """Qué hipótesis se usa, y `None` si no hay ninguna que usar.
+
+        El orden de preferencia dice quién manda, y cada escalón tiene su
+        razón:
+
+        1. **Lo forzado**, que es alguien pidiendo un protocolo concreto.
+           Ni el grafo ni el prompt discuten una orden explícita.
+        2. **La ganadora de la competencia**, que es la abducción. Ésta es
+           la inversión.
+        3. **El triaje**, cuando el grafo no propuso nada admisible: el
+           paciente puede no tener todavía conceptos que cubran ningún
+           ámbito, y quedarse sin hipótesis por eso sería peor que usar la
+           de siempre.
+
+        Y un caso que no es ninguno de los tres: **todas vetadas**. Si el
+        grafo propuso candidatas y el veto las retiró todas, no se cae al
+        triaje. Sería tapar un hallazgo con el comportamiento anterior: lo
+        que el sistema sabe es que *todo lo que este paciente sugiere es
+        estructuralmente imposible*, y eso o significa que hay que ampliar
+        el ámbito o que los antecedentes están mal. Es un estado clínico
+        propio y merece decirse.
+        """
+        if skill_forzada:
+            return triaje
+
+        # El interruptor no apaga la competencia, sólo su voto: el triaje
+        # y el grafo siguen corriendo los dos y `triaje_coincide` se
+        # registra igual, que es la cifra que decide si esto puede
+        # encenderse con fundamento.
+        if not self.settings.abduccion_decide:
+            return triaje
+
+        if resultado.competencia and all(c.vetada for c in resultado.competencia):
+            motivos = [c.motivo_veto for c in resultado.competencia if c.motivo_veto]
+            cuantas = len(resultado.competencia)
+            resultado.todas_vetadas = (
+                (
+                    "La única hipótesis que el grafo propone para este paciente "
+                    "está vetada: "
+                    if cuantas == 1
+                    else f"Las {cuantas} hipótesis que el grafo propone para este "
+                    "paciente están vetadas: "
+                )
+                + "; ".join(motivos)
+                + ". O hay que ampliar el ámbito de los protocolos, o los "
+                "antecedentes que las excluyen están mal registrados."
+            )
+            logger.warning("%s", resultado.todas_vetadas)
+            return None
+
+        if resultado.ganadora_abductiva:
+            ganadora = self.skills.cargar(resultado.ganadora_abductiva)
+            if ganadora:
+                return ganadora
+            logger.warning(
+                "La competencia eligió '%s' y no se pudo cargar; decide el triaje",
+                resultado.ganadora_abductiva,
+            )
+
+        return triaje
+
+    async def _segunda_pasada(
+        self, texto: str, skill: Skill, resultado: ResultadoTic
+    ) -> None:
+        """Relee la nota con los hints de la ganadora: la deducción.
+
+        No es repetir la extracción con otro prompt. La pasada 1 corrió a
+        ciegas y sin poder interpretar un solo número; ésta corre sabiendo
+        qué hipótesis se está sosteniendo, con su vocabulario y con sus
+        cortes de laboratorio declarados. Lo que aparece aquí es
+        literalmente *lo que la hipótesis predice y la lectura genérica no
+        supo ver* — el paso deductivo aplicado al texto que ya está en la
+        mano, antes de preguntarle nada al paciente.
+
+        Se fusiona por término y gana la pasada 2: su normalización es
+        mejor, porque tenía el vocabulario del protocolo delante. Lo que
+        la pasada 1 vio y la 2 no, se conserva: la 2 lee con la hipótesis
+        puesta y puede desatender lo que no le concierne, y eso es
+        justamente el resto no simbolizado que Φ necesita para delatar una
+        hipótesis ajena al paciente.
+        """
+        try:
+            extraidos, _ = await self._extraer(texto, skill)
+        except Exception:  # noqa: BLE001 — sin segunda pasada el tic sigue en pie
+            logger.exception("La segunda pasada falló; se conserva la genérica")
+            return
+        if not extraidos:
+            return
+
+        hints = skill.hints_snomed()
+        nuevos: list[Infon] = []
+        for crudo in extraidos:
+            infon = await self._validar_hallazgo(crudo, texto, skill, hints)
+            if infon:
+                nuevos.append(infon)
+
+        por_termino = {_normalizar(i.termino): i for i in resultado.infones}
+        anteriores = len(por_termino)
+        for infon in nuevos:
+            por_termino[_normalizar(infon.termino)] = infon
+        resultado.infones = list(por_termino.values())
+
+        logger.info(
+            "Segunda pasada con '%s': %d hallazgo(s), %d nuevo(s) sobre los %d "
+            "de la lectura genérica",
+            skill.nombre,
+            len(nuevos),
+            len(por_termino) - anteriores,
+            anteriores,
+        )
 
     def _competir(self, resultado: ResultadoTic, holon: HolonPaciente) -> None:
         """La regla de selección abductiva, corrida para medir y no para decidir.
@@ -414,17 +699,27 @@ class CrystallizationPipeline:
             f"coseno {ganadora.clave:.2f}."
         )
 
-    async def _extraer(self, texto: str, skill: Skill):
-        """Etapa 2: el LLM propone hallazgos. Nada se da por bueno todavía."""
-        vocabulario = ""
-        preferidos = skill.vocabulario_preferido()
-        if preferidos:
-            vocabulario = f"VOCABULARIO PREFERIDO: {preferidos}"
+    async def _extraer(self, texto: str, skill: Skill, generica: bool = False):
+        """El LLM propone hallazgos. Nada se da por bueno todavía.
 
-        prompt = PROMPT_EXTRACCION.format(
-            protocolo=skill.para_prompt(self.settings.formato_protocolo)[:8000],
-            vocabulario=vocabulario,
-        )
+        `generica` es la primera de las dos pasadas: extrae sin protocolo
+        porque el protocolo es justo lo que se está eligiendo. Usa un
+        prompt que prohíbe interpretar números —sin cortes declarados, el
+        modelo se los inventa— y lo que salga pasa además por
+        `_sin_cortes_inventados`, que lo comprueba en vez de confiar.
+        """
+        if generica:
+            prompt = PROMPT_EXTRACCION_GENERICA
+        else:
+            vocabulario = ""
+            preferidos = skill.vocabulario_preferido()
+            if preferidos:
+                vocabulario = f"VOCABULARIO PREFERIDO: {preferidos}"
+
+            prompt = PROMPT_EXTRACCION.format(
+                protocolo=skill.para_prompt(self.settings.formato_protocolo)[:8000],
+                vocabulario=vocabulario,
+            )
 
         try:
             data = await self.llm.generar_json(
@@ -446,6 +741,19 @@ class CrystallizationPipeline:
             for item in crudos
             if isinstance(item, dict) and str(item.get("termino_clinico", "")).strip()
         ]
+
+        if generica:
+            limpios, retirados = _sin_cortes_inventados(
+                limpios, _terminos_autorizados(skill)
+            )
+            if retirados:
+                logger.info(
+                    "Pasada genérica: %d interpretación(es) de números retirada(s) "
+                    "por no tener corte declarado: %s",
+                    len(retirados),
+                    ", ".join(retirados),
+                )
+
         return limpios, str(data.get("resumen", ""))
 
     async def _validar_hallazgo(

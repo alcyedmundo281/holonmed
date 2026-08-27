@@ -55,6 +55,26 @@ class Settings(BaseSettings):
     # extracción.
     formato_protocolo: str = "prosa"
 
+    # --- Quién elige la hipótesis ------------------------------------
+    # False: la elige el prompt de triaje y la competencia sólo mide, que
+    # es como corría hasta el ciclo 7.
+    # True: la elige la competencia abductiva sobre el grafo del paciente.
+    #
+    # VIENE EN False A PROPÓSITO, y no porque la inversión esté a medias.
+    # El diseño pone una precondición que hoy NO está satisfecha: «antes de
+    # sustituir el prompt por esa regla hay que saber cuánto se equivoca».
+    # Esa cifra la produce `TicRepo.acuerdo_del_triaje()` sobre el
+    # histórico, y no hay histórico todavía. Encenderlo sin ella sería
+    # cambiar el mecanismo que elige el diagnóstico apoyándose en una
+    # intuición, que es exactamente lo que el paso 2 existía para evitar.
+    #
+    # Apagado NO se pierde la medición: el triaje y la competencia siguen
+    # corriendo los dos y `triaje_coincide` se registra en cualquiera de
+    # los dos modos. De ahí sale el número que autoriza el cambio.
+    #
+    # Para encenderlo: HOLONMED_ABDUCCION_DECIDE=true
+    abduccion_decide: bool = False
+
     # --- Facturación --------------------------------------------------
     # Qué catálogo de precios se usa. Cada hospital o aseguradora carga el
     # suyo con scripts/importar_tarifario.py; 'demo' trae importes
