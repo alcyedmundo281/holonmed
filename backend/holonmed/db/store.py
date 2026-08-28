@@ -115,6 +115,7 @@ class Database:
         ("tic", "competencia", "TEXT"),
         ("tic", "ganadora_abductiva", "TEXT"),
         ("tic", "triaje_coincide", "INTEGER"),
+        ("tic", "triaje_en_candidatas", "INTEGER"),
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
@@ -463,8 +464,9 @@ class TicRepo:
                                         resumen, inferencia, acoplamiento,
                                         veredicto, competencia,
                                         ganadora_abductiva, triaje_coincide,
+                                        triaje_en_candidatas,
                                         aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -484,6 +486,9 @@ class TicRepo:
                         None
                         if resultado.triaje_coincide is None
                         else int(resultado.triaje_coincide),
+                        None
+                        if resultado.triaje_en_candidatas is None
+                        else int(resultado.triaje_en_candidatas),
                         resultado.aviso_competencia,
                         _json(resultado.reapertura),
                     ),
@@ -613,6 +618,8 @@ class TicRepo:
                      SUM(CASE WHEN triaje_coincide = 0 THEN 1 ELSE 0 END) AS discrepan,
                      SUM(CASE WHEN triaje_coincide IS NULL THEN 1 ELSE 0 END)
                          AS sin_competencia,
+                     SUM(CASE WHEN triaje_en_candidatas = 0 THEN 1 ELSE 0 END)
+                         AS fuera_del_grafo,
                      COUNT(*) AS tics
                  FROM tic"""
         binds: list[Any] = []
@@ -630,6 +637,12 @@ class TicRepo:
             "coinciden": coinciden,
             "discrepan": discrepan,
             "sin_competencia": int(fila["sin_competencia"] or 0),
+            # Subconjunto de `discrepan`, no una cuarta categoría: el tic
+            # que el grafo no propuso siquiera discrepa además de eso. Se
+            # cuenta aparte porque un prompt que elige entre lo que el
+            # paciente sugiere se arregla afinándolo, y uno que elige fuera
+            # no.
+            "fuera_del_grafo": int(fila["fuera_del_grafo"] or 0),
             # None y no 0.0: sin nada comparable no hay tasa que dar, y un
             # cero se leería como «el prompt nunca acierta».
             "acuerdo": (coinciden / comparables) if comparables else None,

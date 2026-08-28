@@ -609,6 +609,22 @@ class ResultadoTic(BaseModel):
         default=None,
         description="None si no hubo competencia con la que comparar",
     )
+    # TERCER ESTADO DEL MISMO EJE, y el grave.
+    #
+    # `triaje_coincide` a False dice que el grafo prefirió OTRA de las que
+    # propuso: una discrepancia entre dos hipótesis que ambas venían a
+    # cuento. Esto dice algo peor —que el grafo no propuso siquiera la que
+    # el triaje eligió—, y hasta ahora los dos se contaban igual.
+    #
+    # Sólo MIDE. No cambia qué protocolo se usa.
+    triaje_en_candidatas: bool | None = Field(
+        default=None,
+        description=(
+            "Si el protocolo que eligió el triaje estaba entre las candidatas "
+            "que el grafo propuso. False es el estado grave: el grafo no lo "
+            "propuso siquiera. None cuando el grafo no propuso ninguna."
+        ),
+    )
     # El cierre del bucle: qué abre la duda cuando Φ dice que la creencia
     # dejó de ser operable. None cuando no hay duda que reabrir.
     reapertura: ReaperturaDeIndagacion | None = None

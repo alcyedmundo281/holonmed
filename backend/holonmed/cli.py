@@ -258,6 +258,15 @@ def _lineas_competencia(resultado) -> list[str]:
             f"  DISCREPAN: el triaje usó {resultado.skill_activa} y el grafo "
             f"habría elegido {resultado.ganadora_abductiva}."
         )
+
+    # El tercer estado se dice aparte y sólo cuando ocurre: discrepar sobre
+    # dos hipótesis que el paciente sugiere es una cosa, y elegir una que no
+    # sugiere es otra. Fundidos en una línea se leen igual.
+    if resultado.triaje_en_candidatas is False:
+        lineas.append(
+            f"  FUERA DEL GRAFO: {resultado.skill_activa} no estaba entre las "
+            f"candidatas que el paciente sugiere. Sólo se registra."
+        )
     if resultado.aviso_competencia:
         lineas.append(f"  AVISO: {resultado.aviso_competencia}")
 

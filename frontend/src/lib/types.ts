@@ -317,6 +317,16 @@ export interface ResultadoTic {
   /** `null` —y no `false`— si no hubo competencia con la que comparar. */
   triaje_coincide: boolean | null;
   /**
+   * Tercer estado del mismo eje, y el grave. `triaje_coincide === false`
+   * dice que el grafo prefirió OTRA de las que propuso; esto dice que no
+   * propuso siquiera la que el triaje eligió, es decir que el prompt
+   * eligió fuera de lo que el paciente sugiere. `null` cuando el grafo no
+   * propuso ninguna candidata.
+   *
+   * Sólo mide: el protocolo que se usa no cambia.
+   */
+  triaje_en_candidatas: boolean | null;
+  /**
    * Se dice en voz alta cuando la de mayor coseno quedó fuera por α:
    * «encaja mejor y no puedo usarla porque su protocolo no cita». Si la
    * compuerta actúa callada, el sistema trata otra cosa sin explicar por

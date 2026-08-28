@@ -601,6 +601,26 @@ class CrystallizationPipeline:
         if not candidatas:
             return
 
+        # LA GUARDA DEL ROUTER, en su versión que sólo mide.
+        #
+        # Se registra ANTES del veto y del orden a propósito: la pregunta
+        # «¿propuso el grafo lo que eligió el prompt?» tiene respuesta
+        # aunque después se vete todo o no gane nadie, y perderla ahí
+        # convertiría el estado grave en un NULL indistinguible.
+        #
+        # `triaje_coincide` a False dice que el grafo prefirió otra de las
+        # que propuso. Esto dice que no propuso ésta en absoluto, que es
+        # otra cosa: el prompt eligió fuera de lo que el paciente sugiere.
+        propuestas = {c.nombre for c in candidatas}
+        resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
+        if not resultado.triaje_en_candidatas:
+            logger.warning(
+                "El triaje eligió '%s', que el grafo NO propuso. Propuso: %s. "
+                "No se cambia el protocolo: sólo se registra.",
+                resultado.skill_activa,
+                ", ".join(sorted(propuestas)),
+            )
+
         # El mismo conjunto para todas: se compite contra UN paciente, no
         # contra uno por hipótesis.
         comun = list(holon.linea_tiempo) + validados

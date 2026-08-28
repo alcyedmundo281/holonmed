@@ -158,6 +158,11 @@ CREATE TABLE IF NOT EXISTS tic (
     -- competencia con la que comparar. Colapsarlo a 0 contaría como
     -- desacuerdo un tic donde nadie compitió.
     triaje_coincide    INTEGER,
+    -- El tercer estado del mismo eje: si el protocolo del triaje estaba
+    -- ENTRE las candidatas del grafo. `triaje_coincide = 0` dice que el
+    -- grafo prefirió otra de las que propuso; esto dice que no propuso
+    -- ésta siquiera, que es peor y hasta ahora se contaba igual.
+    triaje_en_candidatas INTEGER,
     aviso_competencia  TEXT,
 
     -- Lo que la duda abre cuando Φ dice que la creencia dejó de ser
