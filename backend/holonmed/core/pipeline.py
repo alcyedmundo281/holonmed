@@ -126,6 +126,18 @@ FORMATO JSON:
 {{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
 
 
+def _texto_del_modelo(crudo: dict, clave: str) -> str:
+    """Lee un campo de texto de la salida del LLM, tratando `null` como vacío.
+
+    Un modelo puede emitir la clave con valor nulo, y entonces
+    `crudo.get(clave, "")` devuelve `None` en vez del defecto: la clave
+    EXISTE. `str(None)` da 'None', que mide cuatro y es verdadera, así que
+    pasa cualquier comprobación de «viene vacío».
+    """
+    valor = crudo.get(clave)
+    return "" if valor is None else str(valor).strip()
+
+
 def _normalizar(texto: str) -> str:
     """Minúsculas y sin acentos, para comparar lo que dice el texto."""
     import unicodedata
@@ -178,8 +190,8 @@ def _sin_cortes_inventados(
     """
     conservados, retirados = [], []
     for crudo in crudos:
-        cita = str(crudo.get("texto_origen", ""))
-        termino = str(crudo.get("termino_clinico", "")).strip()
+        cita = _texto_del_modelo(crudo, "texto_origen")
+        termino = _texto_del_modelo(crudo, "termino_clinico")
         plano = _normalizar(termino)
         if (
             any(c.isdigit() for c in cita)
@@ -739,7 +751,10 @@ class CrystallizationPipeline:
         limpios = [
             item
             for item in crudos
-            if isinstance(item, dict) and str(item.get("termino_clinico", "")).strip()
+            # `str(item.get(clave, ""))` daría 'None' con un `null` del modelo:
+            # el filtro cuyo único trabajo es tirar lo que no trae término
+            # sería derrotado exactamente por el caso que debía cazar.
+            if isinstance(item, dict) and _texto_del_modelo(item, "termino_clinico")
         ]
 
         if generica:
@@ -763,8 +778,21 @@ class CrystallizationPipeline:
         skill: Skill,
         hints: dict[str, str],
     ) -> Infon | None:
-        termino = str(crudo.get("termino_clinico", "")).strip()
-        cita = str(crudo.get("texto_origen", "")).strip()
+        # `crudo.get(clave, "")` NO protege de un `null`: la clave existe, así
+        # que el defecto no se aplica y `str(None)` da la cadena 'None'
+        # —cuatro caracteres, verdadera— que la guarda de abajo deja pasar. El
+        # resultado llega a la pantalla del clínico como
+        #
+        #     [RUIDO    ] None [AUSENTE]
+        #
+        # y, peor, `texto_origen` fabrica una cita: el infón dice haberse
+        # apoyado en un fragmento de la nota que se llama «None».
+        #
+        # Es la misma forma que el `tipo:` sin valor ya corregido en
+        # `skills.py` —una clave presente y nula derrotando a su defecto—,
+        # ahora en el camino por donde entra TODO lo que dice el modelo.
+        termino = _texto_del_modelo(crudo, "termino_clinico")
+        cita = _texto_del_modelo(crudo, "texto_origen")
         if not termino:
             return None
 
