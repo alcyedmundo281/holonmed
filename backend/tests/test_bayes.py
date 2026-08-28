@@ -234,3 +234,70 @@ def test_una_ausencia_no_validada_no_descarta_nada():
     base = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [])
     con_dudosa = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [dudosa])
     assert con_dudosa.probabilidad_porcentaje == base.probabilidad_porcentaje
+
+
+# --- El a priori: dos defectos en la dirección peligrosa -------------------
+#
+# Encontrados corriendo la UI contra un paciente real con antecedente
+# «Alcoholismo cronico». La traza los confesaba en dos líneas seguidas —el
+# diseño de auditabilidad funcionaba— pero el número no.
+
+import math  # noqa: E402
+
+import pytest  # noqa: E402
+
+from holonmed.core.bayes import _factores_que_aplican  # noqa: E402
+
+FACTORES = {"alcohol": 2.8, "alcoholismo": 2.8, "litiasis biliar": 4.0}
+
+
+def _producto(texto):
+    return math.prod(
+        a.peso for a in _factores_que_aplican(FACTORES, texto) if a.peso is not None
+    )
+
+
+def test_dos_nombres_del_mismo_factor_no_multiplican_dos_veces():
+    """`alcohol` y `alcoholismo` sobre «alcoholismo cronico» son UN factor.
+
+    Antes: 2.8 × 2.8 = 7.84, y una previa del 5% subía al 29.2% en vez del
+    12.8%. Contar de más infla la probabilidad previa, que es hacia donde no
+    se debe errar.
+    """
+    assert _producto("alcoholismo cronico") == 2.8
+
+
+def test_manda_el_nombre_mas_especifico():
+    """Con dos claves sobre el mismo texto se aplica la coincidencia larga."""
+    aplicados = [a for a in _factores_que_aplican(FACTORES, "alcoholismo cronico")
+                 if a.peso is not None]
+    assert [a.linea.split("'")[1] for a in aplicados] == ["alcoholismo"]
+
+
+def test_un_antecedente_negado_no_sube_la_probabilidad():
+    """El defecto de DIRECCIÓN, que es el grave.
+
+    Siendo una subcadena, «sin antecedente de alcoholismo» multiplicaba
+    ×7.84: el sistema subía la probabilidad porque la nota decía que el
+    paciente NO tenía el factor.
+    """
+    assert _producto("sin antecedente de alcoholismo") == 1
+
+
+@pytest.mark.parametrize(
+    "texto", ["no bebe alcohol", "niega alcoholismo", "ausencia de alcoholismo"]
+)
+def test_otras_formas_de_negar_tampoco_suman(texto):
+    assert _producto(texto) == 1
+
+
+def test_un_factor_suprimido_se_dice_en_la_traza():
+    """Un factor suprimido que se anuncia es auditable; uno aplicado en
+    silencio sobre una negación, no."""
+    lineas = [a.linea for a in _factores_que_aplican(FACTORES, "sin alcoholismo")]
+    assert any("NO aplicado" in x and "niega" in x for x in lineas)
+
+
+def test_dos_factores_DISTINTOS_si_multiplican():
+    """El arreglo no puede tragarse los factores que sí son dos."""
+    assert _producto("litiasis biliar y alcoholismo") == pytest.approx(4.0 * 2.8)

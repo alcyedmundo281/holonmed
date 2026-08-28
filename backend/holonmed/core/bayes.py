@@ -18,7 +18,7 @@ juntos para que otro sistema decida. Aquí los fragmentos son infones.
 
 import logging
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 from ..models import InferenciaBayesiana, Infon
 
@@ -28,6 +28,94 @@ logger = logging.getLogger(__name__)
 # y presentar una certeza que la evidencia no sostiene.
 LR_MAXIMO = 100.0
 PROBABILIDAD_MAXIMA = 0.99
+
+
+_NEGACIONES = ("sin ", "no ", "niega ", "ausencia de ", "descarta ")
+_VENTANA_NEGACION = 24
+
+
+class _FactorAplicado(NamedTuple):
+    """Un factor de riesgo con lo que se hizo con él. `peso=None`: no aplicado."""
+
+    peso: float | None
+    linea: str
+
+
+def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorAplicado]:
+    """Qué factores modifican la probabilidad previa, y cuáles no y por qué.
+
+    DOS DEFECTOS QUE ESTO CIERRA, LOS DOS EN LA DIRECCIÓN PELIGROSA
+    ---------------------------------------------------------------
+    El código anterior era `if factor.lower() in antecedentes: odds *= peso`
+    en un bucle por clave. Con un antecedente de «alcoholismo crónico» y un
+    protocolo que declara `alcohol` y `alcoholismo` —dos nombres del MISMO
+    factor— la previa se multiplicaba dos veces:
+
+        Prevalencia poblacional: 5.00%
+        Factor de riesgo 'alcohol' (×2.8)
+        Factor de riesgo 'alcoholismo' (×2.8)     29.2% en vez de 12.8%
+
+    Y siendo subcadena, **«sin antecedente de alcoholismo» también
+    multiplicaba** ×7.84. Eso ya no es un error de magnitud: es de dirección.
+    El sistema subía la probabilidad porque la nota decía que el paciente NO
+    tenía el factor.
+
+    QUÉ HACE
+    --------
+    · Varias claves sobre el MISMO trozo de texto son un factor: se aplica
+      una vez —la coincidencia más larga, el nombre más específico— y se dice
+      que las otras se solaparon. Contar de más infla la previa, que es hacia
+      donde no se debe errar.
+    · Un factor precedido de una marca de negación no se aplica, y se informa.
+      Un factor suprimido que se anuncia es auditable; uno aplicado en
+      silencio sobre una negación, no.
+
+    QUÉ NO ES
+    ---------
+    No es un analizador de negación y no pretende serlo. El arreglo de fondo
+    es que los antecedentes pasen por la misma extracción y validación que los
+    hallazgos —donde ya hay polaridad y tres capas de auditoría— en vez de
+    emparejarse por subcadena contra texto libre. Hoy el a priori rodea todo
+    el aparato que el resto del sistema usa para no equivocarse.
+    """
+    candidatos = []
+    for factor, peso_crudo in factores.items():
+        peso = _a_float(peso_crudo, 1.0)
+        if peso <= 0:
+            continue
+        aguja = str(factor).lower()
+        inicio = antecedentes.find(aguja)
+        if inicio < 0:
+            continue
+        candidatos.append((inicio, inicio + len(aguja), str(factor), peso))
+
+    # El nombre más específico primero: con «alcoholismo» y «alcohol» en el
+    # mismo sitio, manda el largo.
+    candidatos.sort(key=lambda c: (c[0], -(c[1] - c[0])))
+
+    salida: list[_FactorAplicado] = []
+    ocupados: list[tuple[int, int]] = []
+    for inicio, fin, factor, peso in candidatos:
+        if any(inicio < f and i < fin for (i, f) in ocupados):
+            salida.append(_FactorAplicado(
+                None,
+                f"Factor de riesgo '{factor}': se solapa con otro ya contado "
+                f"sobre el mismo texto — se cuenta UNA vez",
+            ))
+            continue
+
+        contexto = antecedentes[max(0, inicio - _VENTANA_NEGACION):inicio]
+        if any(n in contexto for n in _NEGACIONES):
+            ocupados.append((inicio, fin))
+            salida.append(_FactorAplicado(
+                None,
+                f"Factor de riesgo '{factor}' NO aplicado: el texto lo niega",
+            ))
+            continue
+
+        ocupados.append((inicio, fin))
+        salida.append(_FactorAplicado(peso, f"Factor de riesgo '{factor}' (×{peso})"))
+    return salida
 
 
 class AntigenPresentingCell:
@@ -53,13 +141,10 @@ class AntigenPresentingCell:
         antecedentes = str(holon_metadata.get("antecedentes", "")).lower()
         factores = modelo.get("factores_riesgo_a_priori")
         if isinstance(factores, dict):
-            for factor, peso_crudo in factores.items():
-                peso = _a_float(peso_crudo, 1.0)
-                if peso <= 0:
-                    continue
-                if factor.lower() in antecedentes:
-                    odds *= peso
-                    traza.append(f"Factor de riesgo '{factor}' (×{peso})")
+            for aplicado in _factores_que_aplican(factores, antecedentes):
+                if aplicado.peso is not None:
+                    odds *= aplicado.peso
+                traza.append(aplicado.linea)
 
         edad = holon_metadata.get("edad")
         if edad is not None:
