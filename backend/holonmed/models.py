@@ -201,9 +201,9 @@ class VeredictoDeclarado(BaseModel):
 class EstadoDimension(str, Enum):
     """Qué hace el registro en una dimensión del espacio de hallazgos."""
 
-    CONCUERDA = "concuerda"            # el registro dice lo que la hipótesis exige
-    CONTRADICE = "contradice"          # el registro dice lo contrario
-    SIN_MEDIR = "sin_medir"            # nadie lo ha mirado: no es ausencia, es vacío
+    CONCUERDA = "concuerda"  # el registro dice lo que la hipótesis exige
+    CONTRADICE = "contradice"  # el registro dice lo contrario
+    SIN_MEDIR = "sin_medir"  # nadie lo ha mirado: no es ausencia, es vacío
     NO_SIMBOLIZADO = "no_simbolizado"  # hallazgo real que la hipótesis no explica
 
 
@@ -215,11 +215,11 @@ class VeredictoSemiotico(str, Enum):
     solas, nunca para sustituirlo.
     """
 
-    ARMONIA = "ARMONIA"                            # la creencia es operable
+    ARMONIA = "ARMONIA"  # la creencia es operable
     ACOPLAMIENTO_PARCIAL = "ACOPLAMIENTO_PARCIAL"  # encaja, pero queda por mirar
-    INERCIA = "INERCIA"                            # ortogonal: no toca este caso
-    FRICCION = "FRICCION"                          # el contexto empieza a disentir
-    DESARMONIA = "DESARMONIA"                      # el contexto la contradice
+    INERCIA = "INERCIA"  # ortogonal: no toca este caso
+    FRICCION = "FRICCION"  # el contexto empieza a disentir
+    DESARMONIA = "DESARMONIA"  # el contexto la contradice
 
 
 class ComponenteAcoplamiento(BaseModel):

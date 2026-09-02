@@ -32,7 +32,10 @@ SKILL = """# SKILL: PRUEBA
 
 
 def extraccion_de(termino: str, cita: str = "cita textual"):
-    return {"resumen": "…", "infones": [{"texto_origen": cita, "termino_clinico": termino}]}
+    return {
+        "resumen": "…",
+        "infones": [{"texto_origen": cita, "termino_clinico": termino}],
+    }
 
 
 # Término deliberadamente ausente de los skill-hints del protocolo de
@@ -116,7 +119,9 @@ def entorno(tmp_path):
 
 async def test_un_hallazgo_solido_queda_validado(entorno):
     pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert len(resultado.infones) == 1
     infon = resultado.infones[0]
@@ -134,7 +139,9 @@ async def test_un_skill_hint_tiene_prioridad_sobre_el_indice(entorno):
     signDetected del protocolo, así que se resuelve en la capa 0.
     """
     pipeline = entorno(LLMFalso(), IndexFalso(score=5.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     infon = resultado.infones[0]
     assert infon.estado == EstadoInfon.VALIDADO
@@ -148,7 +155,9 @@ async def test_un_hint_sin_vocabulario_cargado_sigue_valiendo(entorno):
     ofrecer linaje ni mapeo, y eso debe verse en el resultado.
     """
     pipeline = entorno(LLMFalso(), IndexFalso(score=5.0, exacto=False))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     infon = resultado.infones[0]
     assert infon.estado == EstadoInfon.VALIDADO
@@ -159,7 +168,9 @@ async def test_un_hint_sin_vocabulario_cargado_sigue_valiendo(entorno):
 
 async def test_acierto_ontologico_sin_respaldo_logico_da_alerta(entorno):
     """El concepto existe, pero la evidencia no lo sostiene: no se valida."""
-    pipeline = entorno(LLMFalso(auditoria_valida=False), IndexFalso(score=95.0, exacto=True))
+    pipeline = entorno(
+        LLMFalso(auditoria_valida=False), IndexFalso(score=95.0, exacto=True)
+    )
     resultado = await pipeline.ejecutar("Texto ambiguo", HolonPaciente(paciente_id="t"))
 
     infon = resultado.infones[0]
@@ -217,7 +228,9 @@ async def test_el_auditor_puede_rechazar_todos_los_candidatos(entorno):
 
 
 async def test_solo_la_evidencia_validada_alimenta_a_bayes(entorno):
-    pipeline = entorno(LLMFalso(auditoria_valida=False), IndexFalso(score=95.0, exacto=True))
+    pipeline = entorno(
+        LLMFalso(auditoria_valida=False), IndexFalso(score=95.0, exacto=True)
+    )
     resultado = await pipeline.ejecutar("Texto", HolonPaciente(paciente_id="t"))
 
     # El infón quedó en ALERTA, así que la probabilidad no debe moverse.
@@ -351,7 +364,9 @@ async def test_la_competencia_mide_y_no_decide(arena):
     del pipeline a medias — que es otra conversación y otro riesgo.
     """
     pipeline = arena(citada=CITADA)
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.skill_activa == "general_triage"
     assert resultado.ganadora_abductiva == "citada"
@@ -369,7 +384,9 @@ async def test_la_competencia_guarda_a_las_perdedoras(arena):
     qué compitió, que es pedirle al clínico que confíe en el orden.
     """
     pipeline = arena(citada=CITADA, otra=CITADA.replace("citada", "otra"))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert {c.skill for c in resultado.competencia} == {"citada", "otra"}
     assert all(c.clave is not None for c in resultado.competencia)
@@ -409,7 +426,9 @@ async def test_la_compuerta_de_alfa_no_actua_callada(arena):
     frase es accionable: manda a arreglar el índice.
     """
     pipeline = arena(citada=CITADA, sin_citar=SIN_CITAR)
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     fuera = next(c for c in resultado.competencia if c.skill == "sin_citar")
     assert fuera.anclaje == 0.0
@@ -449,7 +468,9 @@ async def test_la_competencia_corre_sobre_el_paciente_de_antes_de_clasificar(tmp
         verificador=ClinicalVerifier(LLMFalso(), settings),
         settings=settings,
     )
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     acunado = [i for i in resultado.infones if i.derivado_de]
     assert acunado, "la fixture ya no sirve: el triaje tiene que acuñar algo"
@@ -478,12 +499,10 @@ def test_se_ordena_por_coseno_y_no_por_phi():
     ordenar por Φ la relega — y el sistema trataría al paciente con el
     protocolo mejor escrito en vez de con el que encaja.
     """
-    acoplada = _fila("acoplada", clave=0.90, anclaje=0.69)      # Φ = 0.621
+    acoplada = _fila("acoplada", clave=0.90, anclaje=0.69)  # Φ = 0.621
     documentada = _fila("documentada", clave=0.75, anclaje=0.87)  # Φ = 0.653
 
-    ganadora, aviso = CrystallizationPipeline._ordenar_candidatas(
-        [acoplada, documentada]
-    )
+    ganadora, aviso = CrystallizationPipeline._ordenar_candidatas([acoplada, documentada])
 
     assert ganadora.skill == "acoplada"
     assert aviso is None

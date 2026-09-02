@@ -176,7 +176,10 @@ class OntologyValidator:
             limpio = termino_hint.lower()
             if hay_colision(objetivo, limpio):
                 continue
-            if fuzz.token_sort_ratio(objetivo, limpio) > self.settings.threshold_hint_fuzzy:
+            if (
+                fuzz.token_sort_ratio(objetivo, limpio)
+                > self.settings.threshold_hint_fuzzy
+            ):
                 return self._desde_hint(codigo, termino_hint, "hint_difuso")
         return None
 

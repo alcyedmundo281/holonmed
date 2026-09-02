@@ -53,8 +53,10 @@ CONCEPTOS = {
 REFERENCIAS = {
     "pmid:26474316": {
         "autores": ["Postuma RB", "Berg D"],
-        "publicacion": "Mov Disord", "anio": 2015,
-        "volumen": "30", "paginas": "1591-601",
+        "publicacion": "Mov Disord",
+        "anio": 2015,
+        "volumen": "30",
+        "paginas": "1591-601",
         "identificadores": {"pmid": "26474316", "doi": "10.1002/mds.26424"},
         "verificacion": {"pubmed": True},
     }
@@ -63,8 +65,13 @@ REFERENCIAS = {
 
 def indice():
     return convertir_condicion.Indice(
-        ruta=Path("/no/existe"), conceptos=dict(CONCEPTOS), condiciones={},
-        referencias=dict(REFERENCIAS), archivos={}, commit="0" * 7, limpio=True,
+        ruta=Path("/no/existe"),
+        conceptos=dict(CONCEPTOS),
+        condiciones={},
+        referencias=dict(REFERENCIAS),
+        archivos={},
+        commit="0" * 7,
+        limpio=True,
     )
 
 
@@ -84,19 +91,25 @@ def convertir_signos(condicion: dict):
 
 def infon(termino: str, polaridad: Polaridad = Polaridad.PRESENTE) -> Infon:
     return Infon(
-        texto_origen=termino, termino_propuesto=termino, termino=termino,
-        polaridad=polaridad, estado=EstadoInfon.VALIDADO,
+        texto_origen=termino,
+        termino_propuesto=termino,
+        termino=termino,
+        polaridad=polaridad,
+        estado=EstadoInfon.VALIDADO,
     )
 
 
 # ── lo que SÍ se emite ───────────────────────────────────────────────────────
 
+
 def test_una_bandera_respaldada_entra_como_bandera_roja():
-    texto, pendientes = convertir_signos({
-        "signos_de_alarma": [
-            {"concepto": "HM:0711", "sostiene": "consenso_con_afirmacion"}
-        ]
-    })
+    texto, pendientes = convertir_signos(
+        {
+            "signos_de_alarma": [
+                {"concepto": "HM:0711", "sostiene": "consenso_con_afirmacion"}
+            ]
+        }
+    )
     assert "nombre: Anemia" in texto
     assert "efecto: bandera_roja" in texto
     assert not any("Anemia" in p for p in pendientes)
@@ -112,27 +125,39 @@ def test_una_arista_corriente_no_cambia():
 
 
 def test_una_bandera_por_ausencia_conserva_su_polaridad():
-    texto, _ = convertir_signos({
-        "signos_de_alarma": [{
-            "concepto": "HM:0201", "sostiene": "discriminacion_medida",
-            "dispara_si": "ausente",
-        }]
-    })
+    texto, _ = convertir_signos(
+        {
+            "signos_de_alarma": [
+                {
+                    "concepto": "HM:0201",
+                    "sostiene": "discriminacion_medida",
+                    "dispara_si": "ausente",
+                }
+            ]
+        }
+    )
     assert "efecto: bandera_roja" in texto
     assert "dispara_si: ausente" in texto
 
 
 def test_una_exclusion_por_mecanismo_con_motivo_se_emite():
-    texto, _ = convertir_signos({
-        "signos": [{
-            "concepto": "HM:0900", "efecto": "excluye", "sostiene": "mecanismo",
-            "motivo": "sin apéndice no puede haber apendicitis",
-        }]
-    })
+    texto, _ = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0900",
+                    "efecto": "excluye",
+                    "sostiene": "mecanismo",
+                    "motivo": "sin apéndice no puede haber apendicitis",
+                }
+            ]
+        }
+    )
     assert "efecto: excluye" in texto
 
 
 # ── lo que NO se emite, y las dos mitades de cada negativa ───────────────────
+
 
 @pytest.mark.parametrize(
     "arista, fragmento",
@@ -158,50 +183,67 @@ def test_una_bandera_sin_respaldo_no_entra_al_bloque(arista, fragmento):
 
 def test_una_exclusion_por_mecanismo_sin_motivo_no_entra_al_bloque():
     """El caso peor del degradado: una exclusión absoluta convertida en apoyo."""
-    texto, pendientes = convertir_signos({
-        "signos": [{
-            "concepto": "HM:0900", "efecto": "excluye", "sostiene": "mecanismo",
-        }]
-    })
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0900",
+                    "efecto": "excluye",
+                    "sostiene": "mecanismo",
+                }
+            ]
+        }
+    )
     assert "Apendicectomía" not in texto
     assert "efecto:" not in texto
     assert any("motivo" in p for p in pendientes), pendientes
 
 
 def test_un_efecto_desconocido_no_entra_al_bloque():
-    texto, pendientes = convertir_signos({
-        "signos": [{"concepto": "HM:0711", "efecto": "bandera_amarilla"}]
-    })
+    texto, pendientes = convertir_signos(
+        {"signos": [{"concepto": "HM:0711", "efecto": "bandera_amarilla"}]}
+    )
     assert "Anemia" not in texto
     assert any("bandera_amarilla" in p for p in pendientes), pendientes
 
 
 def test_un_dispara_si_desconocido_no_entra_al_bloque():
     """Emitirlo como «presente» podría invertir cuándo dispara la bandera."""
-    texto, pendientes = convertir_signos({
-        "signos_de_alarma": [{
-            "concepto": "HM:0201", "sostiene": "discriminacion_medida",
-            "dispara_si": "quizas",
-        }]
-    })
+    texto, pendientes = convertir_signos(
+        {
+            "signos_de_alarma": [
+                {
+                    "concepto": "HM:0201",
+                    "sostiene": "discriminacion_medida",
+                    "dispara_si": "quizas",
+                }
+            ]
+        }
+    )
     assert "Dolor" not in texto
     assert any("quizas" in p for p in pendientes), pendientes
 
 
 def test_el_odds_ratio_nunca_sale_como_cociente():
     """Un OR no es una propiedad del hallazgo y el motor lo multiplicaría."""
-    texto, _ = convertir_signos({
-        "signos_de_alarma": [{
-            "concepto": "HM:0711", "sostiene": "consenso_con_afirmacion",
-            "odds_ratio": {"valor": 2.7, "ic95": [1.4, 5.1]},
-        }]
-    })
+    texto, _ = convertir_signos(
+        {
+            "signos_de_alarma": [
+                {
+                    "concepto": "HM:0711",
+                    "sostiene": "consenso_con_afirmacion",
+                    "odds_ratio": {"valor": 2.7, "ic95": [1.4, 5.1]},
+                }
+            ]
+        }
+    )
     assert "lr:" not in texto
     assert "lr_negativo:" not in texto
     assert "2.7" not in texto
 
 
 # ── la consecuencia clínica, extremo a extremo pero sin índice ───────────────
+
 
 def test_una_bandera_sin_respaldo_no_cuenta_en_ninguna_direccion():
     """Lo que de verdad se está protegiendo, medido donde se decide.
@@ -211,23 +253,24 @@ def test_una_bandera_sin_respaldo_no_cuenta_en_ninguna_direccion():
     el hallazgo se ve —sigue en la prosa, y Φ lo recoge como resto no
     simbolizado— pero no empuja el criterio.
     """
-    texto, _ = convertir_signos({
-        "signos_de_alarma": [
-            {"concepto": "HM:0711", "sostiene": "consenso_con_afirmacion"},
-            {"concepto": "HM:0101", "sostiene": "consenso_de_lista"},
-        ]
-    })
+    texto, _ = convertir_signos(
+        {
+            "signos_de_alarma": [
+                {"concepto": "HM:0711", "sostiene": "consenso_con_afirmacion"},
+                {"concepto": "HM:0101", "sostiene": "consenso_de_lista"},
+            ]
+        }
+    )
     skill = Skill("x", f"---\ntitulo: Prueba\n{texto}\n---\n\nPROTOCOLO\n")
 
-    veredicto = EvaluadorDeVeredicto().evaluar(
-        skill, [infon("Anemia"), infon("Fiebre")]
-    )
+    veredicto = EvaluadorDeVeredicto().evaluar(skill, [infon("Anemia"), infon("Fiebre")])
     assert veredicto is not None
     assert veredicto.banderas_rojas == ["Anemia"]
     assert veredicto.apoyos == [], "la fiebre degradada volvió a contar a favor"
 
 
 # ── que las tablas no diverjan entre los dos archivos ────────────────────────
+
 
 def test_las_taxonomias_del_eje_no_divergen():
     """El script no importa el paquete, así que las repite. Que coincidan no
@@ -253,7 +296,8 @@ def test_cada_clave_conocida_se_emite_o_se_declara_no_emitida():
         )
     )
     sin_cubrir = {
-        c for c in convertir_condicion.CLAVES_ARISTA
+        c
+        for c in convertir_condicion.CLAVES_ARISTA
         if c not in convertir_condicion.CONOCIDAS_NO_EMITIDAS and f'"{c}"' not in fuente
     }
     assert not sin_cubrir, (
@@ -279,22 +323,32 @@ PROTOCOLO
 def test_los_niveles_conservan_el_orden_declarado():
     """El motor se queda con el PRIMERO que se satisface, así que invertirlos
     rebajaría el grado de certeza en silencio."""
-    skill = Skill("x", PLANTILLA_BALANCE.format(cuerpo=(
-        '  fuente: "Postuma RB et al"\n'
-        "  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n"
-        "  probable:    {contrapeso: 1, banderas_maximas: 2}\n"
-    )))
+    skill = Skill(
+        "x",
+        PLANTILLA_BALANCE.format(
+            cuerpo=(
+                '  fuente: "Postuma RB et al"\n'
+                "  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n"
+                "  probable:    {contrapeso: 1, banderas_maximas: 2}\n"
+            )
+        ),
+    )
     assert [n.nombre for n in skill.balance.niveles] == ["establecida", "probable"]
 
 
 def test_una_clave_que_no_es_nivel_no_se_interpreta_como_nivel():
     """`poblacion: {...}` es un diccionario y colaba por el filtro anterior. Un
     nivel de más hace el criterio MÁS permisivo."""
-    skill = Skill("x", PLANTILLA_BALANCE.format(cuerpo=(
-        '  fuente: "Postuma RB et al"\n'
-        "  poblacion: {edad_minima: 50}\n"
-        "  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n"
-    )))
+    skill = Skill(
+        "x",
+        PLANTILLA_BALANCE.format(
+            cuerpo=(
+                '  fuente: "Postuma RB et al"\n'
+                "  poblacion: {edad_minima: 50}\n"
+                "  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n"
+            )
+        ),
+    )
     assert [n.nombre for n in skill.balance.niveles] == ["establecida"]
     assert any("poblacion" in p for p in skill.problemas())
 
@@ -305,14 +359,17 @@ def test_una_clave_que_no_es_nivel_no_se_interpreta_como_nivel():
 # emisión del balance no tiraba ni una prueba. El arreglo estaba escrito y sin
 # comprobar, que es la misma clase de verde que este proyecto persigue.
 
+
 def test_el_conversor_no_emite_como_nivel_lo_que_no_lo_es():
-    texto, pendientes = convertir_balance({
-        "balance": {
-            "ref": "pmid:26474316",
-            "poblacion": {"edad_minima": 50},
-            "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
+    texto, pendientes = convertir_balance(
+        {
+            "balance": {
+                "ref": "pmid:26474316",
+                "poblacion": {"edad_minima": 50},
+                "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
+            }
         }
-    })
+    )
     assert "establecida:" in texto
     assert "poblacion" not in texto, "una clave que no es nivel salió como nivel"
     assert any("poblacion" in p for p in pendientes), pendientes
@@ -320,25 +377,29 @@ def test_el_conversor_no_emite_como_nivel_lo_que_no_lo_es():
 
 def test_el_conversor_traduce_ref_a_fuente_en_prosa():
     """El índice guarda el identificador; la skill guarda la cita legible."""
-    texto, _ = convertir_balance({
-        "balance": {
-            "ref": "pmid:26474316",
-            "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
+    texto, _ = convertir_balance(
+        {
+            "balance": {
+                "ref": "pmid:26474316",
+                "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
+            }
         }
-    })
+    )
     assert "Postuma" in texto
     assert "\n  ref:" not in texto
 
 
 def test_un_nucleo_roto_se_lleva_el_balance():
     """Emitir el balance sin su núcleo no es conservador: es más permisivo."""
-    texto, pendientes = convertir_balance({
-        "nucleo": {"requiere": ["HM:9999"], "ref": "pmid:26474316"},
-        "balance": {
-            "ref": "pmid:26474316",
-            "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
-        },
-    })
+    texto, pendientes = convertir_balance(
+        {
+            "nucleo": {"requiere": ["HM:9999"], "ref": "pmid:26474316"},
+            "balance": {
+                "ref": "pmid:26474316",
+                "establecida": {"apoyos_minimos": 2, "banderas_maximas": 0},
+            },
+        }
+    )
     assert "nucleo:" not in texto
     assert "balance:" not in texto, "el balance sobrevivió a su núcleo"
     assert any("no resuelve" in p for p in pendientes), pendientes
@@ -346,8 +407,11 @@ def test_un_nucleo_roto_se_lleva_el_balance():
 
 def test_un_balance_sin_fuente_se_denuncia():
     """Los enteros los fija el panel que redacta el criterio, no el sistema."""
-    skill = Skill("x", PLANTILLA_BALANCE.format(cuerpo=(
-        "  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n"
-    )))
+    skill = Skill(
+        "x",
+        PLANTILLA_BALANCE.format(
+            cuerpo=("  establecida: {apoyos_minimos: 2, banderas_maximas: 0}\n")
+        ),
+    )
     assert skill.balance.declarado
     assert any("sin `fuente`" in p for p in skill.problemas())

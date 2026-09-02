@@ -86,7 +86,9 @@ async def _check() -> int:
         print(f"        {bd['error']}")
     else:
         st = bd["estadisticas"]
-        print(f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones")
+        print(
+            f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones"
+        )
 
     print(marca(bool(estado["skills"])) + f"skills: {', '.join(estado['skills'])}")
 
@@ -142,7 +144,9 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     if resultado.inferencia:
         inf = resultado.inferencia
         print(f"\nInferencia: {inf.diagnostico}")
-        print(f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%")
+        print(
+            f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%"
+        )
         print(f"  veredicto: {inf.veredicto}")
         for paso in inf.traza_logica:
             print(f"    · {paso}")
@@ -218,7 +222,9 @@ def _cuenta(args) -> int:
         print()
         for c in cuenta.cargos:
             marca = {"propuesto": "?", "confirmado": "+", "anulado": "-"}[c.estado.value]
-            print(f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}")
+            print(
+                f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}"
+            )
             print(f"      {c.sistema_tarifario}:{c.codigo_tarifario}  orden {c.orden_id}")
     else:
         print("\n  Sin cargos.")

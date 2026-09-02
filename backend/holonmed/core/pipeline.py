@@ -170,9 +170,7 @@ class CrystallizationPipeline:
         # que acuña un término nuevo, y lo hace Python: es lógica sobre
         # evidencia validada, no una apreciación del modelo.
         try:
-            resultado.clasificacion = self.clasificador.evaluar(
-                skill, resultado.infones
-            )
+            resultado.clasificacion = self.clasificador.evaluar(skill, resultado.infones)
             if resultado.clasificacion and resultado.clasificacion.trastorno:
                 resultado.infones.append(resultado.clasificacion.trastorno)
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
@@ -433,9 +431,7 @@ class CrystallizationPipeline:
         # Por defecto presente: si el modelo no se pronuncia, no vamos a
         # inventarle una ausencia, que es la dirección peligrosa.
         presente = crudo.get("presente", True)
-        polaridad = (
-            Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
-        )
+        polaridad = Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
 
         # CAPAS 0-1-2: ¿existe este concepto en la ontología?
         match = await self.validador.validar(termino, hints=hints)

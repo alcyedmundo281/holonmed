@@ -59,9 +59,7 @@ def test_la_evidencia_no_validada_no_mueve_la_aguja():
     motor = AntigenPresentingCell()
     base = motor.calcular({}, SKILL, [])
     for estado in (EstadoInfon.ALERTA, EstadoInfon.RUIDO):
-        resultado = motor.calcular(
-            {}, SKILL, [infon("Hiperlipasemia (>3x)", estado)]
-        )
+        resultado = motor.calcular({}, SKILL, [infon("Hiperlipasemia (>3x)", estado)])
         assert resultado.probabilidad_porcentaje == base.probabilidad_porcentaje
         assert resultado.evidencia_utilizada == []
 
@@ -94,9 +92,7 @@ def test_skill_sin_modelo_bayesiano_no_inventa_uno():
 
 def test_emparejamiento_por_termino_parcial():
     """'Hiperlipasemia' debe casar con la clave 'Hiperlipasemia (>3x)'."""
-    resultado = AntigenPresentingCell().calcular(
-        {}, SKILL, [infon("Hiperlipasemia")]
-    )
+    resultado = AntigenPresentingCell().calcular({}, SKILL, [infon("Hiperlipasemia")])
     assert len(resultado.evidencia_utilizada) == 1
 
 
@@ -200,9 +196,7 @@ def test_una_prueba_negativa_baja_la_probabilidad():
 
 def test_la_presencia_y_la_ausencia_van_en_direcciones_opuestas():
     motor = AntigenPresentingCell()
-    presente = motor.calcular(
-        {}, SKILL_CON_LR_NEGATIVO, [infon("Hiperlipasemia (>3x)")]
-    )
+    presente = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [infon("Hiperlipasemia (>3x)")])
     ausente = motor.calcular(
         {}, SKILL_CON_LR_NEGATIVO, [infon_ausente("Hiperlipasemia (>3x)")]
     )

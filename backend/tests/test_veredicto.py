@@ -87,8 +87,13 @@ def infon(termino: str, presente: bool = True, valido: bool = True) -> Infon:
 def test_la_apendicectomia_excluye_la_apendicitis(evaluador, skill):
     """El caso que motivó todo el diseño."""
     res = evaluador.evaluar(
-        skill, [infon("Dolor en fosa ilíaca derecha"), infon("Fiebre"),
-                infon("Leucocitosis"), infon("Apendicectomía")]
+        skill,
+        [
+            infon("Dolor en fosa ilíaca derecha"),
+            infon("Fiebre"),
+            infon("Leucocitosis"),
+            infon("Apendicectomía"),
+        ],
     )
 
     assert res.veto is not None
@@ -101,8 +106,13 @@ def test_el_veto_gana_aunque_todo_lo_demas_apoye(evaluador, skill):
     """Ninguna cantidad de evidencia contrarresta una imposibilidad."""
     res = evaluador.evaluar(
         skill,
-        [infon("Apendicectomía"), infon("Fiebre"), infon("Leucocitosis"),
-         infon("Signo de Blumberg"), infon("Dolor en fosa ilíaca derecha")],
+        [
+            infon("Apendicectomía"),
+            infon("Fiebre"),
+            infon("Leucocitosis"),
+            infon("Signo de Blumberg"),
+            infon("Dolor en fosa ilíaca derecha"),
+        ],
     )
     assert res.veto is not None
     assert res.nivel is None
@@ -123,8 +133,10 @@ def test_una_exclusion_en_alerta_no_veta(evaluador, skill):
     Es la dirección peligrosa: un falso positivo aquí quita una apendicitis
     a quien la tiene.
     """
-    res = evaluador.evaluar(skill, [infon("Apendicectomía", valido=False),
-                                    infon("Fiebre"), infon("Leucocitosis")])
+    res = evaluador.evaluar(
+        skill,
+        [infon("Apendicectomía", valido=False), infon("Fiebre"), infon("Leucocitosis")],
+    )
     assert res.veto is None
     assert res.nivel == "establecida"
 
@@ -132,8 +144,8 @@ def test_una_exclusion_en_alerta_no_veta(evaluador, skill):
 def test_la_exclusion_exige_la_polaridad_declarada(evaluador, skill):
     """«No hay apendicectomía» no excluye nada."""
     res = evaluador.evaluar(
-        skill, [infon("Apendicectomía", presente=False), infon("Fiebre"),
-                infon("Leucocitosis")]
+        skill,
+        [infon("Apendicectomía", presente=False), infon("Fiebre"), infon("Leucocitosis")],
     )
     assert res.veto is None
     assert res.nivel == "establecida"
@@ -168,8 +180,8 @@ def test_una_bandera_se_contrarresta_con_un_apoyo(evaluador, skill):
         skill, [infon("Dolor en fosa ilíaca derecha", presente=False)]
     )
 
-    assert una.nivel == "probable"      # contrarrestada
-    assert sola.nivel is None           # sin contrapeso, no alcanza nivel
+    assert una.nivel == "probable"  # contrarrestada
+    assert sola.nivel is None  # sin contrapeso, no alcanza nivel
 
 
 def test_pasar_el_tope_de_banderas_es_un_veto_y_no_un_balance(evaluador):
@@ -180,8 +192,8 @@ def test_pasar_el_tope_de_banderas_es_un_veto_y_no_un_balance(evaluador):
     contada y no como una bandera más.
     """
     protocolo = APENDICITIS.replace(
-        "    dispara_si: ausente\n    fuente: \"...\"",
-        "    dispara_si: ausente\n    fuente: \"...\"",
+        '    dispara_si: ausente\n    fuente: "..."',
+        '    dispara_si: ausente\n    fuente: "..."',
     )
     skill = Skill("x", protocolo)
     # Se fuerza el tope bajándolo a 0 en los dos niveles.
@@ -190,8 +202,12 @@ def test_pasar_el_tope_de_banderas_es_un_veto_y_no_un_balance(evaluador):
 
     res = evaluador.evaluar(
         skill,
-        [infon("Dolor en fosa ilíaca derecha", presente=False),
-         infon("Fiebre"), infon("Leucocitosis"), infon("Signo de Blumberg")],
+        [
+            infon("Dolor en fosa ilíaca derecha", presente=False),
+            infon("Fiebre"),
+            infon("Leucocitosis"),
+            infon("Signo de Blumberg"),
+        ],
     )
     assert res.veto is not None
     assert res.veto.tipo == "tope_banderas"
@@ -272,9 +288,7 @@ def test_el_categorico_se_alcanza_por_el_camino_publico(skill):
     # de redondeo. Con `abs=1e-4` la aserción vive en el filo: hoy pasaba por
     # suerte, y cualquier cambio que mueva los valores la tumba sin que haya
     # nada roto.
-    assert publico.phi_categorico == pytest.approx(
-        directo * publico.anclaje, abs=1e-3
-    )
+    assert publico.phi_categorico == pytest.approx(directo * publico.anclaje, abs=1e-3)
 
 
 def test_un_hallazgo_sin_explicar_baja_el_categorico(skill):
@@ -307,7 +321,7 @@ def test_sin_LR_las_bandas_se_leen_del_categorico(skill):
         skill, [infon("Fiebre"), infon("Leucocitosis"), infon("Signo de Blumberg")]
     )
 
-    assert res.phi == 0.0                       # no hay vector ponderado
+    assert res.phi == 0.0  # no hay vector ponderado
     assert res.phi_categorico > 0.20
     assert res.veredicto is not VeredictoSemiotico.INERCIA
     assert any("no declara ningún LR" in t for t in res.traza)
@@ -330,12 +344,18 @@ def test_los_tres_polos_del_vector_categorico(skill):
     med = MedidorDeAcoplamiento()
     dims = [s for s in skill.signos if s.efecto != "excluye"]
 
-    todo_a_favor = [infon("Fiebre"), infon("Leucocitosis"),
-                    infon("Signo de Blumberg"), infon("Dolor en fosa ilíaca derecha")]
-    todo_en_contra = [infon("Fiebre", presente=False),
-                      infon("Leucocitosis", presente=False),
-                      infon("Signo de Blumberg", presente=False),
-                      infon("Dolor en fosa ilíaca derecha", presente=False)]
+    todo_a_favor = [
+        infon("Fiebre"),
+        infon("Leucocitosis"),
+        infon("Signo de Blumberg"),
+        infon("Dolor en fosa ilíaca derecha"),
+    ]
+    todo_en_contra = [
+        infon("Fiebre", presente=False),
+        infon("Leucocitosis", presente=False),
+        infon("Signo de Blumberg", presente=False),
+        infon("Dolor en fosa ilíaca derecha", presente=False),
+    ]
 
     phi_mas, _, _ = med._categorico(skill, todo_a_favor)
     phi_menos, _, _ = med._categorico(skill, todo_en_contra)
@@ -360,7 +380,7 @@ def test_la_bandera_resta_y_el_apoyo_suma(skill):
 def test_la_exclusion_no_es_una_dimension(skill):
     """No resta: veta. Y para cuando esto se calcula, ya se retiró."""
     _, dims, _ = MedidorDeAcoplamiento()._categorico(skill, [infon("Fiebre")])
-    assert dims == 4          # cinco signos declarados, uno es exclusión
+    assert dims == 4  # cinco signos declarados, uno es exclusión
 
 
 # --- El núcleo --------------------------------------------------------
@@ -380,7 +400,7 @@ def test_sin_nucleo_el_criterio_no_se_aplica(evaluador):
     res = evaluador.evaluar(skill, [infon("Fiebre"), infon("Leucocitosis")])
 
     assert res.nivel is None
-    assert res.veto is None          # no es una exclusión
+    assert res.veto is None  # no es una exclusión
     assert any("Núcleo no documentado" in t for t in res.traza)
 
 
@@ -431,9 +451,9 @@ x
     )
     solo_temblor = evaluador.evaluar(skill, [infon("Temblor de reposo")] + apoyos)
 
-    assert solo_bradicinesia.nivel is None      # falta temblor o rigidez
+    assert solo_bradicinesia.nivel is None  # falta temblor o rigidez
     assert con_rigidez.nivel == "establecida"
-    assert solo_temblor.nivel is None           # falta la bradicinesia
+    assert solo_temblor.nivel is None  # falta la bradicinesia
 
 
 # --- Los tres hallazgos de la revisión --------------------------------
@@ -472,8 +492,11 @@ def test_el_nucleo_empareja_igual_que_el_resto_del_sistema(evaluador):
     skill = Skill("con_nucleo", CON_NUCLEO)
     res = evaluador.evaluar(
         skill,
-        [infon("Dolor en fosa ilíaca derecha irradiado"), infon("Fiebre"),
-         infon("Leucocitosis")],
+        [
+            infon("Dolor en fosa ilíaca derecha irradiado"),
+            infon("Fiebre"),
+            infon("Leucocitosis"),
+        ],
     )
     assert res.nivel == "establecida"
 
@@ -485,7 +508,7 @@ def test_sin_ningun_signo_que_dispare_no_hay_nivel(evaluador):
     estar vacío: entonces apoyos y banderas valen cero y un nivel sin
     `apoyos_minimos` se satisface con 0 >= 0.
     """
-    skill = Skill("apendicitis", APENDICITIS)   # sin bloque `nucleo`
+    skill = Skill("apendicitis", APENDICITIS)  # sin bloque `nucleo`
 
     # El dolor consta PRESENTE: su bandera dispara con la ausencia, así que
     # no dispara nada, pero el signo sí queda emparejado.
