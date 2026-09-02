@@ -832,7 +832,7 @@ class MedidorDeAcoplamiento:
                 f"explicación = {explicacion:.2%} — de lo que el paciente tiene, "
                 f"cuánto cae dentro de la hipótesis"
             )
-        if None not in (direccion, cobertura, explicacion):
+        if direccion is not None and cobertura is not None and explicacion is not None:
             reconstruido = direccion * math.sqrt(cobertura * explicacion)
             traza.append(
                 f"cos = dirección · √(cobertura · explicación) = {reconstruido:.4f}"

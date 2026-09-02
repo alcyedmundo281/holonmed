@@ -189,14 +189,13 @@ class CrystallizationPipeline:
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Evaluador de veredicto falló; el tic sigue en pie")
 
-        vetada = bool(
-            resultado.veredicto_declarado and resultado.veredicto_declarado.veto
-        )
-        if vetada:
+        declarado = resultado.veredicto_declarado
+        veto = declarado.veto if declarado is not None else None
+        if veto is not None:
             logger.info(
                 "Hipótesis '%s' retirada: %s",
                 skill.nombre,
-                resultado.veredicto_declarado.veto.motivo,
+                veto.motivo,
             )
             return resultado
 
@@ -370,8 +369,15 @@ class CrystallizationPipeline:
         if not admitidas:
             return None, None
 
-        ganadora = max(admitidas, key=lambda c: c.clave)
-        mejor = max(con_clave, key=lambda c: c.clave)
+        # `clave` es opcional en el tipo porque una candidata sin lectura
+        # ponderada ni categórica no tiene ninguno. Aquí ya está filtrada:
+        # el `0.0` no se alcanza, y existe para que el tipo diga lo que el
+        # filtro de arriba garantiza.
+        def coseno(c: CandidataAbductiva) -> float:
+            return c.clave if c.clave is not None else 0.0
+
+        ganadora = max(admitidas, key=coseno)
+        mejor = max(con_clave, key=coseno)
         if mejor.admitida:
             return ganadora, None
 

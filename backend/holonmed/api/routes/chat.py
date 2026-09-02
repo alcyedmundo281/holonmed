@@ -118,10 +118,10 @@ async def chat(
 
     if intencion == "cristalizar":
         holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
-        resultado = await ctx.pipeline.ejecutar(req.mensaje, holon)
-        resultado.origen = OrigenTic.CONSULTA
-        resultado.tic_id = ctx.tics.guardar(resultado)
-        return {"tipo": "tic", "datos": resultado}
+        tic = await ctx.pipeline.ejecutar(req.mensaje, holon)
+        tic.origen = OrigenTic.CONSULTA
+        tic.tic_id = ctx.tics.guardar(tic)
+        return {"tipo": "tic", "datos": tic}
 
     return await _consulta_medica(ctx, holon, req.mensaje)
 
