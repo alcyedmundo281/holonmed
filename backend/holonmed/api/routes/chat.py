@@ -50,7 +50,9 @@ Responde en JSON: {{"intencion": "...", ...campos extraídos...}}"""
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest, ctx: AppContext = Depends(get_context)) -> dict[str, Any]:
+async def chat(
+    req: ChatRequest, ctx: AppContext = Depends(get_context)
+) -> dict[str, Any]:
     holon = ctx.pacientes.obtener_o_efimero(req.paciente_id)
 
     try:
@@ -193,8 +195,7 @@ async def _consulta_medica(ctx: AppContext, holon, mensaje: str) -> dict[str, An
     """Consulta general, apoyada en el historial validado del paciente."""
     infones = ctx.tics.linea_tiempo(holon.paciente_id, limite=15)
     contexto = (
-        "HALLAZGOS VALIDADOS PREVIOS: "
-        + "; ".join(i.termino for i in infones)
+        "HALLAZGOS VALIDADOS PREVIOS: " + "; ".join(i.termino for i in infones)
         if infones
         else "Sin hallazgos previos registrados."
     )

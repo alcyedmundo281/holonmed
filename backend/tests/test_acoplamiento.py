@@ -320,7 +320,7 @@ def test_los_factores_categoricos_reconstruyen_su_coseno(medidor):
     escenarios = [
         [infon("Signo 0")],
         [infon("Signo 0"), infon("Signo 1"), infon("Signo 2", presente=False)],
-        [infon("Signo 0"), infon("Hematuria")],            # con resto
+        [infon("Signo 0"), infon("Hematuria")],  # con resto
         [infon("Signo 0"), infon("Hematuria"), infon("Soplo sistolico")],
     ]
 
@@ -345,7 +345,7 @@ def test_la_categorica_lee_en_la_misma_escala_que_la_ponderada(medidor):
     coseno de una ponderada cuyo signo estrella consta. Es la cobertura
     haciendo su trabajo.
     """
-    visto = [infon("Signo 0")]                    # uno de cinco, en los tres
+    visto = [infon("Signo 0")]  # uno de cinco, en los tres
 
     uniforme = medidor.medir(_categorico("uniforme", 5, lr=2.0), visto)
     assert uniforme.coseno == pytest.approx(uniforme.coseno_categorico, abs=1e-4)
@@ -360,7 +360,9 @@ def test_la_categorica_lee_en_la_misma_escala_que_la_ponderada(medidor):
         "estrella",
         "---\ntitulo: estrella\nsignos:\n"
         "  - nombre: Signo 0\n    lr: 26.6\n    fuente: y\n"
-        + "".join(f"  - nombre: Signo {i}\n    lr: 2.0\n    fuente: y\n" for i in range(1, 5))
+        + "".join(
+            f"  - nombre: Signo {i}\n    lr: 2.0\n    fuente: y\n" for i in range(1, 5)
+        )
         + "---\n\nP\n",
     )
     assert medidor.medir(estrella, visto).coseno > uniforme.coseno
@@ -553,18 +555,14 @@ def test_el_peso_declarado_excluye_el_residuo_por_construccion(skill):
         skill, [infon("Hiperlipasemia"), infon("Hematuria")]
     )
 
-    residuo = [
-        c for c in ac.componentes if c.estado is EstadoDimension.NO_SIMBOLIZADO
-    ]
+    residuo = [c for c in ac.componentes if c.estado is EstadoDimension.NO_SIMBOLIZADO]
     assert residuo and all(c.observado for c in residuo)
     assert ac.peso_evidencia_declarado == pytest.approx(
         sum(c.observado for c in ac.componentes) - sum(c.observado for c in residuo)
     )
 
 
-def test_probabilidad_alta_con_resto_sin_explicar_no_se_declara_operable(
-    medidor, skill
-):
+def test_probabilidad_alta_con_resto_sin_explicar_no_se_declara_operable(medidor, skill):
     """El caso que ningún sistema de apoyo suele mostrar.
 
     Una lipasa muy elevada empuja la probabilidad por encima del 50 % ella
@@ -606,8 +604,7 @@ def test_una_prueba_estelar_no_compra_armonia_ilimitada(medidor, skill):
     )
     con_seis = medidor.medir(
         skill,
-        [infon("Hiperlipasemia")]
-        + [infon(f"Hallazgo ajeno {n}") for n in range(6)],
+        [infon("Hiperlipasemia")] + [infon(f"Hallazgo ajeno {n}") for n in range(6)],
     )
 
     assert solo.coseno > con_dos.coseno > con_seis.coseno
@@ -810,7 +807,7 @@ def test_con_las_dos_lecturas_manda_la_ponderada(medidor, skill):
     """
     res = medidor.medir(skill, [infon("Vomitos")])
 
-    assert res.cobertura is not None          # la ponderada existe
-    assert res.phi_categorico > 0.20          # y el categórico diría que no hay duda
+    assert res.cobertura is not None  # la ponderada existe
+    assert res.phi_categorico > 0.20  # y el categórico diría que no hay duda
     assert res.phi_legible == res.phi
     assert res.duda

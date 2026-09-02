@@ -68,9 +68,7 @@ class OrdenRepo:
             logger.error("Error creando la orden: %s", exc)
             return None
 
-    def listar(
-        self, paciente_id: str, estado: EstadoOrden | None = None
-    ) -> list[Orden]:
+    def listar(self, paciente_id: str, estado: EstadoOrden | None = None) -> list[Orden]:
         sql = "SELECT * FROM orden WHERE paciente_id = ?"
         binds: list[Any] = [paciente_id]
         if estado:

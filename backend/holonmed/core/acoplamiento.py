@@ -262,7 +262,9 @@ class MedidorDeAcoplamiento:
             phi=round(phi, 4),
             coseno=round(coseno, 4),
             phi_categorico=(
-                None if phi_cat is None else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
+                None
+                if phi_cat is None
+                else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
             ),
             coseno_categorico=None if phi_cat is None else round(phi_cat, 4),
             dimensiones_categoricas=dims_cat,
@@ -350,9 +352,11 @@ class MedidorDeAcoplamiento:
 
         medidos = len(contribuciones)
         if not medidos:
-            return 0.0, len(dimensiones), [
-                "Φ categórico = 0: ningún signo declarado consta en el registro"
-            ]
+            return (
+                0.0,
+                len(dimensiones),
+                ["Φ categórico = 0: ningún signo declarado consta en el registro"],
+            )
 
         suma = sum(contribuciones.values())
         phi = suma / math.sqrt(len(dimensiones) * (medidos + resto))
@@ -393,9 +397,7 @@ class MedidorDeAcoplamiento:
             if clave is None or clave in contribuciones:
                 continue
             signo = indice[clave]
-            observada = (
-                "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
-            )
+            observada = "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
             contribuciones[clave] = -1 if observada == signo.polaridad_adversa else 1
 
         return dimensiones, contribuciones
@@ -449,9 +451,7 @@ class MedidorDeAcoplamiento:
                 f"dirección categórica = {sum(contribuciones.values())}/{medidos} "
                 f"= {direccion:.4f}"
             )
-        traza.append(
-            f"cobertura categórica = {medidos}/{total} = {cobertura:.2%}"
-        )
+        traza.append(f"cobertura categórica = {medidos}/{total} = {cobertura:.2%}")
         if explicacion is not None:
             traza.append(
                 f"explicación categórica = {medidos}/({medidos} + {resto}) "
@@ -740,7 +740,9 @@ class MedidorDeAcoplamiento:
         # El error de coma flotante puede sacar el coseno del intervalo por
         # unas milmillonésimas; se recorta antes de que llegue a una banda.
         coseno = max(-1.0, min(1.0, coseno))
-        traza.append(f"cos(h,e) = {producto:.3f} / ({norma_h:.3f} × {norma_e:.3f}) = {coseno:.4f}")
+        traza.append(
+            f"cos(h,e) = {producto:.3f} / ({norma_h:.3f} × {norma_e:.3f}) = {coseno:.4f}"
+        )
         return coseno, traza
 
     @staticmethod
@@ -875,7 +877,9 @@ class MedidorDeAcoplamiento:
             return 0.0, detalle, ["α = 0 — ningún infón sostiene el vector"]
 
         n = float(len(contribuyentes))
-        a_conf = sum(min(max(i.confianza, 0.0), 100.0) / 100.0 for i in contribuyentes) / n
+        a_conf = (
+            sum(min(max(i.confianza, 0.0), 100.0) / 100.0 for i in contribuyentes) / n
+        )
         a_proc = (
             sum(_calidad_normalizacion(i.razon_auditoria) for i in contribuyentes) / n
         )
@@ -896,8 +900,7 @@ class MedidorDeAcoplamiento:
         else:
             invocados = self._signos_invocados(skill, infones)
             a_fuente = (
-                sum(1.0 for s in invocados if (s.fuente or "").strip())
-                / len(invocados)
+                sum(1.0 for s in invocados if (s.fuente or "").strip()) / len(invocados)
                 if invocados
                 else 0.0
             )
@@ -961,9 +964,7 @@ class MedidorDeAcoplamiento:
         return VeredictoSemiotico.INERCIA
 
     @staticmethod
-    def _cuadrante(
-        phi: float, inferencia: InferenciaBayesiana | None
-    ) -> str:
+    def _cuadrante(phi: float, inferencia: InferenciaBayesiana | None) -> str:
         """La lectura conjunta (P, Φ), que es donde está el valor clínico.
 
         Un sistema que sólo muestra P no puede avisar del error diagnóstico
@@ -1017,9 +1018,7 @@ class MedidorDeAcoplamiento:
         moverá Φ. Ahí se indaga primero.
         """
         pendientes = [
-            c
-            for c in componentes
-            if c.estado is EstadoDimension.SIN_MEDIR and c.esperado
+            c for c in componentes if c.estado is EstadoDimension.SIN_MEDIR and c.esperado
         ]
         pendientes.sort(key=lambda c: abs(c.esperado), reverse=True)
 
@@ -1031,9 +1030,7 @@ class MedidorDeAcoplamiento:
             for i, c in enumerate(pendientes[:5])
         ]
 
-        contradicen = [
-            c for c in componentes if c.estado is EstadoDimension.CONTRADICE
-        ]
+        contradicen = [c for c in componentes if c.estado is EstadoDimension.CONTRADICE]
         preguntas.extend(
             f"{c.dimension}: el registro contradice lo que la hipótesis exige "
             f"({c.detalle}) — la duda empieza aquí"

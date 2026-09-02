@@ -23,7 +23,12 @@ VOCABULARIO = {
             "icd10": "K85.9",
         },
         {"codigo": "T:4", "termino": "Hiperamilasemia", "padre": "T:2"},
-        {"codigo": "T:5", "termino": "Fiebre", "padre": "T:0", "sinonimos": ["hipertermia"]},
+        {
+            "codigo": "T:5",
+            "termino": "Fiebre",
+            "padre": "T:0",
+            "sinonimos": ["hipertermia"],
+        },
     ]
 }
 
@@ -124,7 +129,11 @@ def test_los_ancestros_salen_ordenados_por_cercania(entorno):
     _, grafo, index = entorno
     concepto = index.buscar_exacto("Hiperlipasemia")
     ancestros = [a["termino"] for a in grafo.ancestros(concepto.concepto_id)]
-    assert ancestros == ["Alteración enzimática", "Alteración analítica", "Hallazgo clínico"]
+    assert ancestros == [
+        "Alteración enzimática",
+        "Alteración analítica",
+        "Hallazgo clínico",
+    ]
 
 
 def test_un_concepto_raiz_no_tiene_ancestros(entorno):
@@ -225,7 +234,11 @@ def test_la_cohorte_encuentra_por_ancestro(entorno):
     db, grafo, index = entorno
     tics = TicRepo(db, grafo)
 
-    for paciente, termino in [("p1", "Hiperlipasemia"), ("p2", "Hiperamilasemia"), ("p3", "Fiebre")]:
+    for paciente, termino in [
+        ("p1", "Hiperlipasemia"),
+        ("p2", "Hiperamilasemia"),
+        ("p3", "Fiebre"),
+    ]:
         cid = index.buscar_exacto(termino).concepto_id
         r = ResultadoTic(paciente_id=paciente, texto_original="…", skill_activa="prueba")
         r.infones = [_infon(termino, cid)]
@@ -256,7 +269,9 @@ def test_un_paciente_efimero_no_pierde_su_tic(entorno):
     """Procesar sin dar de alta al paciente debe funcionar igual."""
     db, grafo, _ = entorno
     tics = TicRepo(db, grafo)
-    r = ResultadoTic(paciente_id="nunca-creado", texto_original="…", skill_activa="prueba")
+    r = ResultadoTic(
+        paciente_id="nunca-creado", texto_original="…", skill_activa="prueba"
+    )
     r.infones = [_infon("Algo", None, EstadoInfon.RUIDO, None)]
     assert tics.guardar(r) is not None
 
@@ -335,7 +350,9 @@ def test_una_receta_queda_en_la_historia(entorno):
     db, grafo, _ = entorno
     tics, docs = TicRepo(db, grafo), DocumentoRepo(db)
 
-    tic_id = tics.guardar(_tic(origen=OrigenTic.FARMACIA, resumen="Receta: Amoxicilina 500 mg"))
+    tic_id = tics.guardar(
+        _tic(origen=OrigenTic.FARMACIA, resumen="Receta: Amoxicilina 500 mg")
+    )
     docs.registrar(
         "p1",
         tipo="receta",
@@ -383,7 +400,9 @@ def test_una_base_anterior_se_migra_sin_perder_datos(tmp_path):
     assert {"origen", "actor"} <= columnas
 
     # El tic anterior sigue ahí y adopta el origen por defecto.
-    fila = db.conexion().execute("SELECT origen, resumen FROM tic WHERE id = 1").fetchone()
+    fila = (
+        db.conexion().execute("SELECT origen, resumen FROM tic WHERE id = 1").fetchone()
+    )
     assert fila["origen"] == "consulta"
     assert fila["resumen"] == "resumen"
 
@@ -407,8 +426,12 @@ def _resultado_con_competencia(**extra):
     )
     r.competencia = [
         CandidataAbductiva(
-            skill="apendicitis", clave=0.87, anclaje=0.9, cobertura=0.74,
-            explicacion=1.0, admitida=True,
+            skill="apendicitis",
+            clave=0.87,
+            anclaje=0.9,
+            cobertura=0.74,
+            explicacion=1.0,
+            admitida=True,
         ),
         CandidataAbductiva(
             skill="diverticulitis", clave=0.25, anclaje=0.87, admitida=True
@@ -438,7 +461,9 @@ def test_el_tic_guarda_la_competencia_entera_y_no_solo_la_ganadora(entorno):
 
     leido = tics.tic_completo(tic_id)
     assert [c["skill"] for c in leido["competencia"]] == [
-        "apendicitis", "diverticulitis", "colecistitis"
+        "apendicitis",
+        "diverticulitis",
+        "colecistitis",
     ]
     perdedora = leido["competencia"][1]
     assert perdedora["clave"] == 0.25
@@ -527,9 +552,7 @@ def test_la_reapertura_de_la_indagacion_sobrevive_al_viaje(entorno):
     # Φ cae y el tic tiene que decirlo.
     r.infones = [_infon("Coluria", None, codigo="T:9")]
     r.acoplamiento = MedidorDeAcoplamiento().medir(protocolo, r.infones)
-    r.reapertura = ReabridorDeIndagacion().reabrir(
-        r.acoplamiento, r.ganadora_abductiva
-    )
+    r.reapertura = ReabridorDeIndagacion().reabrir(r.acoplamiento, r.ganadora_abductiva)
     assert r.reapertura is not None
 
     leido = tics.tic_completo(tics.guardar(r))
@@ -612,8 +635,10 @@ def test_el_phi_previo_es_el_mas_reciente_y_no_el_primero(entorno):
 
     for indice, infones in enumerate(
         (
-            [_infon("Fiebre", None, codigo="T:5"),
-             _infon("Leucocitosis", None, codigo="T:6")],
+            [
+                _infon("Fiebre", None, codigo="T:5"),
+                _infon("Leucocitosis", None, codigo="T:6"),
+            ],
             [_infon("Coluria", None, codigo="T:9")],
         )
     ):
@@ -654,7 +679,7 @@ def test_el_phi_previo_de_un_protocolo_categorico_no_es_cero(entorno):
         _infon("Leucocitosis", None, codigo="T:6"),
     ]
     r.acoplamiento = MedidorDeAcoplamiento().medir(protocolo, r.infones)
-    assert r.acoplamiento.phi == 0.0            # no hay lectura ponderada
+    assert r.acoplamiento.phi == 0.0  # no hay lectura ponderada
     assert r.acoplamiento.phi_categorico > 0.20  # y la categórica va bien
     tics.guardar(r)
 
@@ -749,8 +774,12 @@ def test_una_base_anterior_admite_la_competencia_sin_perder_sus_tics(tmp_path):
     db = Database(ruta)
     columnas = {f[1] for f in db.conexion().execute("PRAGMA table_info(tic)")}
     assert {
-        "skill_version", "acoplamiento", "veredicto",
-        "competencia", "ganadora_abductiva", "triaje_coincide",
+        "skill_version",
+        "acoplamiento",
+        "veredicto",
+        "competencia",
+        "ganadora_abductiva",
+        "triaje_coincide",
         "aviso_competencia",
     } <= columnas
 

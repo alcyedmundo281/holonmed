@@ -73,7 +73,7 @@ def test_en_un_protocolo_categorico_no_imprime_un_cero(medidor, categorico):
     )
     salida = texto(_lineas_acoplamiento(acoplamiento))
 
-    assert acoplamiento.phi == 0.0             # la lectura ponderada no existe
+    assert acoplamiento.phi == 0.0  # la lectura ponderada no existe
     assert "Φ): +0.0000" not in salida
     assert f"{acoplamiento.phi_categorico:+.4f}" in salida
     assert "lectura categórica" in salida
@@ -133,7 +133,7 @@ def test_la_duda_dice_de_que_clase_es_y_que_preguntar(medidor, ponderado):
 
     assert "LA INDAGACIÓN SE REABRE" in salida
     assert "se resuelve indagando" in salida
-    assert "Hiperlipasemia" in salida       # la pregunta más informativa
+    assert "Hiperlipasemia" in salida  # la pregunta más informativa
 
 
 @pytest.mark.parametrize(
@@ -162,8 +162,12 @@ def test_sin_duda_no_se_imprime_nada(medidor, ponderado):
     """Una creencia operable no imprime una sección vacía."""
     acoplamiento = medidor.medir(
         ponderado,
-        [infon("Hiperlipasemia"), infon("Hiperamilasemia"),
-         infon("Dolor epigastrico"), infon("Vomitos")],
+        [
+            infon("Hiperlipasemia"),
+            infon("Hiperamilasemia"),
+            infon("Dolor epigastrico"),
+            infon("Vomitos"),
+        ],
     )
     assert not acoplamiento.duda
     assert _lineas_reapertura(ReabridorDeIndagacion().reabrir(acoplamiento)) == []
@@ -187,15 +191,23 @@ def _tic_con_competencia() -> ResultadoTic:
     r = ResultadoTic(paciente_id="p", texto_original="x", skill_activa="pancreatitis")
     r.competencia = [
         CandidataAbductiva(
-            skill="pancreatitis", clave=0.7947, lectura="ponderada",
-            anclaje=0.98, admitida=True,
+            skill="pancreatitis",
+            clave=0.7947,
+            lectura="ponderada",
+            anclaje=0.98,
+            admitida=True,
         ),
         CandidataAbductiva(
-            skill="colecistitis", clave=0.8613, lectura="categorica",
-            anclaje=0.0, admitida=False,
+            skill="colecistitis",
+            clave=0.8613,
+            lectura="categorica",
+            anclaje=0.0,
+            admitida=False,
         ),
         CandidataAbductiva(
-            skill="apendicitis", anclaje=0.87, vetada=True,
+            skill="apendicitis",
+            anclaje=0.87,
+            vetada=True,
             motivo_veto="Apendicectomía: sin apéndice no hay apendicitis",
         ),
     ]

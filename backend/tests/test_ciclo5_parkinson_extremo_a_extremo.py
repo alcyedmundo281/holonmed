@@ -24,6 +24,7 @@ desactualizado, y decir «assert set() == {'Anemia', ...}» en ese caso manda a
 buscar el fallo donde no está. El salto sólo vale si dice la verdad completa:
 un `skip` genérico sería el defecto de la lista blanca del `tipo` otra vez.
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -86,9 +87,7 @@ def exige_arista(identificador: str, concepto: str, clave: str) -> None:
     """
     indice = convertir_condicion.cargar_indice(INDICE)
     condicion = indice.condiciones.get(identificador) or {}
-    aristas = (condicion.get("signos") or []) + (
-        condicion.get("signos_de_alarma") or []
-    )
+    aristas = (condicion.get("signos") or []) + (condicion.get("signos_de_alarma") or [])
     for arista in aristas:
         if str(arista.get("concepto")) == concepto and arista.get(clave):
             return
@@ -104,7 +103,10 @@ def convertir(identificador: str) -> Skill:
     exige_condicion(identificador)
     r = subprocess.run(
         [sys.executable, str(CONVERSOR), identificador, "--indice", str(INDICE)],
-        capture_output=True, text=True, encoding="utf-8", cwd=str(RAIZ),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(RAIZ),
     )
     assert r.returncode == 0, r.stderr
     return Skill(identificador, r.stdout)
@@ -115,13 +117,16 @@ def infon(termino: str, polaridad: Polaridad = Polaridad.PRESENTE) -> Infon:
     evidencia que pasó la auditoría satisface un criterio o veta un
     diagnóstico, y una fixture que lo olvidara probaría otra cosa."""
     return Infon(
-        texto_origen=termino, termino_propuesto=termino,
-        termino=termino, polaridad=polaridad,
+        texto_origen=termino,
+        termino_propuesto=termino,
+        termino=termino,
+        polaridad=polaridad,
         estado=EstadoInfon.VALIDADO,
     )
 
 
 # ── el caso de aceptación ────────────────────────────────────────────────────
+
 
 def test_parkinson_alcanza_establecida_desde_el_indice():
     """Bradicinesia y rigidez documentadas, dos apoyos, ninguna bandera."""
@@ -155,6 +160,7 @@ def test_parkinson_sin_nucleo_no_alcanza_ningun_nivel():
 
 # ── el ruteo de las banderas ─────────────────────────────────────────────────
 
+
 def test_la_bandera_del_indice_llega_al_bloque_estructurado_y_se_cuenta():
     """Las dos mitades: emitida y contada. La primera sola no prueba nada."""
     exige_arista("HM:6002", "HM:0711", "sostiene")
@@ -170,6 +176,6 @@ def test_la_bandera_del_indice_llega_al_bloque_estructurado_y_se_cuenta():
 
 def test_la_prosa_de_alarma_se_conserva():
     """Dos consumidores, no uno migrando al otro: el modelo también las lee."""
-    skill = convertir("HM:6002")   # la prosa no depende de `sostiene`
+    skill = convertir("HM:6002")  # la prosa no depende de `sostiene`
     assert "## Signos de alarma" in skill.cuerpo
     assert "Anemia" in skill.cuerpo

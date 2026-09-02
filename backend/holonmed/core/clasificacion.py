@@ -58,10 +58,10 @@ class EstadoCriterio(str, Enum):
     Confundirlos convertiría un silencio en evidencia.
     """
 
-    SATISFECHO = "satisfecho"       # hay hallazgo presente que lo cumple
-    DESCARTADO = "descartado"       # consta explícitamente que no está
+    SATISFECHO = "satisfecho"  # hay hallazgo presente que lo cumple
+    DESCARTADO = "descartado"  # consta explícitamente que no está
     SIN_CONFIRMAR = "sin_confirmar"  # hay dato, pero no superó la auditoría
-    SIN_DATOS = "sin_datos"         # nadie lo ha mirado: esto se pregunta
+    SIN_DATOS = "sin_datos"  # nadie lo ha mirado: esto se pregunta
 
 
 @dataclass
@@ -154,8 +154,7 @@ class ResultadoClasificacion:
                 terminos=[i.termino for i in e.por],
             )
             for e in self.evaluados
-            if e.estado
-            in (EstadoCriterio.SIN_DATOS, EstadoCriterio.SIN_CONFIRMAR)
+            if e.estado in (EstadoCriterio.SIN_DATOS, EstadoCriterio.SIN_CONFIRMAR)
             and e.criterio.rol in ROLES_QUE_PIDEN
         ]
 
@@ -165,8 +164,7 @@ class ResultadoClasificacion:
         posibles = self.satisfechos + sum(
             1
             for e in self.evaluados
-            if e.estado
-            in (EstadoCriterio.SIN_DATOS, EstadoCriterio.SIN_CONFIRMAR)
+            if e.estado in (EstadoCriterio.SIN_DATOS, EstadoCriterio.SIN_CONFIRMAR)
         )
         return self.requiere > 0 and posibles >= self.requiere
 
@@ -256,9 +254,7 @@ class Clasificador:
                 sistema, codigo = candidato, str(codigos[candidato])
                 break
 
-        cumplidos = "; ".join(
-            e.descripcion for e in resultado.evaluados if e.satisfecho
-        )
+        cumplidos = "; ".join(e.descripcion for e in resultado.evaluados if e.satisfecho)
         fuente = f" [{clasificacion.fuente}]" if clasificacion.fuente else ""
 
         return Infon(
@@ -276,8 +272,6 @@ class Clasificador:
             confianza=round(confianza, 2),
             score_ontologico=100.0,
             score_logico=confianza,
-            razon_auditoria=(
-                f"Derivado por {resultado.resumen}{fuente}. {cumplidos}"
-            ),
+            razon_auditoria=(f"Derivado por {resultado.resumen}{fuente}. {cumplidos}"),
             origen_skill=skill.nombre,
         )

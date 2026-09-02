@@ -227,7 +227,11 @@ class TestCargaSegura:
     def test_rechaza_el_recorrido_de_directorios(self, tmp_path):
         """El nombre puede venir de un LLM: no debe escapar del directorio."""
         gestor = self._gestor(tmp_path)
-        for malicioso in ("../../../etc/passwd", "..\\..\\windows\\win.ini", "/etc/hosts"):
+        for malicioso in (
+            "../../../etc/passwd",
+            "..\\..\\windows\\win.ini",
+            "/etc/hosts",
+        ):
             assert gestor.cargar(malicioso) is None
 
     def test_siempre_hay_una_skill_por_defecto(self, tmp_path):

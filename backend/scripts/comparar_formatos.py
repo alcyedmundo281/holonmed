@@ -66,9 +66,9 @@ class Medida:
     validados: int = 0
     alertas: int = 0
     ruido: int = 0
-    con_corte: int = 0        # el razonamiento cita el corte real
+    con_corte: int = 0  # el razonamiento cita el corte real
     corte_inventado: int = 0  # cita un número que no es el del protocolo
-    sin_numero: int = 0       # no cita ninguna cifra
+    sin_numero: int = 0  # no cita ninguna cifra
     ejemplos: list[str] = field(default_factory=list)
 
     @property
@@ -80,11 +80,7 @@ def cortes_declarados(skill: Skill) -> dict[str, set[str]]:
     """Término clínico -> números que el protocolo declara para él."""
     mapa: dict[str, set[str]] = {}
     for c in skill.laboratorio:
-        validos = {
-            _fmt(v)
-            for v in (c.corte_superior, c.corte_inferior)
-            if v is not None
-        }
+        validos = {_fmt(v) for v in (c.corte_superior, c.corte_inferior) if v is not None}
         # Con multiplicador, el umbral efectivo también es legítimo.
         if c.multiplicador and c.corte_superior is not None:
             validos.add(_fmt(c.corte_superior * c.multiplicador))

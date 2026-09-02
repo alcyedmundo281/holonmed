@@ -200,11 +200,7 @@ def _terminos_autorizados(skill: Skill) -> set[str]:
     autoriza nada: el protocolo dice que le interesa, no en qué cifra
     empieza.
     """
-    return {
-        _normalizar(t)
-        for criterio in skill.laboratorio
-        for t in criterio.terminos()
-    }
+    return {_normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()}
 
 
 class CrystallizationPipeline:
@@ -343,9 +339,7 @@ class CrystallizationPipeline:
         # --- ETAPA 5: CLASIFICACIÓN ------------------------------------
         # Sólo la de la ganadora, y después de competir.
         try:
-            resultado.clasificacion = self.clasificador.evaluar(
-                skill, resultado.infones
-            )
+            resultado.clasificacion = self.clasificador.evaluar(skill, resultado.infones)
             if resultado.clasificacion and resultado.clasificacion.trastorno:
                 resultado.infones.append(resultado.clasificacion.trastorno)
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
@@ -771,9 +765,7 @@ class CrystallizationPipeline:
         # Por defecto presente: si el modelo no se pronuncia, no vamos a
         # inventarle una ausencia, que es la dirección peligrosa.
         presente = crudo.get("presente", True)
-        polaridad = (
-            Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
-        )
+        polaridad = Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
 
         # CAPAS 0-1-2: ¿existe este concepto en la ontología?
         match = await self.validador.validar(termino, hints=hints)

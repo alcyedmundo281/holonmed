@@ -99,15 +99,15 @@ class Signo:
     nombre: str
     codigos: dict[str, str] = field(default_factory=dict)
     rol: str = "apoyo"
-    lr: float | None = None            # LR+ (alias histórico: `lr`)
-    lr_negativo: float | None = None   # LR- cuando consta como ausente
+    lr: float | None = None  # LR+ (alias histórico: `lr`)
+    lr_negativo: float | None = None  # LR- cuando consta como ausente
     fuente: str = ""
 
     # Los dos ejes de la decisión. Por defecto un signo apoya cuando está
     # presente, que es lo que declaran todos los protocolos escritos antes
     # de existir estas claves: así siguen valiendo sin tocarlos.
     efecto: str = "apoya"
-    dispara_si: str = "presente"       # la polaridad que activa el efecto
+    dispara_si: str = "presente"  # la polaridad que activa el efecto
 
     @property
     def polaridad_adversa(self) -> str:
@@ -274,7 +274,7 @@ class Nucleo:
     un diagnóstico en un paciente del que no consta absolutamente nada.
     """
 
-    requiere: list[str] = field(default_factory=list)          # todos
+    requiere: list[str] = field(default_factory=list)  # todos
     y_al_menos_uno_de: list[str] = field(default_factory=list)  # al menos uno
     # Balance sí guardaba su procedencia y el núcleo no. Es la misma asimetría
     # que el conversor denuncia en su cabecera —«un cociente sin fuente es un
@@ -315,7 +315,7 @@ class NivelCerteza:
     nombre: str
     apoyos_minimos: int = 0
     banderas_maximas: int = 0
-    contrapeso: int = 0   # apoyos exigidos POR CADA bandera roja presente
+    contrapeso: int = 0  # apoyos exigidos POR CADA bandera roja presente
 
     def satisface(self, apoyos: int, banderas: int) -> bool:
         if apoyos < self.apoyos_minimos:
@@ -446,9 +446,7 @@ class Skill:
         """
         import json
 
-        limpio = (
-            contenido.replace("&nbsp;", " ").replace("\xa0", " ").replace("\\", "")
-        )
+        limpio = contenido.replace("&nbsp;", " ").replace("\xa0", " ").replace("\\", "")
         inicio, fin = limpio.find("{"), limpio.rfind("}")
         if inicio == -1 or fin <= inicio:
             return {}, contenido
@@ -610,9 +608,7 @@ class Skill:
 
         umbral = _num(bloque.get("umbral_postest"))
         if umbral is not None and not 0.0 < umbral <= 1.0:
-            self._problemas.append(
-                f"promocion.umbral_postest {umbral} fuera de (0, 1]"
-            )
+            self._problemas.append(f"promocion.umbral_postest {umbral} fuera de (0, 1]")
             umbral = None
 
         promocion = Promocion(
@@ -636,9 +632,7 @@ class Skill:
             return Nucleo()
         return Nucleo(
             requiere=[str(x) for x in (bloque.get("requiere") or [])],
-            y_al_menos_uno_de=[
-                str(x) for x in (bloque.get("y_al_menos_uno_de") or [])
-            ],
+            y_al_menos_uno_de=[str(x) for x in (bloque.get("y_al_menos_uno_de") or [])],
             fuente=str(bloque.get("fuente", "")),
         )
 

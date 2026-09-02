@@ -61,9 +61,7 @@ class RegistroOperativo:
     def resumen(self) -> str:
         if self.completo:
             return f"Registro de {self.rol} completo"
-        return (
-            f"Registro de {self.rol} incompleto: falta {', '.join(self.faltantes)}"
-        )
+        return f"Registro de {self.rol} incompleto: falta {', '.join(self.faltantes)}"
 
 
 class ExtractorOperativo:
