@@ -64,9 +64,7 @@ def _json(valor: Any) -> str | None:
     if valor is None:
         return None
     if isinstance(valor, list):
-        return json.dumps(
-            [v.model_dump(mode="json") for v in valor], ensure_ascii=False
-        )
+        return json.dumps([v.model_dump(mode="json") for v in valor], ensure_ascii=False)
     return json.dumps(valor.model_dump(mode="json"), ensure_ascii=False)
 
 
@@ -133,9 +131,7 @@ class Database:
         quede a medio migrar.
         """
         for tabla, columna, definicion in self.MIGRACIONES:
-            existentes = {
-                fila[1] for fila in cx.execute(f"PRAGMA table_info({tabla})")
-            }
+            existentes = {fila[1] for fila in cx.execute(f"PRAGMA table_info({tabla})")}
             if not existentes:  # la tabla aún no existe
                 continue
             if columna not in existentes:
@@ -748,7 +744,9 @@ class DocumentoRepo:
                         paciente_id,
                         tipo,
                         archivo,
-                        json.dumps(datos, ensure_ascii=False) if datos is not None else None,
+                        json.dumps(datos, ensure_ascii=False)
+                        if datos is not None
+                        else None,
                         _ahora(),
                     ),
                 )

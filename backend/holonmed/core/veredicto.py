@@ -108,9 +108,7 @@ class EvaluadorDeVeredicto:
         veto = self._buscar_exclusion(observados, hipotesis)
         if veto:
             traza.append(f"Exclusión absoluta: {veto.motivo}")
-            return VeredictoDeclarado(
-                veto=veto, fuente=skill.balance.fuente, traza=traza
-            )
+            return VeredictoDeclarado(veto=veto, fuente=skill.balance.fuente, traza=traza)
 
         apoyos = [
             i.termino for s, i in observados if s.efecto == "apoya" and _dispara(s, i)
@@ -131,9 +129,7 @@ class EvaluadorDeVeredicto:
                 i.termino for _, i in observados if i.polaridad is Polaridad.PRESENTE
             ]
             if not skill.nucleo.satisfecho(_emparejador(presentes)):
-                traza.append(
-                    "Núcleo no documentado: el criterio no se aplica todavía"
-                )
+                traza.append("Núcleo no documentado: el criterio no se aplica todavía")
                 return VeredictoDeclarado(
                     apoyos=apoyos,
                     banderas_rojas=banderas,
@@ -221,7 +217,7 @@ class EvaluadorDeVeredicto:
             clave = emparejar_termino(infon.termino, indice)
             if clave is None or clave in vistos:
                 continue
-            vistos.add(clave)   # un signo cuenta una vez, no dos
+            vistos.add(clave)  # un signo cuenta una vez, no dos
             salida.append((indice[clave], infon))
         return salida
 

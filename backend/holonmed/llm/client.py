@@ -119,9 +119,7 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": (
-                    temperature
-                    if temperature is not None
-                    else self.settings.temperature
+                    temperature if temperature is not None else self.settings.temperature
                 ),
                 "num_ctx": num_ctx,
             },
@@ -176,13 +174,17 @@ class OllamaClient:
         """
         try:
             raw = (
-                await self.generar(
-                    prompt,
-                    model=model or self.settings.model_router,
-                    timeout=self.settings.llm_timeout_fast,
-                    temperature=0.1,
+                (
+                    await self.generar(
+                        prompt,
+                        model=model or self.settings.model_router,
+                        timeout=self.settings.llm_timeout_fast,
+                        temperature=0.1,
+                    )
                 )
-            ).strip().lower()
+                .strip()
+                .lower()
+            )
         except LLMUnavailable as exc:
             logger.warning("Clasificación degradada a '%s': %s", defecto, exc)
             return defecto

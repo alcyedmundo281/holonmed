@@ -92,7 +92,9 @@ async def _check() -> int:
         print(f"        {bd['error']}")
     else:
         st = bd["estadisticas"]
-        print(f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones")
+        print(
+            f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones"
+        )
 
     print(marca(bool(estado["skills"])) + f"skills: {', '.join(estado['skills'])}")
 
@@ -122,8 +124,7 @@ def _lineas_veredicto(veredicto) -> list[str]:
             "",
             f"HIPÓTESIS RETIRADA: {veredicto.veto.hipotesis}",
             f"  {veredicto.veto.motivo}",
-            "  Una exclusión absoluta no es una probabilidad baja: es una "
-            "imposibilidad,",
+            "  Una exclusión absoluta no es una probabilidad baja: es una imposibilidad,",
             "  y ninguna cantidad de evidencia la contrarresta.",
         ]
 
@@ -235,9 +236,7 @@ def _lineas_reapertura(reapertura) -> list[str]:
         )
 
     if reapertura.alternativa:
-        lineas.append(
-            f"  La competencia abductiva prefiere «{reapertura.alternativa}»."
-        )
+        lineas.append(f"  La competencia abductiva prefiere «{reapertura.alternativa}».")
     for pregunta in reapertura.preguntas:
         lineas.append(f"    ? {pregunta}")
     return lineas
@@ -252,7 +251,9 @@ def _lineas_competencia(resultado) -> list[str]:
     if resultado.triaje_coincide is None:
         lineas.append("  No hubo candidata admitida con la que comparar el triaje.")
     elif resultado.triaje_coincide:
-        lineas.append(f"  El triaje y el grafo coinciden en {resultado.ganadora_abductiva}.")
+        lineas.append(
+            f"  El triaje y el grafo coinciden en {resultado.ganadora_abductiva}."
+        )
     else:
         lineas.append(
             f"  DISCREPAN: el triaje usó {resultado.skill_activa} y el grafo "
@@ -338,14 +339,14 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     # Con un veto no se dice nada más sobre esa hipótesis: imprimir
     # «Φ 0.69 ARMONIA» debajo de «hipótesis retirada» sería la
     # contradicción que Φ existe justo para delatar.
-    vetada = bool(
-        resultado.veredicto_declarado and resultado.veredicto_declarado.veto
-    )
+    vetada = bool(resultado.veredicto_declarado and resultado.veredicto_declarado.veto)
     if not vetada:
         if resultado.inferencia:
             inf = resultado.inferencia
             print(f"\nInferencia: {inf.diagnostico}")
-            print(f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%")
+            print(
+                f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%"
+            )
             print(f"  veredicto: {inf.veredicto}")
             for paso in inf.traza_logica:
                 print(f"    · {paso}")
@@ -353,9 +354,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
                 print(f"    → {ev}")
 
         for bloque in (
-            _lineas_acoplamiento(
-                resultado.acoplamiento, resultado.reapertura is None
-            ),
+            _lineas_acoplamiento(resultado.acoplamiento, resultado.reapertura is None),
             _lineas_reapertura(resultado.reapertura),
             _lineas_competencia(resultado),
         ):
@@ -432,7 +431,9 @@ def _cuenta(args) -> int:
         print()
         for c in cuenta.cargos:
             marca = {"propuesto": "?", "confirmado": "+", "anulado": "-"}[c.estado.value]
-            print(f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}")
+            print(
+                f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}"
+            )
             print(f"      {c.sistema_tarifario}:{c.codigo_tarifario}  orden {c.orden_id}")
     else:
         print("\n  Sin cargos.")

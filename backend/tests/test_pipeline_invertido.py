@@ -113,9 +113,9 @@ def test_la_pasada_generica_no_deja_pasar_un_corte_inventado():
     conservados, retirados = _sin_cortes_inventados(crudos, autorizados)
 
     assert [c["termino_clinico"] for c in conservados] == [
-        "Fiebre",             # el protocolo declara su corte
-        "Leucocitosis",       # también
-        "Hipocalcemia",       # el TEXTO lo dice, no lo deduce el modelo
+        "Fiebre",  # el protocolo declara su corte
+        "Leucocitosis",  # también
+        "Hipocalcemia",  # el TEXTO lo dice, no lo deduce el modelo
         "Dolor epigastrico",  # sin números: nunca se toca
     ]
     assert retirados == ["Hiperlipasemia", "Hipocalcemia"]

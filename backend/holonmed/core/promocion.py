@@ -107,9 +107,7 @@ class EvaluadorDePromocion:
         # El umbral se comprueba aparte de la tupla y se informa aparte: son
         # dos razones distintas para no promover, y fundirlas dejaría al
         # clínico sin saber si le falta una prueba o le falta evidencia.
-        probabilidad = (
-            inferencia.probabilidad_porcentaje / 100.0 if inferencia else None
-        )
+        probabilidad = inferencia.probabilidad_porcentaje / 100.0 if inferencia else None
         # Tres estados y no dos, otra vez. `False` dice que la probabilidad se
         # quedó corta; `None` dice que no hay probabilidad con la que
         # comparar —Bayes no corrió, o el protocolo no declara prevalencia—.
@@ -144,9 +142,7 @@ class EvaluadorDePromocion:
     # --- Emparejamiento ------------------------------------------------
 
     @staticmethod
-    def _satisfechos(
-        skill: Skill, infones: Sequence[Infon]
-    ) -> list[tuple[str, str]]:
+    def _satisfechos(skill: Skill, infones: Sequence[Infon]) -> list[tuple[str, str]]:
         """(rol, término) de cada signo declarado que consta A FAVOR.
 
         «Positiva» quiere decir la polaridad que sostiene la hipótesis, que
@@ -172,9 +168,7 @@ class EvaluadorDePromocion:
             if clave is None or clave in vistos:
                 continue
             signo: Signo = indice[clave]
-            observada = (
-                "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
-            )
+            observada = "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
             if observada == signo.polaridad_adversa:
                 continue  # consta, pero en contra: no satisface la tupla
             vistos.add(clave)

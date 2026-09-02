@@ -109,8 +109,7 @@ MOTIVOS: dict[CausaDeLaDuda, str] = {
 }
 
 SIN_CAUSA = (
-    "ningún factor está definido: no se ha medido nada con lo que responder "
-    "por qué"
+    "ningún factor está definido: no se ha medido nada con lo que responder por qué"
 )
 
 
@@ -251,9 +250,7 @@ class ReabridorDeIndagacion:
         if cobertura is not None:
             tiros.append((math.sqrt(cobertura), CausaDeLaDuda.COBERTURA, cobertura))
         if explicacion is not None:
-            tiros.append(
-                (math.sqrt(explicacion), CausaDeLaDuda.EXPLICACION, explicacion)
-            )
+            tiros.append((math.sqrt(explicacion), CausaDeLaDuda.EXPLICACION, explicacion))
 
         if not tiros:
             return None, None, traza

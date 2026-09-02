@@ -102,9 +102,7 @@ class Tarifario:
                 if not codigo:
                     continue
                 try:
-                    importe = float(
-                        str(fila.get(mapa["importe"], 0)).replace(",", ".")
-                    )
+                    importe = float(str(fila.get(mapa["importe"], 0)).replace(",", "."))
                 except ValueError:
                     continue
                 entradas.append(

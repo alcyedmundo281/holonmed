@@ -50,7 +50,9 @@ Responde en JSON: {{"intencion": "...", ...campos extraídos...}}"""
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest, ctx: AppContext = Depends(get_context)) -> dict[str, Any]:
+async def chat(
+    req: ChatRequest, ctx: AppContext = Depends(get_context)
+) -> dict[str, Any]:
     holon = ctx.pacientes.obtener_o_efimero(req.paciente_id)
 
     try:
@@ -117,10 +119,10 @@ async def chat(req: ChatRequest, ctx: AppContext = Depends(get_context)) -> dict
     if intencion == "cristalizar":
         holon.linea_tiempo = ctx.tics.linea_tiempo(req.paciente_id)
         holon.phi_previo = ctx.tics.phi_por_hipotesis(req.paciente_id)
-        resultado = await ctx.pipeline.ejecutar(req.mensaje, holon)
-        resultado.origen = OrigenTic.CONSULTA
-        resultado.tic_id = ctx.tics.guardar(resultado)
-        return {"tipo": "tic", "datos": resultado}
+        tic = await ctx.pipeline.ejecutar(req.mensaje, holon)
+        tic.origen = OrigenTic.CONSULTA
+        tic.tic_id = ctx.tics.guardar(tic)
+        return {"tipo": "tic", "datos": tic}
 
     return await _consulta_medica(ctx, holon, req.mensaje)
 
@@ -193,8 +195,7 @@ async def _consulta_medica(ctx: AppContext, holon, mensaje: str) -> dict[str, An
     """Consulta general, apoyada en el historial validado del paciente."""
     infones = ctx.tics.linea_tiempo(holon.paciente_id, limite=15)
     contexto = (
-        "HALLAZGOS VALIDADOS PREVIOS: "
-        + "; ".join(i.termino for i in infones)
+        "HALLAZGOS VALIDADOS PREVIOS: " + "; ".join(i.termino for i in infones)
         if infones
         else "Sin hallazgos previos registrados."
     )

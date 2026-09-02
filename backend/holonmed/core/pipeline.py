@@ -200,11 +200,7 @@ def _terminos_autorizados(skill: Skill) -> set[str]:
     autoriza nada: el protocolo dice que le interesa, no en qué cifra
     empieza.
     """
-    return {
-        _normalizar(t)
-        for criterio in skill.laboratorio
-        for t in criterio.terminos()
-    }
+    return {_normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()}
 
 
 class CrystallizationPipeline:
@@ -343,9 +339,7 @@ class CrystallizationPipeline:
         # --- ETAPA 5: CLASIFICACIÓN ------------------------------------
         # Sólo la de la ganadora, y después de competir.
         try:
-            resultado.clasificacion = self.clasificador.evaluar(
-                skill, resultado.infones
-            )
+            resultado.clasificacion = self.clasificador.evaluar(skill, resultado.infones)
             if resultado.clasificacion and resultado.clasificacion.trastorno:
                 resultado.infones.append(resultado.clasificacion.trastorno)
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
@@ -687,8 +681,15 @@ class CrystallizationPipeline:
         if not admitidas:
             return None, None
 
-        ganadora = max(admitidas, key=lambda c: c.clave)
-        mejor = max(con_clave, key=lambda c: c.clave)
+        # `clave` es opcional en el tipo porque una candidata sin lectura
+        # ponderada ni categórica no tiene ninguno. El filtro de arriba ya
+        # las quitó, así que el `0.0` no se alcanza: existe para que el tipo
+        # afirme lo que hoy sólo garantiza esa línea, tres más arriba.
+        def coseno(c: CandidataAbductiva) -> float:
+            return c.clave if c.clave is not None else 0.0
+
+        ganadora = max(admitidas, key=coseno)
+        mejor = max(con_clave, key=coseno)
         if mejor.admitida:
             return ganadora, None
 
@@ -771,9 +772,7 @@ class CrystallizationPipeline:
         # Por defecto presente: si el modelo no se pronuncia, no vamos a
         # inventarle una ausencia, que es la dirección peligrosa.
         presente = crudo.get("presente", True)
-        polaridad = (
-            Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
-        )
+        polaridad = Polaridad.AUSENTE if presente is False else Polaridad.PRESENTE
 
         # CAPAS 0-1-2: ¿existe este concepto en la ontología?
         match = await self.validador.validar(termino, hints=hints)

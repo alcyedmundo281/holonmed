@@ -201,9 +201,9 @@ class VeredictoDeclarado(BaseModel):
 class EstadoDimension(str, Enum):
     """Qué hace el registro en una dimensión del espacio de hallazgos."""
 
-    CONCUERDA = "concuerda"            # el registro dice lo que la hipótesis exige
-    CONTRADICE = "contradice"          # el registro dice lo contrario
-    SIN_MEDIR = "sin_medir"            # nadie lo ha mirado: no es ausencia, es vacío
+    CONCUERDA = "concuerda"  # el registro dice lo que la hipótesis exige
+    CONTRADICE = "contradice"  # el registro dice lo contrario
+    SIN_MEDIR = "sin_medir"  # nadie lo ha mirado: no es ausencia, es vacío
     NO_SIMBOLIZADO = "no_simbolizado"  # hallazgo real que la hipótesis no explica
 
 
@@ -215,11 +215,11 @@ class VeredictoSemiotico(str, Enum):
     solas, nunca para sustituirlo.
     """
 
-    ARMONIA = "ARMONIA"                            # la creencia es operable
+    ARMONIA = "ARMONIA"  # la creencia es operable
     ACOPLAMIENTO_PARCIAL = "ACOPLAMIENTO_PARCIAL"  # encaja, pero queda por mirar
-    INERCIA = "INERCIA"                            # ortogonal: no toca este caso
-    FRICCION = "FRICCION"                          # el contexto empieza a disentir
-    DESARMONIA = "DESARMONIA"                      # el contexto la contradice
+    INERCIA = "INERCIA"  # ortogonal: no toca este caso
+    FRICCION = "FRICCION"  # el contexto empieza a disentir
+    DESARMONIA = "DESARMONIA"  # el contexto la contradice
 
 
 class ComponenteAcoplamiento(BaseModel):
@@ -411,8 +411,8 @@ class CausaDeLaDuda(str, Enum):
     fundido dice que la creencia no funciona y no dice por qué.
     """
 
-    DIRECCION = "direccion"      # lo que se miró disiente: cambiar de hipótesis
-    COBERTURA = "cobertura"      # casi nada se ha puesto a prueba: indagar
+    DIRECCION = "direccion"  # lo que se miró disiente: cambiar de hipótesis
+    COBERTURA = "cobertura"  # casi nada se ha puesto a prueba: indagar
     EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
 
 
@@ -432,7 +432,7 @@ class TrayectoriaDeLaCreencia(str, Enum):
     una trayectoria que nadie ha medido.
     """
 
-    SE_ROMPIO = "se_rompio"        # venía por encima del mínimo y cayó
+    SE_ROMPIO = "se_rompio"  # venía por encima del mínimo y cayó
     NUNCA_ARRAIGO = "nunca_arraigo"  # ya estaba por debajo la vez anterior
 
 
@@ -616,10 +616,10 @@ class ResultadoTic(BaseModel):
     todas_vetadas: str | None = Field(
         default=None,
         description=(
-            'Se rellena cuando el grafo propuso candidatas y el veto las retiró '
-            'TODAS. No es «no encontré hipótesis»: es que todo lo que este '
-            'paciente sugiere es estructuralmente imposible, y eso o pide '
-            'ampliar el ámbito o dice que los antecedentes están mal.'
+            "Se rellena cuando el grafo propuso candidatas y el veto las retiró "
+            "TODAS. No es «no encontré hipótesis»: es que todo lo que este "
+            "paciente sugiere es estructuralmente imposible, y eso o pide "
+            "ampliar el ámbito o dice que los antecedentes están mal."
         ),
     )
 

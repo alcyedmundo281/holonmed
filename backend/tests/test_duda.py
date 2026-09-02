@@ -24,9 +24,22 @@ from holonmed.models import (
 # Hallazgos que ninguno de los dos protocolos declara: sirven para subir
 # el resto no simbolizado sin tocar ninguna dimensión.
 AJENOS = [
-    "Hematuria", "Cefalea", "Disuria", "Prurito", "Acufenos", "Epistaxis",
-    "Artralgia", "Mialgia", "Tinnitus", "Vertigo", "Astenia", "Anosmia",
-    "Alopecia", "Xerostomia", "Bradicardia", "Hipoacusia",
+    "Hematuria",
+    "Cefalea",
+    "Disuria",
+    "Prurito",
+    "Acufenos",
+    "Epistaxis",
+    "Artralgia",
+    "Mialgia",
+    "Tinnitus",
+    "Vertigo",
+    "Astenia",
+    "Anosmia",
+    "Alopecia",
+    "Xerostomia",
+    "Bradicardia",
+    "Hipoacusia",
 ]
 
 # Un protocolo calibrado para que la escala de comparación importe: con
@@ -101,8 +114,12 @@ def test_una_creencia_operable_no_reabre_nada(medidor, reabridor, skill):
     """Sin duda no hay reapertura, y no un objeto vacío que interrogar."""
     acoplamiento = medidor.medir(
         skill,
-        [infon("Hiperlipasemia"), infon("Hiperamilasemia"),
-         infon("Dolor epigastrico"), infon("Vomitos")],
+        [
+            infon("Hiperlipasemia"),
+            infon("Hiperamilasemia"),
+            infon("Dolor epigastrico"),
+            infon("Vomitos"),
+        ],
     )
 
     assert not acoplamiento.duda
@@ -208,12 +225,15 @@ def test_la_causa_se_lee_del_categorico_cuando_no_hay_ni_un_LR(
     """
     acoplamiento = medidor.medir(
         categorico,
-        [infon("Fiebre"), infon("Leucocitosis", presente=False),
-         infon("Signo de Blumberg", presente=False)],
+        [
+            infon("Fiebre"),
+            infon("Leucocitosis", presente=False),
+            infon("Signo de Blumberg", presente=False),
+        ],
     )
     reapertura = reabridor.reabrir(acoplamiento)
 
-    assert acoplamiento.cobertura is None       # la ponderada no existe
+    assert acoplamiento.cobertura is None  # la ponderada no existe
     assert acoplamiento.direccion_categorica is not None
     assert reapertura is not None
     assert reapertura.causa is not None
@@ -232,9 +252,7 @@ def test_la_alternativa_sale_de_la_competencia(medidor, reabridor, skill):
     assert any("Colecistitis" in t for t in reapertura.traza)
 
 
-def test_no_hay_alternativa_si_la_abduccion_prefiere_la_misma(
-    medidor, reabridor, skill
-):
+def test_no_hay_alternativa_si_la_abduccion_prefiere_la_misma(medidor, reabridor, skill):
     """Proponer la hipótesis que ya se estaba usando no es volver a nada."""
     acoplamiento = medidor.medir(skill, [infon("Vomitos")])
     reapertura = reabridor.reabrir(

@@ -179,9 +179,7 @@ class Conciliador:
 
         codigo = None
         if orden.concepto_id:
-            codigo = self.tarifario.codigo_para(
-                orden.concepto_id, self.sistema_tarifario
-            )
+            codigo = self.tarifario.codigo_para(orden.concepto_id, self.sistema_tarifario)
         # Un protocolo puede declarar el código tarifario directamente.
         if not codigo and orden.sistema == self.sistema_tarifario:
             codigo = orden.codigo

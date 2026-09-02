@@ -35,8 +35,19 @@ jobs:
         run: git clone --depth 1 https://github.com/alcyedmundo281/medsemiotics-db.git ../../medsemiotics-db
         working-directory: backend
 
+      # Las cuatro puertas, en el orden en que cuesta menos fallar: primero
+      # lo que se arregla solo, luego lo que exige pensar.
       - name: Linter
         run: ruff check .
+
+      - name: Formato
+        run: ruff format --check .
+
+      - name: Tipos
+        # Caza la clase de fallo que este dominio no puede permitirse: un
+        # `None` que se multiplica, un atributo que el tipo no garantiza.
+        # No sustituye a las pruebas; llega antes que ellas.
+        run: mypy
 
       - name: Tests
         # No requieren Ollama ni ninguna terminología externa: el pipeline
