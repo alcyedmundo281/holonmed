@@ -94,7 +94,7 @@ class TerminologyIndex:
         if sistema:
             sql = """SELECT id, codigo, sistema, termino FROM concepto
                      WHERE codigo = ? AND sistema = ? LIMIT 1"""
-            args = (codigo, sistema)
+            args: tuple[str, ...] = (codigo, sistema)
         else:
             sql = "SELECT id, codigo, sistema, termino FROM concepto WHERE codigo = ? LIMIT 1"
             args = (codigo,)
@@ -362,16 +362,16 @@ class VocabularyLoader:
         if mapa and mapa.exists():
             with mapa.open(encoding="utf-8", newline="") as fh, self._db._escritura:
                 lector = csv.DictReader(fh, delimiter="\t")
-                pendientes = []
+                mapeos = []
                 for fila in lector:
                     destino = fila.get("mapTarget")
                     if fila.get("active") != "1" or not destino:
                         continue
-                    pendientes.append((sistema, fila["referencedComponentId"], destino))
-                    if len(pendientes) >= lote:
-                        totales["mapeos"] += self._volcar_mapeos(cx, pendientes)
-                        pendientes = []
-                totales["mapeos"] += self._volcar_mapeos(cx, pendientes)
+                    mapeos.append((sistema, fila["referencedComponentId"], destino))
+                    if len(mapeos) >= lote:
+                        totales["mapeos"] += self._volcar_mapeos(cx, mapeos)
+                        mapeos = []
+                totales["mapeos"] += self._volcar_mapeos(cx, mapeos)
                 cx.commit()
 
         cx.execute("INSERT INTO termino_fts(termino_fts) VALUES ('optimize')")

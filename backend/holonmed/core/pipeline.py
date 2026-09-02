@@ -681,8 +681,15 @@ class CrystallizationPipeline:
         if not admitidas:
             return None, None
 
-        ganadora = max(admitidas, key=lambda c: c.clave)
-        mejor = max(con_clave, key=lambda c: c.clave)
+        # `clave` es opcional en el tipo porque una candidata sin lectura
+        # ponderada ni categórica no tiene ninguno. El filtro de arriba ya
+        # las quitó, así que el `0.0` no se alcanza: existe para que el tipo
+        # afirme lo que hoy sólo garantiza esa línea, tres más arriba.
+        def coseno(c: CandidataAbductiva) -> float:
+            return c.clave if c.clave is not None else 0.0
+
+        ganadora = max(admitidas, key=coseno)
+        mejor = max(con_clave, key=coseno)
         if mejor.admitida:
             return ganadora, None
 
