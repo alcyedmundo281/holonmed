@@ -309,6 +309,15 @@ export interface ResultadoTic {
   texto_original: string;
   origen: OrigenTic;
   tipo: TipoNota;
+  /**
+   * El episodio al que pertenece. `null` en los tics anteriores a que
+   * existieran los episodios, y ahí se lee como «sin episodio declarado»:
+   * no se les inventa uno, porque agruparlos afirmaría que pertenecieron al
+   * mismo ingreso y nadie lo sabe.
+   */
+  episodio_id: string | null;
+  /** El «2» de clínica-2. Sólo lo llevan las notas clínicas. */
+  ordinal_clinica: number | null;
   actor: string | null;
   skill_activa: string;
   /**
