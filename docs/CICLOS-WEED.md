@@ -243,6 +243,43 @@ tienen que quedarse separados para que haya algo que conciliar.
 agregar, como `acuerdo_del_triaje()` hace con el triaje. Un hallazgo del
 sistema nunca aparece en el registro del clínico sin una firma.
 
+## Ciclo 17 — El episodio
+
+**Por qué.** La secuencia canónica de un episodio es ésta:
+
+```
+historia clínica
+  evolución … evolución …
+clínica-1
+  evolución … evolución …
+clínica-2
+  evolución … evolución …
+clínica-XX
+  evolución … evolución …
+epicrisis
+```
+
+Tres cosas se siguen de la forma, y ninguna se sostiene hoy:
+
+1. **Las notas clínicas van numeradas.** No es decoración: Weed pide notas
+   tituladas y numeradas, y `clínica-2` sólo significa algo respecto de
+   `clínica-1`. El ordinal es por episodio.
+2. **La primera nota clínica no sigue a la historia.** Entre las dos hay
+   evoluciones, y la clínica-1 las sintetiza. La nota clínica nace de lo
+   acumulado, no de la apertura.
+3. **El episodio tiene principio y fin declarados.** La historia clínica lo
+   abre, la epicrisis lo cierra, y ambos ocurren exactamente una vez.
+
+**Y no existe.** Las tablas son `paciente`, `tic`, `infon`, `orden`… y todo
+cuelga de `paciente_id`. Un paciente con tres ingresos es hoy un único
+flujo continuo: `clínica-1` sería ambigua entre ellos y la epicrisis no
+tendría qué cerrar.
+
+**Condición de hecho.** Un episodio no admite dos historias clínicas ni dos
+epicrisis, el ordinal de una nota clínica es único dentro de él, y la
+historia ya escrita —que no tiene episodios— se migra a uno sin perder un
+tic.
+
 ## Lo que este plan NO cubre
 
 Los tres requisitos que [`AGENTS.md`](../AGENTS.md) declara vigentes y sin
@@ -258,11 +295,11 @@ El orden no es una fila india sino un grafo de dependencias, y conviene decirlo
 con precisión para no serializar de más:
 
 ```
-8  ──► 9 ──► 10 ──► 11
-   └─► 15 (necesita 9: sin base definida no hay qué pedir en la interfaz)
-11 ──► 12
+8  ──► 9 ──► 10 ──► 11 ──► 12
+8  ──► 17 ──► 15 (la interfaz necesita 9 y 17: sin base no hay qué pedir,
+                  y sin episodio la nota clínica no se puede numerar)
 10 ──► 16 (la partida doble concilia lo que el laboratorio trajo)
-13 ──► 14
+17 ──► 13 ──► 14 (la condensación y la nota firmada viven en un episodio)
 ```
 
 Lo que sí es firme: ningún ciclo empieza con su dependencia fuera de `main`.
