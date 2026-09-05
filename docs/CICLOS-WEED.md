@@ -178,6 +178,71 @@ y afirma el estado del paciente en ese instante.
 
 ---
 
+## Ciclo 15 — La interfaz por la que entra todo
+
+**Por qué.** Los tipos existen desde el ciclo 8 y no hay por dónde
+producirlos. Hoy todo entra como texto suelto por un chat.
+
+La serie completa de un episodio son cinco documentos:
+
+```
+historia clínica          la base. Fase 1 de Weed.
+primera nota clínica      el holón, revelado por primera vez
+notas de evolución        el grueso del tráfico
+notas clínicas intermedias  el holón, revelado otra vez
+epicrisis                 cierra el episodio, y sale de la institución
+```
+
+La primera nota clínica y las intermedias son el **mismo tipo**: su
+diferencia es de posición, y la posición se lee del orden. La epicrisis es
+el único que sale de la institución, y por eso es el único bajo aprobación
+humana nombrada obligatoria.
+
+**La historia clínica no la teclea el médico.** Es la solución de Weed para
+la fase 1, y la interfaz tiene que reflejarla: cuestionario con lógica de
+ramificación, enfermería entrenada, y el propio paciente. Un formulario
+libre para el médico sería automatizar el caos.
+
+**Condición de hecho.** Ningún documento se emite sin tipo, y la epicrisis
+no se emite sin firma.
+
+## Ciclo 16 — La partida doble
+
+**Por qué.** Weed sostiene que la medicina es un negocio de billones **sin
+sistema contable**, y que sin poder auditar la calidad no hay medio de
+producirla. La partida doble es lo que hace que una discrepancia sea
+estructuralmente visible: no se puede maquillar un libro sin que el otro lo
+delate.
+
+HolonMed lleva su propio libro por debajo del que lleva el clínico, sobre
+todo lo que llegó —incluido lo que nadie anotó—. La conciliación entre los
+dos tiene tres resultados, y es la misma forma que `conciliacion.py` ya usa
+para órdenes y ejecuciones:
+
+| Situación | Qué significa |
+|---|---|
+| HolonMed lo vio, el clínico no lo escribió | **problema pasado por alto** |
+| El clínico lo escribió, HolonMed no lo vio | fallo de cobertura del índice |
+| Los dos | concuerda |
+
+El primero es medible y Weed lo midió: en la sala de urgencias, con un
+cuestionario de 32 preguntas y personal paramédico, los médicos se estaban
+dejando **5.2 problemas por paciente**. Esa cifra hoy no la produce nadie.
+
+**HolonMed no escribe en el expediente.** Lo que encontró y el clínico no
+anotó entra en su propio libro y se **propone**, por el mismo portón
+proponer/autorizar que ya existe para las órdenes.
+
+Y esto no es una limitación que el contrato impone a regañadientes: **es lo
+que hace que la partida doble funcione**. Si el sistema fundiera en
+silencio sus hallazgos con el registro del clínico habría otra vez un solo
+libro, y la discrepancia —que es el producto— desaparecería. Los dos libros
+tienen que quedarse separados para que haya algo que conciliar.
+
+**Condición de hecho.** La tasa de discrepancia se puede consultar y
+agregar, como `acuerdo_del_triaje()` hace con el triaje. Un hallazgo del
+sistema nunca aparece en el registro del clínico sin una firma.
+
 ## Lo que este plan NO cubre
 
 Los tres requisitos que [`AGENTS.md`](../AGENTS.md) declara vigentes y sin
@@ -187,6 +252,20 @@ resuelven aquí. El ciclo 14 **usa** la aprobación; no la construye.
 
 ## Cómo se ejecuta
 
-Un ciclo por rama, un PR por ciclo, CI en verde antes de fusionar. Ningún ciclo
-empieza antes de que el anterior esté en `main`: cada uno se apoya en el esquema
-del anterior, y hacerlos en paralelo garantiza el conflicto.
+Un ciclo por rama, un PR por ciclo, CI en verde antes de fusionar.
+
+El orden no es una fila india sino un grafo de dependencias, y conviene decirlo
+con precisión para no serializar de más:
+
+```
+8  ──► 9 ──► 10 ──► 11
+   └─► 15 (necesita 9: sin base definida no hay qué pedir en la interfaz)
+11 ──► 12
+10 ──► 16 (la partida doble concilia lo que el laboratorio trajo)
+13 ──► 14
+```
+
+Lo que sí es firme: ningún ciclo empieza con su dependencia fuera de `main`.
+Dos ciclos que tocan el mismo esquema en paralelo garantizan el conflicto, y el
+ciclo 8 ya dejó la lección —la epicrisis entró antes de fusionar justo para no
+migrar dos veces la misma columna.
