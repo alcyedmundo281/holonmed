@@ -41,9 +41,13 @@ export type OrigenTic =
  * Qué clase de documento es un tic, que es un eje distinto de quién lo
  * produjo. Son las tres primeras fases de Weed en el orden en que ocurren:
  * la base definida, la nota de evolución, y la nota clínica —que no es un
- * documento aparte del holón, sino su corte con fecha y firma—.
+ * documento aparte del holón, sino su corte con fecha y firma—, más la
+ * epicrisis, que cierra el episodio en vez de cortarlo.
+ *
+ * La primera nota clínica y las intermedias son el mismo tipo: su
+ * diferencia es de posición, y la posición se lee del orden.
  */
-export type TipoNota = 'base' | 'evolucion' | 'clinica';
+export type TipoNota = 'base' | 'evolucion' | 'clinica' | 'epicrisis';
 
 export interface Infon {
   timestamp: string;

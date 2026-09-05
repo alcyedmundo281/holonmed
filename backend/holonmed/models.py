@@ -70,11 +70,21 @@ class TipoNota(str, Enum):
       también una nota de evolución.
     * `CLINICA` — la nota clínica: el holón revelado en un instante. No es
       un documento aparte del holón, es su corte con fecha y firma.
+    * `EPICRISIS` — la síntesis que cierra el episodio.
+
+    La primera nota clínica y las intermedias son el MISMO tipo. Su
+    diferencia es de posición —una no tiene predecesora— y la posición se
+    lee del orden, no del tipo. Meterla aquí sería el mismo error que
+    congelar el umbral dentro del nombre de un signo.
+
+    La epicrisis sí es otra cosa, y por dos razones: cierra el episodio en
+    vez de cortarlo, y es el único de los cuatro que sale de la institución.
     """
 
     BASE = "base"
     EVOLUCION = "evolucion"
     CLINICA = "clinica"
+    EPICRISIS = "epicrisis"
 
 
 class Polaridad(str, Enum):
