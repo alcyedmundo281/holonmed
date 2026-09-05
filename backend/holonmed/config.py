@@ -97,6 +97,11 @@ class Settings(BaseSettings):
 
     # --- Rutas -------------------------------------------------------
     skills_dir: Path = RAIZ / "skills"
+    # La base de datos definida —fase 1 de Weed— vive declarada, como los
+    # protocolos. Un directorio aparte porque son cosas distintas: la skill
+    # dice cómo se razona sobre una hipótesis, la base dice qué se averigua
+    # siempre, antes de que haya ninguna hipótesis.
+    base_dir: Path = RAIZ / "base"
     docs_dir: Path = RAIZ / "generated_docs"
 
     @field_validator("cors_origins", mode="before")
