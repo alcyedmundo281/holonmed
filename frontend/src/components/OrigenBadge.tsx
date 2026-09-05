@@ -1,13 +1,17 @@
-import { Beaker, FlaskConical, HeartPulse, Pill, Scan, Stethoscope } from 'lucide-react';
+import { Beaker, FlaskConical, HeartPulse, Pill, Scan, Stethoscope, User } from 'lucide-react';
 import type { OrigenTic } from '../lib/types';
 
 /**
  * Distintivo del actor que produjo un registro.
  *
  * En un entorno clínico real la información no llega de un solo sitio: la
- * consulta dicta, el laboratorio informa, la farmacia dispensa. Los tres
+ * consulta dicta, el laboratorio informa, la farmacia dispensa. Todos
  * alimentan la misma historia, y saber de cuál viene cada dato cambia
  * cuánto se le concede al leerlo.
+ *
+ * El paciente es uno más, y se distingue a propósito: es quien más
+ * variables conoce sobre su propio cuadro, y lo que trae no se lee igual
+ * que lo que mide un analizador.
  */
 const ESTILOS: Record<OrigenTic, { etiqueta: string; clase: string; Icono: typeof Stethoscope }> = {
   consulta: {
@@ -34,6 +38,11 @@ const ESTILOS: Record<OrigenTic, { etiqueta: string; clase: string; Icono: typeo
     etiqueta: 'Imagen',
     clase: 'bg-violet-50 text-violet-700 border-violet-200',
     Icono: Scan,
+  },
+  paciente: {
+    etiqueta: 'Paciente',
+    clase: 'bg-amber-50 text-amber-700 border-amber-200',
+    Icono: User,
   },
   otro: {
     etiqueta: 'Otro',

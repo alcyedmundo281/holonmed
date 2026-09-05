@@ -40,7 +40,51 @@ class OrigenTic(str, Enum):
     FARMACIA = "farmacia"
     ENFERMERIA = "enfermeria"
     IMAGEN = "imagen"
+    # El paciente es quien más variables conoce sobre su propio cuadro, y
+    # hasta ahora no tenía por dónde entrar: los cinco actores de arriba
+    # son todos del centro sanitario. Sin esta clave, un dato que trae el
+    # enfermo se registra como si lo hubiera producido la consulta, y deja
+    # de poder auditarse aparte.
+    PACIENTE = "paciente"
     OTRO = "otro"
+
+
+class TipoNota(str, Enum):
+    """Qué clase de documento es un tic.
+
+    Es un eje distinto de `OrigenTic`, y confundirlos era el error. El
+    origen dice QUIÉN produjo el dato; el tipo dice QUÉ clase de documento
+    es. Un laboratorio y un paciente pueden producir los dos una nota de
+    evolución, y una misma consulta produce a veces la base y a veces una
+    nota clínica.
+
+    Los tres tipos son las tres primeras fases de Weed, en el orden en que
+    ocurren:
+
+    * `BASE` — la historia clínica completa. Weed insiste en que sea
+      DEFINIDA y se obtenga siempre, porque la lista de problemas es un
+      artefacto de la base: si no se define, la lista depende de dónde se
+      formó quien preguntó y de cuántos ingresos hubo anoche.
+    * `EVOLUCION` — la nota de evolución. Es el grueso del tráfico y no la
+      escribe sólo el médico: un resultado de laboratorio solicitado es
+      también una nota de evolución.
+    * `CLINICA` — la nota clínica: el holón revelado en un instante. No es
+      un documento aparte del holón, es su corte con fecha y firma.
+    * `EPICRISIS` — la síntesis que cierra el episodio.
+
+    La primera nota clínica y las intermedias son el MISMO tipo. Su
+    diferencia es de posición —una no tiene predecesora— y la posición se
+    lee del orden, no del tipo. Meterla aquí sería el mismo error que
+    congelar el umbral dentro del nombre de un signo.
+
+    La epicrisis sí es otra cosa, y por dos razones: cierra el episodio en
+    vez de cortarlo, y es el único de los cuatro que sale de la institución.
+    """
+
+    BASE = "base"
+    EVOLUCION = "evolucion"
+    CLINICA = "clinica"
+    EPICRISIS = "epicrisis"
 
 
 class Polaridad(str, Enum):
@@ -571,6 +615,10 @@ class ResultadoTic(BaseModel):
     texto_original: str
 
     origen: OrigenTic = OrigenTic.CONSULTA
+    tipo: TipoNota = Field(
+        default=TipoNota.EVOLUCION,
+        description="Qué clase de documento es. Por defecto, nota de evolución.",
+    )
     actor: str | None = Field(
         default=None,
         description="Quién asertó estos datos. Sin autenticación es informativo.",

@@ -137,6 +137,11 @@ CREATE TABLE IF NOT EXISTS tic (
     paciente_id    TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
     timestamp      TEXT NOT NULL,
     origen         TEXT NOT NULL DEFAULT 'consulta',
+    -- Qué clase de documento es, que es un eje distinto de quién lo
+    -- produjo: base | evolucion | clinica. El grueso son de evolución, y
+    -- por eso es el defecto; sin la columna, una nota clínica y un
+    -- resultado de laboratorio se leen igual.
+    tipo           TEXT NOT NULL DEFAULT 'evolucion',
     actor          TEXT,
     skill          TEXT NOT NULL,
     -- La versión del protocolo, junto a su nombre. Es la columna que
@@ -251,7 +256,12 @@ CREATE TABLE IF NOT EXISTS orden (
     sistema      TEXT,
     concepto_id  INTEGER REFERENCES concepto(id) ON DELETE SET NULL,
     texto_origen TEXT NOT NULL DEFAULT '',   -- cita de la nota
-    prescriptor  TEXT,
+    prescriptor  TEXT,                       -- quién FIRMA. Siempre una persona.
+    -- Quién ORIGINÓ la petición: medico | acoplamiento | bayes | promocion.
+    -- No sustituye a la firma, la acompaña. Sin esta columna no hay forma
+    -- de medir nunca si lo que el sistema propone vale algo.
+    solicitante  TEXT NOT NULL DEFAULT 'medico',
+    motivo       TEXT NOT NULL DEFAULT '',   -- por qué, cuando no lo pidió una persona
     detalle      TEXT,                        -- JSON: dosis, vía, frecuencia
     estado       TEXT NOT NULL DEFAULT 'pendiente',
     referencias  TEXT                         -- JSON: ids en sistemas del centro

@@ -791,3 +791,73 @@ def test_una_base_anterior_admite_la_competencia_sin_perder_sus_tics(tmp_path):
     assert medida["tics"] == 2
     assert medida["sin_competencia"] == 1
     assert medida["coinciden"] == 1
+
+
+def test_el_tipo_de_nota_sobrevive_al_viaje(entorno):
+    """Un tic sabe qué clase de documento es, no sólo quién lo produjo.
+
+    Los dos ejes estaban fundidos en `origen`, y así una nota clínica y un
+    resultado de laboratorio se leían igual. Sin el tipo no se puede
+    reconstruir la historia según Weed —base, nota clínica, evolución—,
+    que es lo que da orden a todo lo demás.
+    """
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    clinica = _tic()
+    clinica.tipo = TipoNota.CLINICA
+    tics.guardar(clinica)
+    tics.guardar(_tic())  # el defecto
+
+    tipos = sorted(fila["tipo"] for fila in tics.historial("p1"))
+    assert tipos == ["clinica", "evolucion"]
+
+
+def test_el_paciente_es_un_actor_como_los_demas(entorno):
+    """Los cinco actores anteriores eran todos del centro sanitario.
+
+    Sin esta clave, un dato que trae el enfermo se registra como si lo
+    hubiera producido la consulta, y deja de poder auditarse aparte —que
+    es justo lo que `origen` existe para evitar.
+    """
+    from holonmed.models import OrigenTic
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    tics.guardar(_tic(origen=OrigenTic.PACIENTE, actor="el propio paciente"))
+
+    solo_paciente = tics.historial("p1", origen="paciente")
+    assert len(solo_paciente) == 1
+    assert solo_paciente[0]["actor"] == "el propio paciente"
+
+
+def test_una_base_anterior_admite_el_tipo_sin_perder_sus_tics(entorno, tmp_path):
+    """La migración no puede costar la historia ya escrita.
+
+    `CREATE TABLE IF NOT EXISTS` no toca una tabla que ya existe, así que
+    una base anterior a esta columna se quedaría coja. Se comprueba contra
+    una base real a la que se le quita la columna, no contra el esquema
+    nuevo.
+    """
+    import sqlite3
+
+    from holonmed.db import Database
+
+    ruta = tmp_path / "vieja.db"
+    vieja = Database(ruta)
+    TicRepo(vieja, GraphRepo(vieja)).guardar(_tic(resumen="escrito antes"))
+    vieja.cerrar()
+
+    with sqlite3.connect(ruta) as cx:
+        cx.execute("ALTER TABLE tic DROP COLUMN tipo")
+        cx.commit()
+
+    reabierta = Database(ruta)
+    filas = TicRepo(reabierta, GraphRepo(reabierta)).historial("p1")
+    assert len(filas) == 1
+    assert filas[0]["resumen"] == "escrito antes"
+    # El defecto no es un capricho: el grueso del tráfico son notas de
+    # evolución, y es lo que eran todos los tics escritos hasta ahora.
+    assert filas[0]["tipo"] == "evolucion"
+    reabierta.cerrar()
