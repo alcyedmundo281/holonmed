@@ -62,6 +62,15 @@ jobs:
           python scripts/importar_terminologia.py --semilla
           python scripts/importar_terminologia.py --estado
 
+      - name: La base definida se sostiene
+        # Weed: la lista de problemas es un artefacto de la base. Una base
+        # declarada que nadie recorre se pudre en silencio —`resumen_vivo`
+        # llevaba así desde el primer día— y con ella se pudre la única
+        # garantía de que la lista de problemas no dependa de quién preguntó.
+        run: |
+          python -m holonmed.cli base --validar | tee /tmp/base.txt
+          grep -q "Todas las bases son válidas" /tmp/base.txt
+
       - name: Los protocolos anclan lo que acuñan
         # Con el vocabulario ya cargado, comprueba que ningún protocolo
         # apunte a un concepto que no existe: ni sus hints, ni su ámbito de

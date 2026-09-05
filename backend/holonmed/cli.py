@@ -390,6 +390,14 @@ def main(argv=None) -> int:
         help="Deriva cargos de las parejas conciliadas antes de mostrar",
     )
 
+    p_base = sub.add_parser("base", help="Inspecciona la base de datos definida")
+    p_base.add_argument("--nombre", default=None)
+    p_base.add_argument(
+        "--validar",
+        action="store_true",
+        help="Comprueba que las bases declaradas se sostengan",
+    )
+
     p_skill = sub.add_parser("skills", help="Inspecciona los protocolos")
     p_skill.add_argument("--nombre", default=None)
     p_skill.add_argument(
@@ -410,6 +418,8 @@ def main(argv=None) -> int:
         return _cuenta(args)
     if args.comando == "skills":
         return _skills(args)
+    if args.comando == "base":
+        return _base(args)
     return 1
 
 
@@ -466,6 +476,56 @@ def _cuenta(args) -> int:
             pend.append(f"{len(cuenta.descuadres)} descuadre(s)")
         print(f"  NO cerrable: {', '.join(pend)}.")
     print()
+    return 0
+
+
+def _base(args) -> int:
+    """Muestra las bases declaradas y, con `--validar`, lo que no se sostiene.
+
+    Existe para que la base no sea otro campo declarado y nunca leído. Que
+    CI la recorra es lo que impide que se pudra en silencio, igual que con
+    los protocolos.
+    """
+    from .config import get_settings
+    from .core.base import cargar_todas, validar
+
+    bases = cargar_todas(get_settings().base_dir)
+    if not bases:
+        print("No hay ninguna base declarada.", file=sys.stderr)
+        return 1
+
+    nombres = [args.nombre] if args.nombre else sorted(bases)
+    problemas_totales = 0
+
+    for nombre in nombres:
+        base = bases.get(nombre)
+        if base is None:
+            print(f"No existe la base '{nombre}'", file=sys.stderr)
+            return 1
+
+        print()
+        print(f"{base.titulo}  ({base.alcance.value}, v{base.version})")
+        for seccion in base.secciones:
+            print(f"  {seccion.nombre}")
+            for item in seccion.items:
+                edades = ""
+                if item.desde_edad is not None:
+                    edades += f" desde {item.desde_edad}"
+                if item.hasta_edad is not None:
+                    edades += f" hasta {item.hasta_edad}"
+                print(f"    - {item.nombre}  [{item.quien.value}]{edades}")
+
+        if args.validar:
+            problemas = validar([base])
+            problemas_totales += len(problemas)
+            for problema in problemas:
+                print(f"  ! {problema}", file=sys.stderr)
+
+    if args.validar:
+        if problemas_totales:
+            print(f"{problemas_totales} problemas.", file=sys.stderr)
+            return 1
+        print("Todas las bases son válidas.")
     return 0
 
 
