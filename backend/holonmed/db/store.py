@@ -106,6 +106,7 @@ class Database:
     # añadirlas explícitamente o una base creada antes se queda coja.
     MIGRACIONES: tuple[tuple[str, str, str], ...] = (
         ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
+        ("tic", "tipo", "TEXT NOT NULL DEFAULT 'evolucion'"),
         ("tic", "actor", "TEXT"),
         ("tic", "skill_version", "TEXT"),
         ("tic", "acoplamiento", "TEXT"),
@@ -119,6 +120,8 @@ class Database:
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
         ("orden", "referencias", "TEXT"),
+        ("orden", "solicitante", "TEXT NOT NULL DEFAULT 'medico'"),
+        ("orden", "motivo", "TEXT NOT NULL DEFAULT ''"),
         ("ejecucion", "referencias", "TEXT"),
         ("ejecucion", "campos_faltantes", "TEXT"),
     )
@@ -454,17 +457,19 @@ class TicRepo:
                     (resultado.paciente_id, resultado.paciente_id, _ahora()),
                 )
                 cursor = cx.execute(
-                    """INSERT INTO tic (paciente_id, timestamp, origen, actor,
+                    """INSERT INTO tic (paciente_id, timestamp, origen, tipo,
+                                        actor,
                                         skill, skill_version, texto_original,
                                         resumen, inferencia, acoplamiento,
                                         veredicto, competencia,
                                         ganadora_abductiva, triaje_coincide,
                                         aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
                         resultado.origen.value,
+                        resultado.tipo.value,
                         resultado.actor,
                         resultado.skill_activa,
                         resultado.skill_version,
@@ -549,7 +554,7 @@ class TicRepo:
         Filtrar por origen es lo que permite responder «enséñame sólo lo
         que vino del laboratorio» sin recorrer toda la historia.
         """
-        sql = """SELECT t.id, t.timestamp AS fecha, t.origen, t.actor, t.skill,
+        sql = """SELECT t.id, t.timestamp AS fecha, t.origen, t.tipo, t.actor, t.skill,
                         t.resumen, t.inferencia,
                         COUNT(i.id) AS total_infones,
                         SUM(CASE WHEN i.estado = 'VALIDADO' THEN 1 ELSE 0 END) AS validados,
