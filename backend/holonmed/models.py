@@ -140,6 +140,16 @@ class Infon(BaseModel):
     # proyecto, SNOMED CT si tienes licencia, o cualquier otro importado.
     termino: str = Field(description="Término preferente tras la normalización")
     polaridad: Polaridad = Polaridad.PRESENTE
+    procedencia: str = Field(
+        default="objetivo",
+        description=(
+            "Quién asevera este infón: 'subjetivo' lo expresó el paciente, "
+            "'objetivo' lo observó el clínico o lo midió quien informa, "
+            "'derivado' no lo aseveró nadie y se sigue de otros infones. "
+            "Lo que clasifica es quién asevera, no el instrumento: una "
+            "glucemia que el paciente refiere es subjetiva."
+        ),
+    )
     codigo: str | None = None
     sistema: str | None = Field(
         default=None, description="'holonmed' | 'snomed' | 'hpo' | …"
