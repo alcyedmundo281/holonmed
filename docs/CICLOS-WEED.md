@@ -43,6 +43,67 @@ uno y la discrepancia —que es el producto— dejaría de existir.
 **Autor no es firmante.** Lo que HolonMed redacta es un borrador hasta que
 una persona nombrada lo firma.
 
+## Los fundamentos
+
+Tres commitments que no son ciclos: son la forma del sistema, y todo ciclo
+que los contradiga está mal aunque pase las pruebas.
+
+### El tiempo es discreto
+
+Para HolonMed el tiempo no es continuo: es **tic, tic, tic**. Nada cambia
+entre tics. El estado en el tic *n* es recomputable desde los tics 1..*n*,
+que es exactamente lo que `skill_version` existía para permitir —«convierte
+recomputar en auditar»—.
+
+De ahí una consecuencia de notación que conviene decir: `dΦ/dt` **no es una
+derivada**. Es la diferencia entre dos tics consecutivos, y así está
+implementado — `duda.py` no lee el reloj en ninguna línea, compara contra el
+tic anterior.
+
+### Potencia y acto
+
+En cada tic, **lo potencial es validado por el médico y se vuelve presente
+real**. Lo que el sistema propone es potencia; el acto es humano.
+
+Esto obliga a distinguir dos cosas que hoy están fundidas en `EstadoInfon`:
+`VALIDADO` significa hoy «el validador del sistema lo confirmó», que es
+juicio de la máquina. Bajo este principio eso sigue siendo **potencial**
+hasta que alguien lo actualiza. Es la misma forma que ya tienen
+`solicitante` y `prescriptor`: el juicio del sistema y la ratificación
+humana nunca comparten campo.
+
+### El bucle
+
+```
+tic real ──genera──► tic potencial ──acepta │ corrige │ valida──► nuevo tic real ──►
+```
+
+Del tic real sale el siguiente tic potencial, **sobre la base de lo que el
+médico aprobó**. No se propone sobre lo que el sistema cree, sino sobre lo
+que quedó actualizado.
+
+**«Corrige» no es un tercer botón, es el producto.** Aceptar o rechazar
+mide poco; la corrección dice en qué se equivocó el sistema y cuánto. Es la
+discrepancia de la partida doble, y tiene la misma forma que
+`triaje_coincide`: se registra aunque no decida nada, porque sin ella la
+medida que justificaría hacerle caso al sistema no existe.
+
+### El holon es anidado
+
+Y aquí el nombre se redime. Un holon, en Koestler, es un todo que es parte
+de un todo mayor:
+
+```
+infones            componen ──►  historia clínica   holon PRIMARIO
++ historia         componen ──►  notas clínicas     holones SECUNDARIOS
++ todo lo anterior componen ──►  epicrisis          holon FINAL
+```
+
+Hoy `HolonPaciente` tiene **un solo nivel**: la historia entera creciendo
+por absorción de infones, sin jerarquía. Que un holon se componga de
+holones y no sólo de infones es estructura que falta, y es la misma escalera
+que el episodio del ciclo 17 ya ordena en el tiempo.
+
 ## Lo que hoy no es cierto
 
 | Fase de Weed | Estado |
@@ -203,6 +264,12 @@ lista de problemas y la hoja de flujo se mantienen, no se archivan por fechas.
 **Por qué.** Es el holón revelado, y es un documento: tiene fecha, autor y firma,
 y afirma el estado del paciente en ese instante.
 
+- **Va organizada por problema, y es lo más recurrente que HolonMed hace.**
+  Es la queja central de Weed: «doing well» no significa nada cuando el
+  paciente tiene artritis, insuficiencia cardíaca, azotemia, cadera rota e
+  infección de oído. Cada problema lleva su punto de vista del paciente, su
+  dato objetivo y su siguiente paso. Es justo el trabajo en el que los
+  médicos fallan, y el que una máquina minuciosa hace bien.
 - Nace del **cambio en la lista de problemas**, que es el disparo de Weed.
 - El volumen es válvula secundaria, y cuando dispara él **la nota lo dice**: esta
   síntesis la pidió el tamaño, no el paciente.
@@ -314,6 +381,39 @@ tendría qué cerrar.
 epicrisis, el ordinal de una nota clínica es único dentro de él, y la
 historia ya escrita —que no tiene episodios— se migra a uno sin perder un
 tic.
+
+## Ciclo 19 — Potencia y acto
+
+**Por qué.** `EstadoInfon.VALIDADO` significa hoy «el validador del sistema
+lo confirmó». Eso es juicio de la máquina, y bajo el principio de potencia y
+acto sigue siendo potencial hasta que un médico lo actualiza.
+
+- Un eje nuevo, separado del veredicto del validador: quién lo actualizó y
+  cuándo. Sin él, «validado» dice dos cosas distintas según quién lea.
+- El tic potencial se genera **sobre lo aprobado**, no sobre lo que el
+  sistema cree.
+- **Aceptar, corregir o validar**, y la corrección se registra con lo que
+  cambió. Es la medida de cuánto se equivoca el sistema, y sin registrarla
+  no existe.
+
+**Condición de hecho.** Un infón que ningún humano actualizó nunca se
+presenta como real. Y la tasa de corrección se puede agregar, como
+`acuerdo_del_triaje()`.
+
+## Ciclo 20 — El holon anidado
+
+**Por qué.** `HolonPaciente` tiene un solo nivel. La historia clínica es el
+holon primario, las notas clínicas son secundarios y la epicrisis es el
+final; hoy los tres son el mismo objeto plano.
+
+- Un holon referencia los holones que lo componen, no sólo sus infones.
+- La escalera coincide con la secuencia del episodio, que el ciclo 17 ya
+  ordena en el tiempo: es la misma estructura vista desde la composición en
+  vez de desde el orden.
+
+**Condición de hecho.** Reconstruir la epicrisis desde sus holones da lo
+mismo que reconstruirla desde los infones de todo el episodio, y si no da lo
+mismo el sistema lo dice en vez de elegir uno.
 
 ## Lo que este plan NO cubre
 
