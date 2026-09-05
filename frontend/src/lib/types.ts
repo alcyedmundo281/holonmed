@@ -35,6 +35,8 @@ export type OrigenTic =
   | 'imagen'
   /** El paciente. Los otros cinco son todos del centro sanitario. */
   | 'paciente'
+  /** El propio sistema, autor de notas clínicas. Autor no es firmante. */
+  | 'holonmed'
   | 'otro';
 
 /**

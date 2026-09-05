@@ -46,6 +46,18 @@ class OrigenTic(str, Enum):
     # enfermo se registra como si lo hubiera producido la consulta, y deja
     # de poder auditarse aparte.
     PACIENTE = "paciente"
+    # HolonMed también produce documentos, sobre todo notas clínicas: la
+    # síntesis periódica del holón es trabajo suyo, no del clínico.
+    #
+    # Que sea un actor con nombre propio y no un `OTRO` disfrazado es la
+    # condición de la partida doble. Si lo que redacta el sistema entrara
+    # bajo el origen de la consulta, los dos libros se habrían fundido en
+    # uno y la discrepancia —que es el producto— dejaría de existir.
+    #
+    # Autor no es firmante. Lo que HolonMed redacta es un borrador hasta
+    # que una persona nombrada lo firma, y la epicrisis además sale de la
+    # institución. El sistema es minucioso; la responsabilidad es humana.
+    HOLONMED = "holonmed"
     OTRO = "otro"
 
 
