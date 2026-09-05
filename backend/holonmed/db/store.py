@@ -120,6 +120,7 @@ class Database:
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
+        ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'objetivo'"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
         ("orden", "referencias", "TEXT"),
@@ -621,11 +622,12 @@ class TicRepo:
                     cx.execute(
                         """INSERT INTO infon (
                                tic_id, paciente_id, concepto_id, timestamp, texto_origen,
-                               termino_propuesto, termino, polaridad, derivado_de,
+                               termino_propuesto, termino, polaridad, procedencia,
+                               derivado_de,
                                criterio, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -635,6 +637,7 @@ class TicRepo:
                             infon.termino_propuesto,
                             infon.termino,
                             infon.polaridad.value,
+                            infon.procedencia,
                             json.dumps(infon.derivado_de, ensure_ascii=False)
                             if infon.derivado_de
                             else None,
@@ -969,6 +972,8 @@ def _fila_a_infon(fila: sqlite3.Row) -> Infon:
         polaridad=Polaridad(fila["polaridad"] or "presente")
         if "polaridad" in fila.keys()
         else Polaridad.PRESENTE,
+        procedencia=(fila["procedencia"] if "procedencia" in fila.keys() else "objetivo")
+        or "objetivo",
         derivado_de=json.loads(derivado) if derivado else [],
         criterio=fila["criterio"] if "criterio" in fila.keys() else None,
         codigo=fila["codigo"],

@@ -51,12 +51,21 @@ export type OrigenTic =
  */
 export type TipoNota = 'base' | 'evolucion' | 'clinica' | 'epicrisis';
 
+/** Quién asevera un infón. Weed: primero lo sintomático, luego lo objetivo. */
+export type Procedencia = 'subjetivo' | 'objetivo' | 'derivado';
+
 export interface Infon {
   timestamp: string;
   texto_origen: string;
   termino_propuesto: string;
   termino: string;
   polaridad: Polaridad;
+  /**
+   * Quién asevera este infón. Lo que clasifica es quién asevera, no el
+   * instrumento: una glucemia que el paciente refiere es subjetiva, porque
+   * nadie vio el aparato ni la lectura.
+   */
+  procedencia: Procedencia;
   codigo: string | null;
   sistema: string | null;
   concepto_id: number | null;

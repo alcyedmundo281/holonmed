@@ -238,6 +238,12 @@ CREATE TABLE IF NOT EXISTS infon (
     termino_propuesto TEXT NOT NULL,
     termino           TEXT NOT NULL,
     polaridad         TEXT NOT NULL DEFAULT 'presente',
+    -- Quién lo asevera: subjetivo | objetivo | derivado. El eje es del
+    -- infón y no del tic, porque una nota de consulta lleva las dos clases
+    -- en el mismo párrafo. El defecto es 'objetivo' porque es lo que eran
+    -- todos los infones escritos antes de que existiera la distinción: los
+    -- producía el validador contra un protocolo, no el relato de nadie.
+    procedencia       TEXT NOT NULL DEFAULT 'objetivo',
     derivado_de       TEXT,            -- JSON: términos que lo satisfacen
     criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,
