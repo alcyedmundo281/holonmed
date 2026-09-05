@@ -1,4 +1,4 @@
-import { Beaker, FlaskConical, HeartPulse, Pill, Scan, Stethoscope, User } from 'lucide-react';
+import { Beaker, FlaskConical, HeartPulse, Pill, Scan, Stethoscope, User, Cpu } from 'lucide-react';
 import type { OrigenTic } from '../lib/types';
 
 /**
@@ -43,6 +43,11 @@ const ESTILOS: Record<OrigenTic, { etiqueta: string; clase: string; Icono: typeo
     etiqueta: 'Paciente',
     clase: 'bg-amber-50 text-amber-700 border-amber-200',
     Icono: User,
+  },
+  holonmed: {
+    etiqueta: 'HolonMed',
+    clase: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+    Icono: Cpu,
   },
   otro: {
     etiqueta: 'Otro',

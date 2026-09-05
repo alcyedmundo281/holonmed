@@ -8,6 +8,41 @@ reflejo.
 HolonMed implementa hoy la tercera y la cuarta a medias, y **no implementa la
 primera en absoluto**. Este documento es el plan para cerrarlo.
 
+## La tesis
+
+Antes de cualquier ciclo, lo que ordena todos:
+
+> **No queremos que un modelo de lenguaje trate a un paciente. Queremos que
+> la práctica clínica sea perfecta.**
+
+HolonMed no es un clínico ni aspira a serlo. Es el sistema minucioso y
+ordenado que Weed pedía y que nunca tuvo: el que impide que la lista de
+problemas dependa de quién pasó visita, que una orden se ejecute sin
+autorización, que un hallazgo entre en la historia sin poder defenderse, o
+que una hipótesis siga en pie cuando el paciente ya la contradice.
+
+De ahí se sigue todo lo demás, y en particular la regla que puede parecer
+una concesión burocrática y no lo es: **el sistema propone, la persona
+firma**. Un sistema que decidiera sería otro clínico —falible, y encima
+opaco—. Un sistema que no deja decidir mal es otra cosa.
+
+Es también lo que mantiene a HolonMed del lado correcto de la línea
+regulatoria. Ver [`DISCLAIMER.md`](../DISCLAIMER.md).
+
+## El octavo actor: HolonMed
+
+`origen` tenía siete actores y ninguno era el sistema. Pero HolonMed
+produce documentos —sobre todo notas clínicas, que son síntesis periódicas
+del holón y trabajo suyo, no del clínico—.
+
+Que sea un actor **con nombre propio** y no un `otro` disfrazado es la
+condición de la partida doble del ciclo 16: si lo que redacta el sistema
+entrara bajo el origen de la consulta, los dos libros se habrían fundido en
+uno y la discrepancia —que es el producto— dejaría de existir.
+
+**Autor no es firmante.** Lo que HolonMed redacta es un borrador hasta que
+una persona nombrada lo firma.
+
 ## Lo que hoy no es cierto
 
 | Fase de Weed | Estado |
