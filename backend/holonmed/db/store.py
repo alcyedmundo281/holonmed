@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..core.episodio import EstadoEpisodio, admite
 from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,8 @@ class Database:
     MIGRACIONES: tuple[tuple[str, str, str], ...] = (
         ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
         ("tic", "tipo", "TEXT NOT NULL DEFAULT 'evolucion'"),
+        ("tic", "episodio_id", "INTEGER"),
+        ("tic", "ordinal_clinica", "INTEGER"),
         ("tic", "actor", "TEXT"),
         ("tic", "skill_version", "TEXT"),
         ("tic", "acoplamiento", "TEXT"),
@@ -440,6 +443,104 @@ class PacienteRepo:
             return False
 
 
+class EpisodioRepo:
+    """Episodios: el contenedor con principio y fin de la secuencia de Weed.
+
+    Las reglas de qué documento admite cada episodio viven en
+    `core.episodio`, que es puro y se prueba solo. Aquí sólo se lee el
+    estado y se escribe el resultado: el almacén no reimplementa la lógica.
+    """
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    def abrir(
+        self, paciente_id: str, motivo: str = "", alcance_base: str = "comprehensiva"
+    ) -> str | None:
+        try:
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cx.execute(
+                    """INSERT OR IGNORE INTO paciente (id, nombre, antecedentes, creado)
+                       VALUES (?, ?, '', ?)""",
+                    (paciente_id, paciente_id, _ahora()),
+                )
+                cursor = cx.execute(
+                    """INSERT INTO episodio (paciente_id, abierto, motivo, alcance_base)
+                       VALUES (?,?,?,?)""",
+                    (paciente_id, _ahora(), motivo, alcance_base),
+                )
+                cx.commit()
+                return str(cursor.lastrowid)
+        except sqlite3.Error as exc:
+            logger.error("Error abriendo el episodio: %s", exc)
+            return None
+
+    def estado(self, episodio_id: str) -> EstadoEpisodio | None:
+        """Lo que `core.episodio` necesita para decidir. `None` si no existe.
+
+        Se distingue «no existe» de «vacío» a propósito: un episodio
+        inexistente no es un episodio sin historia, y tratarlos igual dejaría
+        escribir contra un identificador inventado.
+        """
+        try:
+            fila = (
+                self._db.conexion()
+                .execute(
+                    """SELECT e.cerrado,
+                          SUM(CASE WHEN t.tipo = 'base' THEN 1 ELSE 0 END) AS historias,
+                          SUM(CASE WHEN t.tipo = 'clinica' THEN 1 ELSE 0 END) AS clinicas
+                     FROM episodio e
+                     LEFT JOIN tic t ON t.episodio_id = e.id
+                    WHERE e.id = ?
+                    GROUP BY e.id""",
+                    (episodio_id,),
+                )
+                .fetchone()
+            )
+        except sqlite3.Error as exc:
+            logger.error("Error leyendo el episodio: %s", exc)
+            return None
+
+        if fila is None:
+            return None
+        return EstadoEpisodio(
+            cerrado=bool(fila["cerrado"]),
+            tiene_historia=bool(fila["historias"]),
+            notas_clinicas=int(fila["clinicas"] or 0),
+        )
+
+    def cerrar(self, episodio_id: str) -> bool:
+        """Lo llama la epicrisis. Un episodio no se cierra por dejar de escribir."""
+        try:
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cx.execute(
+                    "UPDATE episodio SET cerrado = ? WHERE id = ? AND cerrado IS NULL",
+                    (_ahora(), episodio_id),
+                )
+                cx.commit()
+                return True
+        except sqlite3.Error as exc:
+            logger.error("Error cerrando el episodio: %s", exc)
+            return False
+
+    def listar(self, paciente_id: str) -> list[dict[str, Any]]:
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT * FROM episodio WHERE paciente_id = ?
+                   ORDER BY abierto DESC""",
+                    (paciente_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [dict(f) for f in filas]
+
+
 class TicRepo:
     def __init__(self, db: Database, grafo: GraphRepo):
         self._db = db
@@ -447,6 +548,28 @@ class TicRepo:
 
     def guardar(self, resultado) -> str | None:
         cx = self._db.conexion()
+
+        # Las reglas del episodio gobiernan la escritura, y sólo cuando hay
+        # episodio: un tic sin él es el caso anterior al ciclo 17 y sigue
+        # valiendo. Rechazar aquí y no en la ruta es deliberado —el almacén
+        # es el único punto por el que se puede pasar—, y el ordinal de una
+        # nota clínica se asigna en el mismo sitio que autoriza escribirla:
+        # si dos sitios lo calcularan, un día diferirían.
+        if resultado.episodio_id:
+            episodios = EpisodioRepo(self._db)
+            estado = episodios.estado(resultado.episodio_id)
+            if estado is None:
+                logger.error(
+                    "El episodio %s no existe: el tic no se escribe.",
+                    resultado.episodio_id,
+                )
+                return None
+            veredicto = admite(estado, resultado.tipo)
+            if not veredicto.admitido:
+                logger.warning("Tic rechazado: %s", veredicto.motivo)
+                return None
+            resultado.ordinal_clinica = veredicto.ordinal
+
         try:
             with self._db._escritura:
                 # El paciente puede ser efímero (nunca dado de alta); se crea
@@ -458,18 +581,21 @@ class TicRepo:
                 )
                 cursor = cx.execute(
                     """INSERT INTO tic (paciente_id, timestamp, origen, tipo,
+                                        episodio_id, ordinal_clinica,
                                         actor,
                                         skill, skill_version, texto_original,
                                         resumen, inferencia, acoplamiento,
                                         veredicto, competencia,
                                         ganadora_abductiva, triaje_coincide,
                                         aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
                         resultado.origen.value,
                         resultado.tipo.value,
+                        int(resultado.episodio_id) if resultado.episodio_id else None,
+                        resultado.ordinal_clinica,
                         resultado.actor,
                         resultado.skill_activa,
                         resultado.skill_version,

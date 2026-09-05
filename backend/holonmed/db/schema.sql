@@ -132,6 +132,30 @@ CREATE INDEX IF NOT EXISTS idx_paciente_nombre ON paciente(nombre);
 -- `actor` es quién lo asertó. Hoy es informativo porque no hay
 -- autenticación; existe desde ahora para que añadirla después no obligue
 -- a migrar registros clínicos ya escritos.
+-- Un episodio: el contenedor con principio y fin dentro del cual la
+-- secuencia de Weed tiene sentido.
+--
+-- Sin él, `clínica-1` sería ambigua entre tres ingresos del mismo paciente
+-- y la epicrisis no tendría qué cerrar. Todo colgaba de `paciente_id`, que
+-- es la persona, no el episodio de atención.
+--
+-- `alcance_base` dice bajo qué base se atendió. Un episodio atendido con la
+-- base mínima NO puede presentarse como si se hubiera hecho la
+-- comprehensiva: es la razón entera de que la excepción esté declarada.
+CREATE TABLE IF NOT EXISTS episodio (
+    id           INTEGER PRIMARY KEY,
+    paciente_id  TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    abierto      TEXT NOT NULL,
+    -- NULL mientras el episodio sigue vivo. Lo escribe la epicrisis, y
+    -- sólo la epicrisis: un episodio no se cierra por dejar de escribir.
+    cerrado      TEXT,
+    motivo       TEXT NOT NULL DEFAULT '',
+    alcance_base TEXT NOT NULL DEFAULT 'comprehensiva'
+);
+
+CREATE INDEX IF NOT EXISTS idx_episodio_paciente
+    ON episodio(paciente_id, abierto DESC);
+
 CREATE TABLE IF NOT EXISTS tic (
     id             INTEGER PRIMARY KEY,
     paciente_id    TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
@@ -142,6 +166,15 @@ CREATE TABLE IF NOT EXISTS tic (
     -- por eso es el defecto; sin la columna, una nota clínica y un
     -- resultado de laboratorio se leen igual.
     tipo           TEXT NOT NULL DEFAULT 'evolucion',
+    -- NULL en los tics escritos antes de que existieran los episodios. No
+    -- se les inventa uno: agruparlos afirmaría que pertenecieron al mismo
+    -- ingreso, y nadie lo sabe. NULL se lee como «anterior al episodio».
+    episodio_id    INTEGER REFERENCES episodio(id) ON DELETE SET NULL,
+    -- El ordinal de una nota clínica dentro de su episodio: el «2» de
+    -- clínica-2. Se asigna al crearla y no se recalcula, porque el número
+    -- es parte de su identidad: si se derivara del orden, insertar una nota
+    -- con fecha anterior renumeraría notas que ya se citaron.
+    ordinal_clinica INTEGER,
     actor          TEXT,
     skill          TEXT NOT NULL,
     -- La versión del protocolo, junto a su nombre. Es la columna que

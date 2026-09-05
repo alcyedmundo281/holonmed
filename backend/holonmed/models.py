@@ -631,6 +631,22 @@ class ResultadoTic(BaseModel):
         default=TipoNota.EVOLUCION,
         description="Qué clase de documento es. Por defecto, nota de evolución.",
     )
+    episodio_id: str | None = Field(
+        default=None,
+        description=(
+            "El episodio al que pertenece. `None` en los tics anteriores a que "
+            "existieran los episodios, y ahí se lee como «sin episodio "
+            "declarado»: no se les inventa uno, porque agruparlos afirmaría "
+            "que pertenecieron al mismo ingreso y nadie lo sabe."
+        ),
+    )
+    ordinal_clinica: int | None = Field(
+        default=None,
+        description=(
+            "El «2» de clínica-2. Lo asigna el almacén al escribirla, no quien "
+            "la redacta: si dos sitios lo calcularan, un día diferirían."
+        ),
+    )
     actor: str | None = Field(
         default=None,
         description="Quién asertó estos datos. Sin autenticación es informativo.",

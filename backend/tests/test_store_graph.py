@@ -861,3 +861,100 @@ def test_una_base_anterior_admite_el_tipo_sin_perder_sus_tics(entorno, tmp_path)
     # evolución, y es lo que eran todos los tics escritos hasta ahora.
     assert filas[0]["tipo"] == "evolucion"
     reabierta.cerrar()
+
+
+def test_el_almacen_obedece_la_secuencia_del_episodio(entorno):
+    """Las reglas puras ya se prueban aparte; aquí se prueba que gobiernen.
+
+    Rechazar en el almacén y no en la ruta es deliberado: es el único punto
+    por el que se puede pasar, y una regla que sólo vive en la capa de
+    arriba se salta desde la CLI.
+    """
+    from holonmed.db import EpisodioRepo
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics, episodios = TicRepo(db, grafo), EpisodioRepo(db)
+    episodio = episodios.abrir("p1", motivo="dolor abdominal")
+
+    # Una evolución no puede preceder a la historia clínica.
+    evolucion = _tic()
+    evolucion.episodio_id, evolucion.tipo = episodio, TipoNota.EVOLUCION
+    assert tics.guardar(evolucion) is None
+
+    base = _tic()
+    base.episodio_id, base.tipo = episodio, TipoNota.BASE
+    assert tics.guardar(base) is not None
+
+    # Y una segunda historia clínica tampoco.
+    otra = _tic()
+    otra.episodio_id, otra.tipo = episodio, TipoNota.BASE
+    assert tics.guardar(otra) is None
+
+
+def test_el_ordinal_de_la_nota_clinica_lo_asigna_el_almacen(entorno):
+    """Si dos sitios lo calcularan, un día diferirían."""
+    from holonmed.db import EpisodioRepo
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics, episodios = TicRepo(db, grafo), EpisodioRepo(db)
+    episodio = episodios.abrir("p1")
+
+    base = _tic()
+    base.episodio_id, base.tipo = episodio, TipoNota.BASE
+    tics.guardar(base)
+
+    ordinales = []
+    for _ in range(3):
+        clinica = _tic()
+        clinica.episodio_id, clinica.tipo = episodio, TipoNota.CLINICA
+        tics.guardar(clinica)
+        ordinales.append(clinica.ordinal_clinica)
+
+    assert ordinales == [1, 2, 3]
+
+
+def test_un_episodio_cerrado_no_admite_nada_mas(entorno):
+    """Si se pudiera seguir escribiendo, la epicrisis sería un documento más."""
+    from holonmed.db import EpisodioRepo
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics, episodios = TicRepo(db, grafo), EpisodioRepo(db)
+    episodio = episodios.abrir("p1")
+
+    for tipo in (TipoNota.BASE, TipoNota.CLINICA, TipoNota.EPICRISIS):
+        documento = _tic()
+        documento.episodio_id, documento.tipo = episodio, tipo
+        assert tics.guardar(documento) is not None
+
+    episodios.cerrar(episodio)
+
+    tarde = _tic()
+    tarde.episodio_id, tarde.tipo = episodio, TipoNota.EVOLUCION
+    assert tics.guardar(tarde) is None
+
+
+def test_un_episodio_inventado_no_admite_escritura(entorno):
+    """«No existe» no es «existe y está vacío», y confundirlos dejaría
+    escribir contra un identificador cualquiera."""
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    fantasma = _tic()
+    fantasma.episodio_id, fantasma.tipo = "9999", TipoNota.BASE
+    assert tics.guardar(fantasma) is None
+
+
+def test_un_tic_sin_episodio_sigue_escribiendose(entorno):
+    """Es el caso anterior al ciclo 17, y la historia ya escrita es toda así.
+
+    No se les inventa un episodio: agruparlos afirmaría que pertenecieron al
+    mismo ingreso, y nadie lo sabe.
+    """
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    assert tics.guardar(_tic(resumen="sin episodio")) is not None
+    assert tics.historial("p1")[0]["resumen"] == "sin episodio"
