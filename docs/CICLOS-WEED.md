@@ -1,4 +1,4 @@
-# Inyectar a Weed: siete ciclos
+# Inyectar a Weed, ciclo a ciclo
 
 Lawrence Weed dividió la acción médica en cuatro fases —base de datos, lista de
 problemas, plan por problema, notas de evolución tituladas y numeradas— y
@@ -244,41 +244,60 @@ Una sensible negativa **no cierra la indagación: cierra una línea y abre otra*
 
 **Condición de hecho.** Ninguna propuesta se convierte en orden sin firma.
 
-## Ciclo 13 — `resumen_vivo` vivo
+## Ciclo 13 — El holon de background, y su impresión
 
-**Por qué.** El campo existe desde el primer día y **nadie lo escribe nunca**. Es
-el hueco de la condensación mantenida.
+Esto era dos ciclos —«`resumen_vivo` vivo» y «la nota clínica firmada»— y
+son **dos estados de un mismo mecanismo**. Separarlos habría llevado a
+construir dos cosas que luego había que reconciliar.
 
-Weed funda el registro en un límite de capacidad —la mente no puede cargar todo
-sin error— y ese argumento se traslada entero a una ventana de contexto. Pero lo
-que justifica es una **condensación mantenida**, no una serie de instantáneas: la
-lista de problemas y la hoja de flujo se mantienen, no se archivan por fechas.
+### El background
 
-- Se reescribe cuando cambia algo material, y también por volumen.
-- No lleva fecha ni firma: no afirma el estado del paciente en un instante.
+Después de que el médico valida cada infón, HolonMed genera **en cada tic**
+un holon secundario que incorpora los nuevos infones. Corre por debajo, no
+se imprime, y por eso puede estar siempre al día sin molestar a nadie.
 
-**Condición de hecho.** Nunca está obsoleto respecto de la última nota.
+Esa es la condensación mantenida que el argumento de capacidad de Weed
+justifica: la lista de problemas y la hoja de flujo se mantienen, no se
+archivan por fechas. `resumen_vivo` era el hueco declarado para esto desde
+el primer día, y nunca lo escribió nadie.
 
-## Ciclo 14 — La nota clínica firmada
+**No lleva fecha ni firma.** No afirma el estado del paciente en un
+instante: afirma el estado *ahora*, y se reescribe.
 
-**Por qué.** Es el holón revelado, y es un documento: tiene fecha, autor y firma,
-y afirma el estado del paciente en ese instante.
+### La impresión
 
-- **Va organizada por problema, y es lo más recurrente que HolonMed hace.**
-  Es la queja central de Weed: «doing well» no significa nada cuando el
-  paciente tiene artritis, insuficiencia cardíaca, azotemia, cadera rota e
-  infección de oído. Cada problema lleva su punto de vista del paciente, su
-  dato objetivo y su siguiente paso. Es justo el trabajo en el que los
-  médicos fallan, y el que una máquina minuciosa hace bien.
-- Nace del **cambio en la lista de problemas**, que es el disparo de Weed.
-- El volumen es válvula secundaria, y cuando dispara él **la nota lo dice**: esta
-  síntesis la pidió el tamaño, no el paciente.
-- Weed sobre las notas escritas el domingo por la mañana: una nota cuyo sello de
-  tiempo no corresponde a un evento es ficción, no ciencia.
+Cuando las cosas cambian, ese holon de background **se imprime en el
+presente real**, para que el médico actualice su conocimiento clínico del
+paciente. La impresión es el evento, y lo que se imprime es un documento de
+verdad: `clínica-N`, con su ordinal, su fecha y su firma.
 
-**Condición de hecho.** Aprobación humana nombrada antes de emitirla.
+Qué cuenta como «las cosas cambian»:
 
----
+- **Cambio en la lista de problemas** — el disparo de Weed, y el que el
+  sistema ya sabe calcular: `promocion.py` cuando un problema pasa a
+  diagnóstico, `duda.py` cuando el argumento deja de sostenerse.
+- **Volumen**, como válvula secundaria. Y cuando dispara el volumen **la
+  nota lo dice**: esta síntesis la pidió el tamaño, no el paciente. Que se
+  note la diferencia es la mitad del valor.
+
+Weed sobre las notas escritas el domingo por la mañana: una nota cuyo sello
+de tiempo no corresponde a un evento es ficción, no ciencia. El background
+no tiene sello, así que no puede mentir; la impresión sí lo tiene, y por eso
+tiene que corresponder a algo.
+
+### Y va por problema
+
+Es la queja central de Weed y **lo más recurrente que HolonMed hace**:
+«doing well» no significa nada en un paciente con artritis, insuficiencia
+cardíaca, azotemia, cadera rota e infección de oído. Cada problema lleva su
+punto de vista del paciente, su dato objetivo y su siguiente paso.
+
+Es justo el trabajo en el que los médicos fallan y en el que una máquina
+minuciosa es buena.
+
+**Condición de hecho.** El background nunca está obsoleto respecto del
+último tic. Nada se imprime sin firma. Y una nota impresa dice si la pidió
+el paciente o el tamaño.
 
 ## Ciclo 15 — La interfaz por la que entra todo
 
@@ -382,6 +401,29 @@ epicrisis, el ordinal de una nota clínica es único dentro de él, y la
 historia ya escrita —que no tiene episodios— se migra a uno sin perder un
 tic.
 
+## Ciclo 18 — La procedencia de un infón
+
+**Por qué.** Weed pide la nota escrita «sintomáticamente y objetivamente»,
+en ese orden. Esa separación no es de estilo: es de procedencia, y sin
+registrarla la nota mezcla lo que alguien contó con lo que alguien comprobó.
+
+```
+subjetivo   lo expresó el paciente
+objetivo    lo observó el clínico, o lo midió quien informa
+derivado    no lo aseveró nadie: se sigue de otros infones
+```
+
+**Lo que clasifica es quién asevera, no el instrumento.** Una glucemia que
+el paciente refiere es subjetiva aunque salga de un glucómetro: nadie vio el
+aparato, ni la lectura, ni si estaba calibrado.
+
+La consecuencia es la que da valor a la regla: **un valor referido no puede
+compararse contra un punto de corte como si se hubiera medido**.
+
+**Condición de hecho.** El eje es del infón y no del tic, porque una nota de
+consulta lleva las dos clases en el mismo párrafo. Y un origen que no
+declara qué produce no recibe ninguna procedencia.
+
 ## Ciclo 19 — Potencia y acto
 
 **Por qué.** `EstadoInfon.VALIDADO` significa hoy «el validador del sistema
@@ -430,11 +472,14 @@ El orden no es una fila india sino un grafo de dependencias, y conviene decirlo
 con precisión para no serializar de más:
 
 ```
+HECHOS      8 · 9 · 17 · 18 · 19 · 20
+
 8  ──► 9 ──► 10 ──► 11 ──► 12
-8  ──► 17 ──► 15 (la interfaz necesita 9 y 17: sin base no hay qué pedir,
-                  y sin episodio la nota clínica no se puede numerar)
-10 ──► 16 (la partida doble concilia lo que el laboratorio trajo)
-17 ──► 13 ──► 14 (la condensación y la nota firmada viven en un episodio)
+9 + 17 ──► 15   la interfaz: sin base no hay qué pedir, y sin episodio la
+                nota clínica no se puede numerar
+10 ──► 16       la partida doble concilia lo que el laboratorio trajo
+19 + 20 ──► 13  el holon de background necesita la escalera (20) y saber qué
+                está ratificado (19), porque se genera TRAS la validación
 ```
 
 Lo que sí es firme: ningún ciclo empieza con su dependencia fuera de `main`.
