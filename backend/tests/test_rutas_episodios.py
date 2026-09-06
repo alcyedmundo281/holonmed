@@ -156,3 +156,33 @@ def test_un_episodio_cerrado_no_admite_mas_documentos(cliente):
 
 def test_un_episodio_inventado_no_existe(cliente):
     assert _escribir(cliente, "9999", "base").status_code == 404
+
+
+def test_el_fondo_no_lleva_fecha_ni_firma(cliente):
+    """Leerlo no lo imprime: afirma el estado ahora, y se reescribe."""
+    episodio = _abrir(cliente)
+    _escribir(cliente, episodio, "base")
+
+    cuerpo = cliente.get(f"/api/episodios/{episodio}/fondo").json()
+    assert set(cuerpo) == {"bloques", "sin_sintetizar", "al_dia", "impresion"}
+    assert "firmado_por" not in cuerpo
+    assert "fecha" not in cuerpo
+
+
+def test_el_fondo_trae_su_decision_de_imprimir(cliente):
+    """Viajan juntas porque quien consulta el fondo es quien va a imprimirlo.
+
+    Separarlas dejaría que se imprimiera sin motivo, que es exactamente la
+    nota que no fecha nada.
+    """
+    episodio = _abrir(cliente)
+    _escribir(cliente, episodio, "base")
+
+    impresion = cliente.get(f"/api/episodios/{episodio}/fondo").json()["impresion"]
+    assert "imprime" in impresion
+    assert "razon" in impresion
+    assert "la_pidio_el_paciente" in impresion
+
+
+def test_un_episodio_inventado_no_tiene_fondo(cliente):
+    assert cliente.get("/api/episodios/9999/fondo").status_code == 404
