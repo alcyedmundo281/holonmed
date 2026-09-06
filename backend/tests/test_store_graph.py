@@ -958,3 +958,112 @@ def test_un_tic_sin_episodio_sigue_escribiendose(entorno):
     tics = TicRepo(db, grafo)
     assert tics.guardar(_tic(resumen="sin episodio")) is not None
     assert tics.historial("p1")[0]["resumen"] == "sin episodio"
+
+
+def test_un_infon_que_nadie_actualizo_no_es_real(entorno):
+    """Por bien validado que esté por el sistema, sigue siendo potencia.
+
+    `estado` es el veredicto del validador de tres capas; `acto` es la
+    ratificación humana. Fundirlos haría que «validado» significara dos
+    cosas distintas según quién leyera.
+    """
+    from holonmed.models import EstadoInfon
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    resultado = _tic()
+    resultado.infones = [
+        Infon(
+            texto_origen="Fiebre de 38.5",
+            termino_propuesto="fiebre",
+            termino="Fiebre",
+            estado=EstadoInfon.VALIDADO,
+        )
+    ]
+    tic_id = tics.guardar(resultado)
+
+    guardado = tics.tic_completo(tic_id)["infones"][0]
+    assert guardado["estado"] == "VALIDADO"
+    assert guardado["acto"] is None
+
+
+def test_la_ratificacion_sobrevive_al_viaje(entorno):
+    from holonmed.models import EstadoInfon
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    resultado = _tic()
+    resultado.infones = [
+        Infon(
+            texto_origen="Dolor epigástrico",
+            termino_propuesto="dolor",
+            termino="Dolor epigástrico",
+            estado=EstadoInfon.VALIDADO,
+            acto="corregido",
+            actualizado_por="Dra. Ruiz",
+            actualizado_en="2026-09-05T10:00:00Z",
+            correccion={"termino": ["Dolor abdominal", "Dolor epigástrico"]},
+        )
+    ]
+    tic_id = tics.guardar(resultado)
+
+    guardado = tics.tic_completo(tic_id)["infones"][0]
+    assert guardado["acto"] == "corregido"
+    assert guardado["actualizado_por"] == "Dra. Ruiz"
+
+
+def test_sin_nadie_que_actue_la_tasa_de_correccion_es_none(entorno):
+    """Cero diría que el sistema no se equivocó; nadie ha mirado todavía."""
+    from holonmed.models import EstadoInfon
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    resultado = _tic()
+    resultado.infones = [
+        Infon(
+            texto_origen="x",
+            termino_propuesto="x",
+            termino="X",
+            estado=EstadoInfon.VALIDADO,
+        )
+    ]
+    tics.guardar(resultado)
+
+    medida = tics.tasa_de_correccion("p1")
+    assert medida["tasa"] is None
+    assert medida["sin_actuar"] == 1
+    assert medida["actuados"] == 0
+
+
+def test_la_tasa_dice_en_que_campo_falla_el_sistema(entorno):
+    """Un contador de aciertos no dice en qué falla; el desglose sí."""
+    from holonmed.models import EstadoInfon
+
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+    resultado = _tic()
+    resultado.infones = [
+        Infon(
+            texto_origen="a",
+            termino_propuesto="a",
+            termino="A",
+            estado=EstadoInfon.VALIDADO,
+            acto="aceptado",
+            actualizado_por="Dra. Ruiz",
+        ),
+        Infon(
+            texto_origen="b",
+            termino_propuesto="b",
+            termino="B",
+            estado=EstadoInfon.VALIDADO,
+            acto="corregido",
+            actualizado_por="Dra. Ruiz",
+            correccion={"termino": ["B", "B'"]},
+        ),
+    ]
+    tics.guardar(resultado)
+
+    medida = tics.tasa_de_correccion("p1")
+    assert medida["actuados"] == 2
+    assert medida["tasa"] == 0.5
+    assert medida["por_campo"] == {"termino": 1}

@@ -51,6 +51,12 @@ export type OrigenTic =
  */
 export type TipoNota = 'base' | 'evolucion' | 'clinica' | 'epicrisis';
 
+/**
+ * Qué hizo el humano con lo que el sistema propuso. `rechazado` no borra: lo
+ * rechazado dice algo sobre el sistema, y esconderlo lo haría inauditable.
+ */
+export type Acto = 'aceptado' | 'corregido' | 'rechazado';
+
 /** Quién asevera un infón. Weed: primero lo sintomático, luego lo objetivo. */
 export type Procedencia = 'subjetivo' | 'objetivo' | 'derivado';
 
@@ -66,6 +72,16 @@ export interface Infon {
    * nadie vio el aparato ni la lectura.
    */
   procedencia: Procedencia;
+  /**
+   * Potencia y acto. `acto: null` es el estado inicial correcto —el sistema
+   * lo propuso y nadie lo ha ratificado—, no un hueco que rellenar. `estado`
+   * es otra cosa: el veredicto del validador, que es juicio de la máquina.
+   */
+  acto: Acto | null;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+  /** Qué cambió al corregirlo: `{ campo: [antes, después] }`. */
+  correccion: Record<string, unknown>;
   codigo: string | null;
   sistema: string | null;
   concepto_id: number | null;
