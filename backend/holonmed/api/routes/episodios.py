@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.base import cargar_todas, evaluar
+from ...core.sintesis import decidir, sintetizar
 from ...models import OrigenTic, TipoNota
 from ..deps import AppContext, get_context
 
@@ -120,6 +121,55 @@ async def estado_de_la_base(
         "completa": estado.completa,
         "razon": estado.razon,
         "faltan_por_quien": estado.faltan_por_quien,
+    }
+
+
+@router.get("/episodios/{episodio_id}/fondo")
+async def holon_de_fondo(
+    episodio_id: str, ctx: AppContext = Depends(get_context)
+) -> dict[str, Any]:
+    """El holon de fondo del episodio, y si toca imprimirlo.
+
+    El fondo corre por debajo en cada tic y **no lleva fecha ni firma**: no
+    afirma el estado del paciente en un instante, afirma el estado ahora.
+    Leerlo no lo imprime.
+
+    La decisión viaja con él porque quien lo consulta es quien va a
+    imprimirlo, y separarlas dejaría que se imprimiera sin motivo.
+    """
+    if ctx.episodios.listar_uno(episodio_id) is None:
+        raise HTTPException(404, "No existe ese episodio")
+
+    paciente_id = ctx.episodios.paciente_de(episodio_id) or ""
+    problemas = [p["termino"] for p in ctx.tics.lista_problemas(paciente_id)]
+    infones = ctx.episodios.infones_del_episodio(episodio_id)
+
+    fondo = sintetizar(infones, problemas)
+    # Sin problemas previos con qué comparar, el primer fondo de un episodio
+    # imprime por cada problema que aparece, que es lo correcto: todos son
+    # nuevos.
+    decision = decidir(problemas_antes=[], problemas_ahora=problemas)
+
+    return {
+        "bloques": [
+            {
+                "problema": b.problema,
+                "subjetivo": list(b.subjetivo),
+                "objetivo": list(b.objetivo),
+                "derivado": list(b.derivado),
+            }
+            for b in fondo.bloques
+        ],
+        # Lo que no cayó bajo ningún problema. No se descarta: lo que no
+        # esté en el fondo no llegará nunca al médico.
+        "sin_sintetizar": list(fondo.sin_sintetizar),
+        "al_dia": fondo.al_dia,
+        "impresion": {
+            "imprime": decision.imprime,
+            "motivos": [m.value for m in decision.motivos],
+            "razon": decision.razon,
+            "la_pidio_el_paciente": decision.la_pidio_el_paciente,
+        },
     }
 
 

@@ -610,6 +610,28 @@ class EpisodioRepo:
             return None
         return dict(fila) if fila else None
 
+    def infones_del_episodio(self, episodio_id: str) -> list[Infon]:
+        """Los infones de este episodio, para sintetizar el fondo.
+
+        Se filtra por episodio y no por paciente: el fondo de un ingreso no
+        puede arrastrar los hallazgos de otro, que es justo lo que el
+        episodio existe para separar.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT i.* FROM infon i JOIN tic t ON t.id = i.tic_id
+                        WHERE t.episodio_id = ? AND i.estado = 'VALIDADO'
+                        ORDER BY i.timestamp""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [_fila_a_infon(fila) for fila in filas]
+
     def paciente_de(self, episodio_id: str) -> str | None:
         episodio = self.listar_uno(episodio_id)
         return episodio["paciente_id"] if episodio else None
