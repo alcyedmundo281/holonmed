@@ -216,10 +216,35 @@ class Infon(BaseModel):
         """Un humano lo actualizó. Lo demás es potencia, por bien validada que esté."""
         return self.acto in ("aceptado", "corregido")
 
+    # --- Serendipia ---------------------------------------------------
+    # Un resultado que nadie pidió no es prueba de la hipótesis activa:
+    # nadie lo eligió para ponerla a prueba. Abre un problema, que es otra
+    # cosa. `False` es el defecto y el caso de todo lo escrito hasta hoy.
+    abre_problema: bool = Field(
+        default=False,
+        description=(
+            "Llegó sin orden que lo pidiera. Entra en la historia y en la "
+            "lista de problemas, pero no cuenta como evidencia."
+        ),
+    )
+    responde_a: str | None = Field(
+        default=None, description="La orden a la que responde, si responde a alguna."
+    )
+
     @property
     def confirma(self) -> bool:
-        """Un hallazgo validado y presente. El que suma en la inferencia."""
-        return self.es_valido and self.polaridad is Polaridad.PRESENTE
+        """Un hallazgo validado y presente. El que suma en la inferencia.
+
+        Un hallazgo serendípico queda fuera, y no por desconfianza: contar
+        como prueba de una hipótesis un dato recogido para otra cosa —o
+        para nada— sería inflar el numerador de Bayes con evidencia que
+        nadie eligió. Sigue en la historia y en la lista de problemas.
+        """
+        return (
+            self.es_valido
+            and self.polaridad is Polaridad.PRESENTE
+            and not self.abre_problema
+        )
 
     @property
     def descarta(self) -> bool:

@@ -252,6 +252,10 @@ CREATE TABLE IF NOT EXISTS infon (
     actualizado_por   TEXT,
     actualizado_en    TEXT,
     correccion        TEXT,            -- JSON: {campo: [antes, después]}
+    -- Serendipia: llegó sin orden que lo pidiera. Entra en la historia y
+    -- abre un problema, pero no cuenta como prueba de la hipótesis activa.
+    abre_problema     INTEGER NOT NULL DEFAULT 0,
+    responde_a        TEXT,            -- la orden a la que responde
     derivado_de       TEXT,            -- JSON: términos que lo satisfacen
     criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,

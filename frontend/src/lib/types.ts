@@ -82,6 +82,14 @@ export interface Infon {
   actualizado_en: string | null;
   /** Qué cambió al corregirlo: `{ campo: [antes, después] }`. */
   correccion: Record<string, unknown>;
+  /**
+   * Serendipia: llegó sin orden que lo pidiera. Entra en la historia y en la
+   * lista de problemas, pero **no cuenta como evidencia** de la hipótesis
+   * activa: nadie lo eligió para ponerla a prueba.
+   */
+  abre_problema: boolean;
+  /** La orden a la que responde, si responde a alguna. */
+  responde_a: string | null;
   codigo: string | null;
   sistema: string | null;
   concepto_id: number | null;
