@@ -23,6 +23,7 @@ from ..db import (
     CitaRepo,
     Database,
     DocumentoRepo,
+    EpisodioRepo,
     GraphRepo,
     PacienteRepo,
     TicRepo,
@@ -55,6 +56,7 @@ class AppContext:
         self.grafo = GraphRepo(self.database)
         self.pacientes = PacienteRepo(self.database)
         self.tics = TicRepo(self.database, self.grafo)
+        self.episodios = EpisodioRepo(self.database)
         self.citas = CitaRepo(self.database)
         self.documentos = DocumentoRepo(self.database)
 

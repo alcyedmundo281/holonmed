@@ -599,6 +599,44 @@ class EpisodioRepo:
             logger.error("Error cerrando el episodio: %s", exc)
             return False
 
+    def listar_uno(self, episodio_id: str) -> dict[str, Any] | None:
+        try:
+            fila = (
+                self._db.conexion()
+                .execute("SELECT * FROM episodio WHERE id = ?", (episodio_id,))
+                .fetchone()
+            )
+        except sqlite3.Error:
+            return None
+        return dict(fila) if fila else None
+
+    def paciente_de(self, episodio_id: str) -> str | None:
+        episodio = self.listar_uno(episodio_id)
+        return episodio["paciente_id"] if episodio else None
+
+    def terminos_del_episodio(self, episodio_id: str) -> list[str]:
+        """Los terminos ya averiguados en este episodio.
+
+        Es lo que se compara contra la base definida. Se devuelven terminos
+        y no codigos porque un item de la base puede no tener concepto —«con
+        quien vive» no esta en ningun vocabulario clinico— y dejar fuera lo
+        que no se codifica reduciria la base a lo que el indice sabe nombrar.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT DISTINCT i.termino
+                         FROM infon i JOIN tic t ON t.id = i.tic_id
+                        WHERE t.episodio_id = ?""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [fila["termino"] for fila in filas]
+
     def listar(self, paciente_id: str) -> list[dict[str, Any]]:
         try:
             filas = (
