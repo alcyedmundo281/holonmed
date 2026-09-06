@@ -1067,3 +1067,75 @@ def test_la_tasa_dice_en_que_campo_falla_el_sistema(entorno):
     assert medida["actuados"] == 2
     assert medida["tasa"] == 0.5
     assert medida["por_campo"] == {"termino": 1}
+
+
+def test_la_escalera_de_holones_se_deriva_del_episodio(entorno):
+    """La composición no se almacena: es función de la secuencia.
+
+    Una tabla de enlace sería una segunda fuente de verdad que un día
+    diverge, y el compromiso del sistema es que el estado en el tic n sea
+    recomputable desde 1..n.
+    """
+    from holonmed.db import EpisodioRepo
+    from holonmed.models import TipoNota
+
+    db, grafo, _ = entorno
+    tics, episodios = TicRepo(db, grafo), EpisodioRepo(db)
+    episodio = episodios.abrir("p1")
+
+    for tipo in (
+        TipoNota.BASE,
+        TipoNota.EVOLUCION,
+        TipoNota.CLINICA,
+        TipoNota.EPICRISIS,
+    ):
+        documento = _tic()
+        documento.episodio_id, documento.tipo = episodio, tipo
+        tics.guardar(documento)
+
+    escalera = episodios.holones(episodio)
+    etiquetas = [h["etiqueta"] for h in escalera["holones"]]
+
+    # La evolución no aparece: aporta infones, no síntesis.
+    assert etiquetas == ["primario", "clínica-1", "final"]
+    # Y el final los contiene a todos los anteriores.
+    assert len(escalera["holones"][-1]["compone"]) == 2
+
+
+def test_los_infones_de_las_evoluciones_los_recoge_el_holon_siguiente(entorno):
+    """Es para lo que nace un holon secundario."""
+    from holonmed.db import EpisodioRepo
+    from holonmed.models import EstadoInfon, TipoNota
+
+    db, grafo, _ = entorno
+    tics, episodios = TicRepo(db, grafo), EpisodioRepo(db)
+    episodio = episodios.abrir("p1")
+
+    base = _tic()
+    base.episodio_id, base.tipo = episodio, TipoNota.BASE
+    tics.guardar(base)
+
+    evolucion = _tic()
+    evolucion.episodio_id, evolucion.tipo = episodio, TipoNota.EVOLUCION
+    evolucion.infones = [
+        Infon(
+            texto_origen="Fiebre",
+            termino_propuesto="fiebre",
+            termino="Fiebre",
+            estado=EstadoInfon.VALIDADO,
+        )
+    ]
+    tics.guardar(evolucion)
+
+    # Antes de la nota clínica, ese infón espera: no es una pérdida.
+    en_espera = episodios.holones(episodio)
+    assert en_espera["conservacion"]["coincide"]
+    assert len(en_espera["conservacion"]["huerfanos"]) == 1
+
+    clinica = _tic()
+    clinica.episodio_id, clinica.tipo = episodio, TipoNota.CLINICA
+    tics.guardar(clinica)
+
+    tras_sintetizar = episodios.holones(episodio)
+    assert tras_sintetizar["conservacion"]["huerfanos"] == []
+    assert len(tras_sintetizar["holones"][-1]["infones_propios"]) == 1

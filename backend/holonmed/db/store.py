@@ -23,7 +23,8 @@ from typing import Any
 
 from ..core.actualizacion import Acto, Actualizacion, medir
 from ..core.episodio import EstadoEpisodio, admite
-from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad
+from ..core.holon import Documento, componer, conciliar
+from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad, TipoNota
 
 logger = logging.getLogger(__name__)
 
@@ -515,6 +516,73 @@ class EpisodioRepo:
             tiene_historia=bool(fila["historias"]),
             notas_clinicas=int(fila["clinicas"] or 0),
         )
+
+    def holones(self, episodio_id: str) -> dict[str, Any]:
+        """La escalera de holones de un episodio, y si conserva sus infones.
+
+        La composición se DERIVA de la secuencia y no se almacena: la
+        secuencia es inmutable —se añade, no se reescribe— y una tabla de
+        enlace sería una segunda fuente de verdad que un día diverge. El
+        compromiso del sistema es que el estado en el tic n sea recomputable
+        desde 1..n, y esto lo cumple por construcción.
+
+        Se devuelve la conciliación junto a la escalera y no aparte porque
+        quien lee los holones es quien necesita saber si están completos. Un
+        consumidor que tuviera que acordarse de preguntarlo acabaría no
+        preguntándolo.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT t.id, t.tipo, t.ordinal_clinica,
+                          (SELECT group_concat(i.id) FROM infon i
+                            WHERE i.tic_id = t.id) AS infones
+                     FROM tic t
+                    WHERE t.episodio_id = ?
+                    ORDER BY t.timestamp, t.id""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error as exc:
+            logger.error("Error leyendo los holones: %s", exc)
+            return {"holones": [], "conservacion": None}
+
+        documentos = [
+            Documento(
+                tic_id=str(fila["id"]),
+                tipo=TipoNota(fila["tipo"]),
+                infones=tuple((fila["infones"] or "").split(","))
+                if fila["infones"]
+                else (),
+                ordinal=fila["ordinal_clinica"],
+            )
+            for fila in filas
+        ]
+
+        escalera = componer(documentos)
+        conservacion = conciliar(documentos, escalera)
+        return {
+            "holones": [
+                {
+                    "tic_id": h.tic_id,
+                    "nivel": h.nivel.value,
+                    "etiqueta": h.etiqueta,
+                    "compone": list(h.compone),
+                    "infones_propios": list(h.infones_propios),
+                }
+                for h in escalera
+            ],
+            "conservacion": {
+                "coincide": conservacion.coincide,
+                "razon": conservacion.razon,
+                # Los huérfanos NO son una pérdida: son lo que espera al
+                # próximo holon, que es el estado normal entre dos notas.
+                "huerfanos": list(conservacion.huerfanos),
+                "perdidos": list(conservacion.perdidos),
+            },
+        }
 
     def cerrar(self, episodio_id: str) -> bool:
         """Lo llama la epicrisis. Un episodio no se cierra por dejar de escribir."""
