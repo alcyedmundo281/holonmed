@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..core.actualizacion import Acto, Actualizacion, medir
 from ..core.episodio import EstadoEpisodio, admite
 from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad
 
@@ -121,6 +122,10 @@ class Database:
         ("tic", "reapertura", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
         ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'objetivo'"),
+        ("infon", "acto", "TEXT"),
+        ("infon", "actualizado_por", "TEXT"),
+        ("infon", "actualizado_en", "TEXT"),
+        ("infon", "correccion", "TEXT"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
         ("orden", "referencias", "TEXT"),
@@ -623,11 +628,12 @@ class TicRepo:
                         """INSERT INTO infon (
                                tic_id, paciente_id, concepto_id, timestamp, texto_origen,
                                termino_propuesto, termino, polaridad, procedencia,
+                               acto, actualizado_por, actualizado_en, correccion,
                                derivado_de,
                                criterio, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -638,6 +644,12 @@ class TicRepo:
                             infon.termino,
                             infon.polaridad.value,
                             infon.procedencia,
+                            infon.acto,
+                            infon.actualizado_por,
+                            infon.actualizado_en,
+                            json.dumps(infon.correccion, ensure_ascii=False)
+                            if infon.correccion
+                            else None,
                             json.dumps(infon.derivado_de, ensure_ascii=False)
                             if infon.derivado_de
                             else None,
@@ -825,6 +837,59 @@ class TicRepo:
             # El primero que se ve de cada hipótesis es el más reciente.
             previo.setdefault(acoplamiento.hipotesis, acoplamiento.phi_legible)
         return previo
+
+    def tasa_de_correccion(self, paciente_id: str | None = None) -> dict[str, Any]:
+        """Cuánto no aceptó el humano tal cual, y en qué campos falla el sistema.
+
+        Es la cifra que el eje de actualización existe para producir. Sin
+        ella, «el sistema propone y la persona firma» es una política sin
+        medida, y nunca se sabría si lo que propone vale algo.
+
+        LOS INFONES SIN ACTUAR SE CUENTAN APARTE, NO COMO ACIERTO.
+        Uno que nadie miró no dice nada sobre el sistema; meterlo en el
+        denominador inventaría una tasa. Es la misma decisión que
+        `acuerdo_del_triaje()` toma con los tics sin competencia, y por la
+        misma razón.
+        """
+        sql = """SELECT acto, correccion FROM infon"""
+        binds: list[Any] = []
+        if paciente_id:
+            sql += " WHERE paciente_id = ?"
+            binds.append(paciente_id)
+
+        try:
+            filas = self._db.conexion().execute(sql, binds).fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Error midiendo la tasa de corrección: %s", exc)
+            return {"actuados": 0, "tasa": None, "por_campo": {}}
+
+        actualizaciones: list[Actualizacion | None] = []
+        for fila in filas:
+            acto = fila["acto"]
+            if not acto:
+                actualizaciones.append(None)
+                continue
+            crudos = json.loads(fila["correccion"]) if fila["correccion"] else {}
+            cambios = {k: (str(v[0]), str(v[1])) for k, v in crudos.items()}
+            actualizaciones.append(
+                # `por` y `cuando` no se leen aquí: la medida sólo necesita el
+                # acto y los campos. Se rellenan para no relajar la validación
+                # del dataclass, que es la que impide una corrección vacía.
+                Actualizacion(acto=Acto(acto), por="—", cuando="", cambios=cambios)
+            )
+
+        medida = medir(actualizaciones)
+        return {
+            "aceptados": medida.aceptados,
+            "corregidos": medida.corregidos,
+            "rechazados": medida.rechazados,
+            "sin_actuar": medida.sin_actuar,
+            "actuados": medida.actuados,
+            # `None` y no 0: cero diría que el sistema no se equivocó, y lo
+            # que pasa es que nadie ha mirado todavía.
+            "tasa": medida.tasa,
+            "por_campo": medida.por_campo,
+        }
 
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
         """Lista de problemas: conceptos validados, agrupados y fechados.

@@ -244,6 +244,14 @@ CREATE TABLE IF NOT EXISTS infon (
     -- todos los infones escritos antes de que existiera la distinción: los
     -- producía el validador contra un protocolo, no el relato de nadie.
     procedencia       TEXT NOT NULL DEFAULT 'objetivo',
+    -- Potencia y acto. `acto` NULL es el estado inicial correcto —el
+    -- sistema lo propuso y nadie lo ha ratificado— y no un hueco que
+    -- rellenar. `estado` de al lado es otra cosa: el veredicto del
+    -- validador, que es juicio de la máquina.
+    acto              TEXT,
+    actualizado_por   TEXT,
+    actualizado_en    TEXT,
+    correccion        TEXT,            -- JSON: {campo: [antes, después]}
     derivado_de       TEXT,            -- JSON: términos que lo satisfacen
     criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,

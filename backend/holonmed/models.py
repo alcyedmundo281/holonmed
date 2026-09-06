@@ -180,9 +180,41 @@ class Infon(BaseModel):
     razon_auditoria: str = "No evaluado"
     origen_skill: str = "general_triage"
 
+    # --- Potencia y acto ---------------------------------------------
+    # Separado de `estado` a propósito. `estado` es el veredicto del
+    # validador de tres capas —juicio de la máquina, con su traza y su
+    # score—; esto es la ratificación humana. Fundirlos haría que
+    # «validado» significara dos cosas distintas según quién leyera.
+    acto: str | None = Field(
+        default=None,
+        description="'aceptado' | 'corregido' | 'rechazado'. `None` = potencial.",
+    )
+    actualizado_por: str | None = Field(
+        default=None,
+        description=(
+            "Nombre de quien lo ratificó. El contrato exige aprobación humana "
+            "nombrada: «alguien lo validó» no se puede auditar."
+        ),
+    )
+    actualizado_en: str | None = None
+    correccion: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Qué cambió al corregirlo: {campo: [antes, después]}. Es la materia "
+            "prima de la tasa de corrección, que es la medida de cuánto se "
+            "equivoca el sistema."
+        ),
+    )
+
     @property
     def es_valido(self) -> bool:
+        """El validador de tres capas lo confirmó. NO es una ratificación."""
         return self.estado == EstadoInfon.VALIDADO
+
+    @property
+    def es_real(self) -> bool:
+        """Un humano lo actualizó. Lo demás es potencia, por bien validada que esté."""
+        return self.acto in ("aceptado", "corregido")
 
     @property
     def confirma(self) -> bool:
