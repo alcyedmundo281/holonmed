@@ -127,6 +127,8 @@ class Database:
         ("infon", "actualizado_por", "TEXT"),
         ("infon", "actualizado_en", "TEXT"),
         ("infon", "correccion", "TEXT"),
+        ("infon", "abre_problema", "INTEGER NOT NULL DEFAULT 0"),
+        ("infon", "responde_a", "TEXT"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
         ("orden", "referencias", "TEXT"),
@@ -757,11 +759,12 @@ class TicRepo:
                                tic_id, paciente_id, concepto_id, timestamp, texto_origen,
                                termino_propuesto, termino, polaridad, procedencia,
                                acto, actualizado_por, actualizado_en, correccion,
+                               abre_problema, responde_a,
                                derivado_de,
                                criterio, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -778,6 +781,8 @@ class TicRepo:
                             json.dumps(infon.correccion, ensure_ascii=False)
                             if infon.correccion
                             else None,
+                            int(infon.abre_problema),
+                            infon.responde_a,
                             json.dumps(infon.derivado_de, ensure_ascii=False)
                             if infon.derivado_de
                             else None,
