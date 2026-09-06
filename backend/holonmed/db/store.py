@@ -971,6 +971,30 @@ class TicRepo:
             previo.setdefault(acoplamiento.hipotesis, acoplamiento.phi_legible)
         return previo
 
+    def infones_por_tic(self, paciente_id: str) -> dict[str, list[Infon]]:
+        """Los infones agrupados por su tic, para cerrar los dos libros.
+
+        Se agrupa aquí y no en el núcleo porque el agrupamiento es una
+        consulta; lo que hace el núcleo con los grupos —distinguir pendiente
+        de pasado por alto— es la regla, y ésa vive en `core.partida_doble`.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    "SELECT * FROM infon WHERE paciente_id = ? ORDER BY tic_id",
+                    (paciente_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return {}
+
+        salida: dict[str, list[Infon]] = {}
+        for fila in filas:
+            salida.setdefault(str(fila["tic_id"]), []).append(_fila_a_infon(fila))
+        return salida
+
     def tasa_de_correccion(self, paciente_id: str | None = None) -> dict[str, Any]:
         """Cuánto no aceptó el humano tal cual, y en qué campos falla el sistema.
 

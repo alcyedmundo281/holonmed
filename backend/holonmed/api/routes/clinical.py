@@ -1,9 +1,11 @@
 """Rutas clínicas: cristalización, historial y línea de tiempo del holón."""
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from ...core.partida_doble import conciliar
 from ...models import CrystallizeRequest, OrigenTic, ResultadoTic
 from ...services import LabExtractionError, extraer_texto_pdf
 from ..deps import AppContext, get_context
@@ -144,6 +146,42 @@ async def listar_skills(ctx: AppContext = Depends(get_context)):
             }
         )
     return salida
+
+
+@router.get("/pacientes/{paciente_id}/partida-doble")
+async def partida_doble(
+    paciente_id: str, ctx: AppContext = Depends(get_context)
+) -> dict[str, Any]:
+    """Cierra los dos libros: el del sistema y el del clínico.
+
+    La cifra que sale es la que Weed midió y que hoy no produce nadie: qué
+    fracción de lo que el sistema vio y el clínico revisó, el clínico no
+    recogió. En su sala de urgencias eran 5.2 problemas por paciente.
+
+    Y la otra mitad mide al índice, no al médico: lo que el clínico ratificó
+    y el validador no dio por bueno es cobertura que falta.
+
+    Los pendientes se devuelven aparte y NO entran en ninguna tasa: son
+    trabajo sin hacer, no desacuerdo.
+    """
+    balance = conciliar(ctx.tics.infones_por_tic(paciente_id))
+    return {
+        "concuerdan": balance.concuerdan,
+        "solo_holonmed": balance.solo_holonmed,
+        "solo_clinico": balance.solo_clinico,
+        "pendientes": balance.pendientes,
+        "conciliados": balance.conciliados,
+        # `None` y no 0: cero diría que no se pasó nada por alto, y lo que
+        # pasa es que no hay con qué compararlo.
+        "tasa_pasados_por_alto": balance.tasa_pasados_por_alto,
+        "tasa_sin_cobertura": balance.tasa_sin_cobertura,
+        "por_termino": balance.por_termino,
+        "discrepancias": [
+            {"termino": a.termino, "situacion": a.situacion.value, "motivo": a.motivo}
+            for a in balance.asientos
+            if a.es_discrepancia
+        ],
+    }
 
 
 @router.get("/pacientes/{paciente_id}/problemas")
