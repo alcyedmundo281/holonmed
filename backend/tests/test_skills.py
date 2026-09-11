@@ -443,3 +443,62 @@ def test_los_tipos_validos_se_respetan(valido):
     skill = Skill("x", PLANTILLA_TIPO.format(tipo=valido))
     assert skill.tipo == valido
     assert not any("desconocido" in f for f in skill.problemas())
+
+
+# --- Un signo que sólo descarta también aporta LR ----------------------
+
+
+PLANTILLA_SOLO_DESCARTE = """---
+titulo: Protocolo de prueba
+descripcion: Un modelo bayesiano cuyo único signo sólo descarta
+condicion:
+  nombre: Trombosis venosa profunda
+  codigos: {{ snomed: "128053003" }}
+
+modelo_bayesiano:
+  probabilidad_base: 0.17
+
+signos:
+  - nombre: Dímero D negativo
+    codigos: {{ snomed: "441740002" }}
+{cociente}
+    fuente: pmid:16403932
+---
+
+PROTOCOLO
+"""
+
+SOLO_NEGATIVO = "    lr_negativo: 0.1"
+SOLO_POSITIVO = "    lr: 2.1"
+
+
+def test_un_signo_que_solo_descarta_cuenta_como_LR():
+    """El dímero D de alta sensibilidad no confirma nada: descarta.
+
+    Ésa es toda su utilidad y por eso se publica su LR−, no su LR+. La
+    revisión miraba sólo `lr` —que es el LR+— y daba por vacío de cocientes
+    un modelo que tenía uno perfectamente citado, con lo que ninguna
+    condición de sólo-descarte podía trasladarse desde medsemiotics-db.
+    """
+    skill = Skill("x", PLANTILLA_SOLO_DESCARTE.format(cociente=SOLO_NEGATIVO))
+
+    assert skill.bayes.declarado
+    assert not any("ningún signo aporta LR" in f for f in skill.problemas())
+
+
+def test_un_modelo_bayesiano_sin_ningun_cociente_se_sigue_denunciando():
+    """La corrección de arriba no puede desactivar la comprobación.
+
+    Un modelo que se declara bayesiano y no trae ni un cociente —ni de
+    confirmación ni de descarte— no puede mover la probabilidad de nadie.
+    """
+    skill = Skill("x", PLANTILLA_SOLO_DESCARTE.format(cociente=""))
+
+    assert skill.bayes.declarado
+    assert any("ningún signo aporta LR" in f for f in skill.problemas())
+
+
+def test_un_signo_que_solo_confirma_sigue_contando():
+    skill = Skill("x", PLANTILLA_SOLO_DESCARTE.format(cociente=SOLO_POSITIVO))
+
+    assert not any("ningún signo aporta LR" in f for f in skill.problemas())
