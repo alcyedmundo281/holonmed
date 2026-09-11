@@ -438,7 +438,7 @@ seguridad clínica.
 El software está archivado en Zenodo con DOI permanente:
 
 > Torres Guerrero, A. E. (2026). *HolonMed: apoyo a la decisión clínica con
-> validación ontológica y razonamiento bayesiano explicable* (v0.4.0).
+> validación ontológica y razonamiento bayesiano explicable* (v0.5.0).
 > Zenodo. https://doi.org/10.5281/zenodo.21896525
 
 ```bibtex
@@ -448,7 +448,7 @@ El software está archivado en Zenodo con DOI permanente:
                ontológica y razonamiento bayesiano explicable},
   year      = {2026},
   publisher = {Zenodo},
-  version   = {v0.4.0},
+  version   = {v0.5.0},
   doi       = {10.5281/zenodo.21896525},
   url       = {https://doi.org/10.5281/zenodo.21896525}
 }
@@ -459,7 +459,7 @@ Hay dos DOI y conviene distinguirlos:
 | DOI | Qué identifica | Cuándo usarlo |
 |-----|----------------|---------------|
 | [`10.5281/zenodo.21896525`](https://doi.org/10.5281/zenodo.21896525) | Todas las versiones | Por defecto. Resuelve siempre a la última |
-| [`10.5281/zenodo.21911667`](https://doi.org/10.5281/zenodo.21911667) | Sólo v0.4.0 | Cuando importe reproducir esta versión exacta |
+| [`10.5281/zenodo.22263458`](https://doi.org/10.5281/zenodo.22263458) | Sólo v0.5.0 | Cuando importe reproducir esta versión exacta |
 
 GitHub también genera la cita automáticamente desde
 [CITATION.cff](CITATION.cff) con el botón *Cite this repository*.
