@@ -932,7 +932,14 @@ class Skill:
             if not criterio.terminos():
                 fallos.append(f"criterio '{criterio.parametro}': sin término asociado")
 
-        if self.bayes.declarado and not any(s.lr for s in self.signos):
+        # Un signo que sólo descarta aporta LR igual que uno que sólo
+        # confirma: el dímero D de alta sensibilidad en la trombosis venosa
+        # profunda no sirve para otra cosa, y ésa es toda su utilidad. Mirar
+        # sólo `lr` —que es el LR+— daba por vacío un modelo que tiene
+        # cociente. Es el mismo criterio que ya usa `resumen()` más arriba.
+        if self.bayes.declarado and not any(
+            s.lr is not None or s.lr_negativo is not None for s in self.signos
+        ):
             fallos.append("declara modelo bayesiano pero ningún signo aporta LR")
 
         if index is not None:
