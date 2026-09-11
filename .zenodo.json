@@ -19,7 +19,6 @@
   "creators": [
     {
       "name": "Torres Guerrero, Alcy Edmundo",
-      "affiliation": "Power Semiotics",
       "orcid": "0000-0002-9742-375X"
     }
   ],
@@ -51,5 +50,7 @@
       "resource_type": "software",
       "scheme": "url"
     }
-  ]
+  ],
+
+  "notes": "Plataforma independiente. El proyecto no implica aval ni representación de ninguna institución sanitaria ni académica. HolonMed no está certificado como producto sanitario: ver DISCLAIMER.md."
 }
