@@ -3,7 +3,7 @@ titulo: Protocolo de pancreatitis aguda
 descripcion: >-
   Dolor epigástrico en cinturón, enzimas pancreáticas elevadas, factores
   de riesgo biliares o enólicos.
-version: "2.0.0"
+version: "2.0.1"
 
 condicion:
   nombre: Pancreatitis aguda
@@ -48,6 +48,19 @@ modelo_bayesiano:
 # Cada LR debe citar su fuente. Un likelihood ratio sin procedencia es un
 # número inventado con formato científico.
 #
+# LOS SIETE COCIENTES DE ESTE PROTOCOLO SALEN DE GetTheDiagnosis.org. La
+# lipasa y la amilasa citaban «JAMA Rational Clinical Examination» y era un
+# error: esa serie NO TIENE ningún artículo sobre pancreatitis, comprobado
+# contra PubMed el 16/09/2026. El signo de Cullen no citaba nada y venía del
+# mismo sitio. Corregido en la v2.0.1; ningún número ha cambiado.
+#
+# GetTheDiagnosis es un agregador: recopila cocientes de la literatura, pero
+# no es un artículo y no tiene PMID. Por eso medsemiotics-db NO admite estos
+# siete —su regla es que todo entre con PMID y DOI— y su condición HM:6040
+# registra las siete aristas con `estado_lr: no_medido`. Para que entren hay
+# que subir un eslabón: el artículo que cada cociente resume, que
+# GetTheDiagnosis cita por estudio en su ficha de pancreatitis.
+#
 # `lr_negativo` sólo tiene sentido donde la ausencia sea informativa. Que
 # no haya signo de Cullen no dice nada: es raro incluso en la enfermedad.
 signos:
@@ -57,8 +70,8 @@ signos:
     lr: 26.6
     lr_negativo: 0.1
     fuente: >-
-      JAMA Rational Clinical Examination. Criterio de referencia; el LR más
-      alto de la serie. Una lipasa normal descarta con fuerza.
+      GetTheDiagnosis.org. Criterio de referencia de laboratorio; el LR más
+      alto de este protocolo. Una lipasa normal descarta con fuerza.
 
   - nombre: Hiperamilasemia (>3x)
     codigos: { holonmed: "HM:0731", snomed: "10427000" }
@@ -66,9 +79,9 @@ signos:
     lr: 12.5
     lr_negativo: 0.3
     fuente: >-
-      JAMA Rational Clinical Examination. Fuerte, pero menos específica que
-      la lipasa: se eleva también en patología salival y otras causas, y
-      se normaliza antes.
+      GetTheDiagnosis.org. Fuerte, pero menos específica que la lipasa: se
+      eleva también en patología salival y otras causas, y se normaliza
+      antes.
 
   - nombre: Dolor epigástrico
     codigos: { holonmed: "HM:0202", snomed: "79922009" }
@@ -96,8 +109,9 @@ signos:
     rol: apoyo
     lr: 8.0
     fuente: >-
-      Raro pero específico de pancreatitis necrotizante o hemorrágica. Su
-      ausencia no descarta nada, y por eso no declara lr_negativo.
+      GetTheDiagnosis.org. Raro pero específico de pancreatitis necrotizante
+      o hemorrágica. Su ausencia no descarta nada, y por eso no declara
+      lr_negativo.
 
   - nombre: Hallazgos de imagen compatibles con pancreatitis
     codigos: { holonmed: "HM:0901" }
