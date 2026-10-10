@@ -613,6 +613,20 @@ def _decidir_efecto(
         )
         return None
 
+    if efecto == "excluye" and sostiene == "mecanismo" and arista.get("advertencia"):
+        # Una exclusión por mecanismo no tiene cociente que la gradúe: es un
+        # veto absoluto en `veredicto.py`, y la excepción que la advertencia
+        # describe sólo existiría en un comentario, sin que el motor pueda
+        # honrarla. Se queda en la prosa, donde el clínico la lee. (Las que
+        # sostiene `discriminacion_medida` llevan su LR y no entran aquí.)
+        informe.pendiente(
+            termino,
+            "exclusión por mecanismo con una advertencia que nombra una "
+            "excepción: no entra en el bloque estructurado, porque `excluye` "
+            "vetaría también el caso de la excepción. Se queda en la prosa",
+        )
+        return None
+
     if dispara not in POLARIDADES:
         # Una bandera que debía dispararse por ausencia y se emite por
         # presencia dispara justo al revés. Tampoco se emite.
@@ -625,6 +639,46 @@ def _decidir_efecto(
         return None
 
     return efecto, dispara
+
+
+def _emitir_umbral(
+    salida: Bloque,
+    positivo: dict,
+    negativo: dict,
+    arista: dict,
+    termino: str,
+    indice: Indice,
+    informe: Informe,
+) -> None:
+    """Un LR que sólo vale por encima o por debajo de un corte no se traslada.
+
+    El motor aplica `lr` cuando el hallazgo está presente y `lr_negativo` cuando
+    consta ausente; no evalúa el valor medido. Trasladar el número dejaría que
+    «hCG 200» recibiera el cociente de «hCG > 1500» sólo por mencionarse la
+    prueba. El corte tiene que modelarse como criterio de `laboratorio` y el
+    cociente colgarse del hallazgo ya umbralizado: eso es una decisión humana.
+    """
+    salida.comentario(
+        "el índice publica este cociente PARA UN UMBRAL y el motor no evalúa el "
+        "valor medido: aplicado tal cual, cualquier mención de la prueba "
+        "recibiría el cociente. No se traslada. Modela el corte como criterio de "
+        "`laboratorio` y cuelga el cociente del hallazgo umbralizado.",
+        sangria=4,
+    )
+    emitidos = [(e, lr) for e, lr in (("LR+", positivo), ("LR−", negativo)) if lr]
+    for etiqueta, lr in emitidos:
+        salida.comentario(
+            f"{etiqueta} {lr.get('valor')} para {_plano(lr.get('umbral') or 'sin umbral')}",
+            sangria=4,
+        )
+    texto = _fuente(emitidos, arista, indice, informe, termino)
+    if texto:
+        salida.comentario(texto, sangria=4)
+    informe.pendiente(
+        termino,
+        "el cociente está publicado para un umbral y no se traslada: el motor no "
+        "lo evaluaría. Modela el corte en `laboratorio` antes de usarlo",
+    )
 
 
 def _conceptos_en_conflicto(entradas: list[tuple[dict, str]]) -> set[str]:
@@ -801,6 +855,10 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
                 sangria=4,
             )
             _comentar_contexto(salida, arista, indice, informe, termino)
+        elif (positivo or negativo) and (
+            positivo.get("umbral") or negativo.get("umbral")
+        ):
+            _emitir_umbral(salida, positivo, negativo, arista, termino, indice, informe)
         elif positivo or negativo:
             valor_positivo = (
                 _valor_utilizable(positivo, "LR+", termino, informe) if positivo else None

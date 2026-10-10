@@ -473,3 +473,45 @@ def test_con_algun_lr_la_prevalencia_del_indice_se_conserva():
         {"probabilidad_base": {"valor": 0.2}}, indice(), informe
     )
     assert "probabilidad_base: 0.2" in bloque.texto()
+
+
+# ── lo que el motor no puede honrar no entra en el bloque estructurado ──────
+
+
+def test_una_exclusion_con_advertencia_no_entra_como_veto():
+    """`excluye` es un veto absoluto; la excepción de la advertencia sólo
+    viviría en un comentario y el motor no puede aplicarla."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0900",
+                    "efecto": "excluye",
+                    "sostiene": "mecanismo",
+                    "motivo": "anatomía",
+                    "advertencia": "existe la excepción heterotópica",
+                }
+            ]
+        }
+    )
+    assert "excluye" not in texto
+    assert any("advertencia" in p for p in pendientes)
+
+
+def test_un_lr_publicado_para_un_umbral_no_se_traslada():
+    """El motor no evalúa el valor medido: el número se aplicaría a cualquier
+    mención de la prueba."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                _arista(
+                    "HM:0101",
+                    lr_positivo={"valor": 2.3, "umbral": "hCG > 1500 mIU/mL"},
+                    lr_negativo={"valor": 0.91, "umbral": "hCG > 1500 mIU/mL"},
+                )
+            ]
+        }
+    )
+    assert "\n    lr:" not in texto and "lr_negativo:" not in texto
+    assert "LR+ 2.3 para hCG > 1500 mIU/mL" in texto
+    assert any("umbral" in p for p in pendientes)

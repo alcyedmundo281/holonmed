@@ -36,29 +36,6 @@ modelo_bayesiano:
 # Cada LR conserva la procedencia con la que entró en el índice.
 # Un cociente sin fuente es un número inventado con formato científico.
 signos:
-  - nombre: Embarazo intrauterino confirmado en ecografía
-    codigos: { holonmed: "HM:3165" }
-    rol: imagen
-    efecto: excluye
-    # no_medido: la exclusión no descansa en un cociente sino en la
-    # anatomía: un embarazo ectópico está fuera del útero por definición,
-    # así que ver el embarazo dentro lo vuelve muy improbable sin que nadie
-    # haya tenido que medirlo. Y la fuente no lo mide: su condición diana es
-    # el embarazo intrauterino contrastado contra la ecografía transvaginal
-    # del obstetra, no el ectópico contrastado contra visualización
-    # quirúrgica o seguimiento. Convertir su especificidad del 100% en un
-    # cociente del ectópico sería inventar un número que el estudio no
-    # calculó. Ver `notas_de_uso`.
-    # población: 143 gestantes sintomáticas del primer trimestre atendidas
-    # en urgencias por sangrado vaginal y dolor abdominopélvico
-    # ADVERTENCIA: el embarazo heterotópico existe: confirmar el
-    # intrauterino no excluye un ectópico simultáneo, y la excepción pesa de
-    # verdad en la mujer que viene de reproducción asistida. El seudosaco es
-    # la otra trampa, y es la peligrosa: una colección endometrial central
-    # sin saco vitelino ni embrión NO es este hallazgo
-    # Çelik A et al. Am J Emerg Med 2022;61:105-110. PMID 36063623.
-    # doi:10.1016/j.ajem.2022.08.045.
-
   - nombre: Masa anexial sin gestación intrauterina en ecografía transvaginal
     codigos: { holonmed: "HM:3064" }
     rol: imagen
@@ -135,18 +112,21 @@ signos:
   - nombre: hCG sérica cuantitativa
     codigos: { holonmed: "HM:3189" }
     rol: prueba_especifica
-    lr: 2.3
-    lr_negativo: 0.91
-    fuente: >-
-      Condous G et al. Ultrasound Obstet Gynecol 2005;26:770-5. PMID
-      16308901. doi:10.1002/uog.2636. LR+ umbral: hCG > 1500 mIU/mL. LR−
-      umbral: hCG > 1500 mIU/mL. Población: 527 mujeres con embarazo de
-      localización no determinada (PUL) tras ecografía transvaginal en
-      unidad especializada. Ningún valor aislado de hCG por encima de la
-      zona discriminatoria confirma el ectópico, y un valor por debajo
-      nunca lo descarta (LR− 0.90-0.94). La zona discriminatoria define
-      cuándo un embarazo intrauterino viable debería verse, no cuándo un
-      embarazo es obligadamente ectópico.
+    # el índice publica este cociente PARA UN UMBRAL y el motor no evalúa el
+    # valor medido: aplicado tal cual, cualquier mención de la prueba
+    # recibiría el cociente. No se traslada. Modela el corte como criterio
+    # de `laboratorio` y cuelga el cociente del hallazgo umbralizado.
+    # LR+ 2.3 para hCG > 1500 mIU/mL
+    # LR− 0.91 para hCG > 1500 mIU/mL
+    # Condous G et al. Ultrasound Obstet Gynecol 2005;26:770-5. PMID
+    # 16308901. doi:10.1002/uog.2636. LR+ umbral: hCG > 1500 mIU/mL. LR−
+    # umbral: hCG > 1500 mIU/mL. Población: 527 mujeres con embarazo de
+    # localización no determinada (PUL) tras ecografía transvaginal en
+    # unidad especializada. Ningún valor aislado de hCG por encima de la
+    # zona discriminatoria confirma el ectópico, y un valor por debajo nunca
+    # lo descarta (LR− 0.90-0.94). La zona discriminatoria define cuándo un
+    # embarazo intrauterino viable debería verse, no cuándo un embarazo es
+    # obligadamente ectópico.
 
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.
@@ -187,7 +167,17 @@ ROL: ginecólogo experto, basado en evidencia.
    abdominal y sangrado vaginal en la gestación precoz son lo que trae a
    la paciente a consulta, no lo que diagnostica: no tienen cociente
    propio en este modelo.
-5. No infieras lo que no está escrito. Un dato que falta se pide, no
+5. **Un embarazo intrauterino confirmado en la ecografía lo vuelve muy
+   improbable, pero no lo descarta.** El embarazo heterotópico existe,
+   sobre todo tras reproducción asistida, y un seudosaco (colección
+   endometrial central sin saco vitelino ni embrión) no es este hallazgo.
+   Regístralo como dato; este protocolo no lo trata como exclusión.
+   Sin intrauterino confirmado no hay alta: hay un embarazo de
+   localización no determinada.
+6. **La hCG no tiene cociente aquí.** El índice lo publica para un umbral
+   (hCG > 1500 mIU/mL) que este modelo no evalúa. Regístrala como dato;
+   ningún valor aislado confirma ni descarta el ectópico.
+7. No infieras lo que no está escrito. Un dato que falta se pide, no
    se supone.
 
 ## Lo que la fuente concluye
