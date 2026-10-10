@@ -19,6 +19,7 @@ condicion:
 ambito_grafo:
   - HM:0200   # Dolor
   - HM:0600   # Signo de exploración
+  - HM:0710   # Alteración hematológica
   - HM:0900   # Hallazgo de imagen
   - HM:3069   # Sangrado vaginal en la gestación precoz
 
@@ -35,6 +36,29 @@ modelo_bayesiano:
 # Cada LR conserva la procedencia con la que entró en el índice.
 # Un cociente sin fuente es un número inventado con formato científico.
 signos:
+  - nombre: Embarazo intrauterino confirmado en ecografía
+    codigos: { holonmed: "HM:3165" }
+    rol: imagen
+    efecto: excluye
+    # no_medido: la exclusión no descansa en un cociente sino en la
+    # anatomía: un embarazo ectópico está fuera del útero por definición,
+    # así que ver el embarazo dentro lo vuelve muy improbable sin que nadie
+    # haya tenido que medirlo. Y la fuente no lo mide: su condición diana es
+    # el embarazo intrauterino contrastado contra la ecografía transvaginal
+    # del obstetra, no el ectópico contrastado contra visualización
+    # quirúrgica o seguimiento. Convertir su especificidad del 100% en un
+    # cociente del ectópico sería inventar un número que el estudio no
+    # calculó. Ver `notas_de_uso`.
+    # población: 143 gestantes sintomáticas del primer trimestre atendidas
+    # en urgencias por sangrado vaginal y dolor abdominopélvico
+    # ADVERTENCIA: el embarazo heterotópico existe: confirmar el
+    # intrauterino no excluye un ectópico simultáneo, y la excepción pesa de
+    # verdad en la mujer que viene de reproducción asistida. El seudosaco es
+    # la otra trampa, y es la peligrosa: una colección endometrial central
+    # sin saco vitelino ni embrión NO es este hallazgo
+    # Çelik A et al. Am J Emerg Med 2022;61:105-110. PMID 36063623.
+    # doi:10.1016/j.ajem.2022.08.045.
+
   - nombre: Masa anexial sin gestación intrauterina en ecografía transvaginal
     codigos: { holonmed: "HM:3064" }
     rol: imagen
@@ -108,13 +132,29 @@ signos:
     # Crochet JR et al. JAMA 2013;309:1722-9. PMID 23613077.
     # doi:10.1001/jama.2013.3914.
 
+  - nombre: hCG sérica cuantitativa
+    codigos: { holonmed: "HM:3189" }
+    rol: prueba_especifica
+    lr: 2.3
+    lr_negativo: 0.91
+    fuente: >-
+      Condous G et al. Ultrasound Obstet Gynecol 2005;26:770-5. PMID
+      16308901. doi:10.1002/uog.2636. LR+ umbral: hCG > 1500 mIU/mL. LR−
+      umbral: hCG > 1500 mIU/mL. Población: 527 mujeres con embarazo de
+      localización no determinada (PUL) tras ecografía transvaginal en
+      unidad especializada. Ningún valor aislado de hCG por encima de la
+      zona discriminatoria confirma el ectópico, y un valor por debajo
+      nunca lo descarta (LR− 0.90-0.94). La zona discriminatoria define
+      cuándo un embarazo intrauterino viable debería verse, no cuándo un
+      embarazo es obligadamente ectópico.
+
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.
 procedencia:
   indice: medsemiotics-db
   condicion: HM:6016
-  commit: 22f8b9c
-  generado: 2026-08-23
+  commit: 9505ae0
+  generado: 2026-10-10
   herramienta: scripts/convertir_condicion.py
 ---
 

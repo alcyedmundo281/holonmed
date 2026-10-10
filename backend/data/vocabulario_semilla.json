@@ -12,9 +12,10 @@
     "y rechaza lo que no reconoce. Para codificar de verdad (facturación,",
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help",
-    "v1.6.0: suma los conceptos acuñados por medsemiotics-db al modelar embarazo ectópico (HM:6016), conjuntivitis bacteriana (HM:6017) y apnea obstructiva del sueño (HM:6018), todas con cociente de verosimilitud verificado contra PubMed."
+    "v1.6.0: suma los conceptos acuñados por medsemiotics-db al modelar embarazo ectópico (HM:6016), conjuntivitis bacteriana (HM:6017) y apnea obstructiva del sueño (HM:6018), todas con cociente de verosimilitud verificado contra PubMed.",
+    "v1.7.0: suma HM:3165 (embarazo intrauterino confirmado en ecografía) y HM:3189 (hCG sérica cuantitativa), que medsemiotics-db añadió al protocolo de embarazo ectópico (HM:6016)."
   ],
-  "version": "1.6.0",
+  "version": "1.7.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1944,6 +1945,29 @@
       "sinonimos": [
         "SAOS",
         "apnea del sueño"
+      ]
+    },
+    {
+      "codigo": "HM:3165",
+      "termino": "Embarazo intrauterino confirmado en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "gestación intrauterina confirmada",
+        "saco gestacional intrauterino con saco vitelino o embrión",
+        "embarazo intrauterino definitivo"
+      ]
+    },
+    {
+      "codigo": "HM:3189",
+      "termino": "hCG sérica cuantitativa",
+      "semantica": "hallazgo",
+      "padre": "HM:0710",
+      "sinonimos": [
+        "beta-hCG cuantitativa",
+        "gonadotropina coriónica humana sérica",
+        "subunidad beta de gonadotropina coriónica humana",
+        "fracción beta de hCG"
       ]
     }
   ]
