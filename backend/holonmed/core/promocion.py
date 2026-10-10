@@ -157,6 +157,8 @@ class EvaluadorDePromocion:
         """
         from .bayes import emparejar_termino
 
+        # Sólo `apoya`: la tupla cuenta lo que el protocolo declara que apoya.
+        # `evidencia` pesa en la probabilidad pero no satisface ninguna tupla.
         indice = {s.nombre.lower(): s for s in skill.signos if s.efecto == "apoya"}
         salida: list[tuple[str, str]] = []
         vistos: set[str] = set()

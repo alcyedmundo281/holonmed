@@ -97,7 +97,11 @@ class EvaluadorDeVeredicto:
         cumple; None dice que no hay criterio que aplicar.
         """
         hipotesis = str(skill.condicion.get("nombre") or skill.titulo)
-        declara_efectos = any(s.efecto != "apoya" for s in skill.signos)
+        # `evidencia` no decide nada, así que no cuenta como efecto declarado:
+        # un protocolo que sólo la usa sigue sin criterio que aplicar.
+        declara_efectos = any(
+            s.efecto not in ("apoya", "evidencia") for s in skill.signos
+        )
         if not declara_efectos and not skill.balance.declarado:
             return None
 

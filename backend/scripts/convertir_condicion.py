@@ -110,7 +110,7 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 # Las dos taxonomías del eje `efecto`. Se repiten aquí y en `skills.py` por la
 # misma razón que `ROLES`: este script no importa el paquete. Que no diverjan lo
 # comprueba `test_las_taxonomias_del_eje_no_divergen`.
-EFECTOS = ("apoya", "bandera_roja", "excluye")
+EFECTOS = ("apoya", "bandera_roja", "excluye", "evidencia")
 POLARIDADES = ("presente", "ausente")
 
 # Claves de una arista que este conversor sabe traducir. Cada condición nueva
@@ -622,22 +622,20 @@ def _decidir_efecto(
         # excluye la apendicitis): precede a todo y no admite grados. Lo que el
         # índice sostiene con una discriminación MEDIDA es un cociente, y un
         # cociente de 0.2 no es una exclusión: un infarto con dolor pleurítico
-        # existe. Emitirlo como `excluye` descartaría el diagnóstico entero.
-        # Como no hay un efecto que cuente el cociente sin contarlo a favor
-        # (`apoya` invertiría el signo), no entra en el bloque estructurado y
-        # se queda en la prosa, que es lo que esta función hace con todo lo
-        # que no puede honrar.
-        publicado = "; ".join(
-            f"{e} {_lr(arista.get(c)).get('valor')}"
-            for e, c in (("LR+", "lr_positivo"), ("LR−", "lr_negativo"))
-            if _lr(arista.get(c)).get("valor") is not None
-        )
+        # existe. Tampoco puede ser `apoya`, que invertiría el signo. Es
+        # `evidencia`: entra en la probabilidad por su LR y no decide nada.
+        # Sin ningún cociente utilizable no hay evidencia que trasladar.
+        if any(
+            isinstance(_lr(arista.get(c)).get("valor"), (int, float))
+            and _lr(arista.get(c))["valor"] > 0
+            for c in ("lr_positivo", "lr_negativo")
+        ):
+            return "evidencia", "presente"
         informe.pendiente(
             termino,
-            f"exclusión sostenida por «{sostiene or 'nada'}», no por mecanismo: es "
-            f"un cociente medido ({publicado or 'sin valor'}) y `excluye` sería un "
-            f"veto absoluto. No entra en el bloque estructurado; decide si merece "
-            f"un veto o se queda en la prosa",
+            f"exclusión sostenida por «{sostiene or 'nada'}», no por mecanismo, y "
+            f"sin ningún cociente utilizable: `excluye` sería un veto absoluto y "
+            f"no hay LR con que trasladarla. No entra en el bloque estructurado",
         )
         return None
 

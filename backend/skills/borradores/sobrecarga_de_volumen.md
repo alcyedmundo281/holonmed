@@ -18,6 +18,7 @@ condicion:
 ambito_grafo:
   - HM:0400   # Síntoma respiratorio
   - HM:0600   # Signo de exploración
+  - HM:0700   # Alteración analítica
   - HM:0900   # Hallazgo de imagen
 
 modelo_bayesiano:
@@ -44,6 +45,23 @@ signos:
       del BNP. La conclusión de la fuente los nombra juntos como las dos
       pruebas más útiles para identificar la sobrecarga.
 
+  - nombre: Péptido natriurético cerebral elevado
+    codigos: { holonmed: "HM:3151" }
+    rol: prueba_sensible
+    efecto: evidencia
+    # el índice publica este cociente PARA UN UMBRAL y el motor no evalúa el
+    # valor medido: aplicado tal cual, cualquier mención de la prueba
+    # recibiría el cociente. No se traslada. Modela el corte como criterio
+    # de `laboratorio` y cuelga el cociente del hallazgo umbralizado.
+    # LR+ 4.2 para BNP ≥ 100 ng/mL
+    # LR− 0.09 para BNP < 100 ng/mL
+    # Drum B et al. JAMA 2026;335:1159-1168. PMID 41729549.
+    # doi:10.1001/jama.2026.0446. LR+ IC95% [1.8, 10]; umbral: BNP ≥ 100
+    # ng/mL. LR− IC95% [0.06, 0.16]; umbral: BNP < 100 ng/mL. La conclusión
+    # de la fuente lo señala, junto con la ausencia de líneas B, como lo más
+    # útil para EXCLUIR la sobrecarga: un BNP normal la hace muy poco
+    # probable.
+
   - nombre: Ingurgitación yugular
     codigos: { holonmed: "HM:3146" }
     rol: apoyo
@@ -57,6 +75,19 @@ signos:
     # pulsación > 3 cm sobre el ángulo esternal. El hallazgo de exploración
     # física con mejor rendimiento de la serie, y el más específico de los
     # doce.
+
+  - nombre: Líneas B pulmonares bilaterales
+    codigos: { holonmed: "HM:3148" }
+    rol: imagen
+    efecto: evidencia
+    lr: 4.0
+    lr_negativo: 0.09
+    fuente: >-
+      Drum B et al. JAMA 2026;335:1159-1168. PMID 41729549.
+      doi:10.1001/jama.2026.0446. LR+ IC95% [2.7, 6.1]. LR− IC95% [0.04,
+      0.23]. Su AUSENCIA es lo que la conclusión de la fuente convierte en
+      decisión: junto con un BNP normal, es lo más útil para excluir la
+      sobrecarga.
 
   - nombre: Colapsabilidad reducida de la vena cava inferior
     codigos: { holonmed: "HM:3149" }
@@ -105,10 +136,20 @@ signos:
       pero poco.
 
 laboratorio:
+  - parametro: Péptido natriurético cerebral en plasma
+    corte_superior: 100
+    termino_si_alto: Péptido natriurético cerebral elevado
+    codigos: { holonmed: "HM:3151" }
+
   - parametro: Altura del punto máximo de pulsación sobre el ángulo esternal
     corte_superior: 3
     termino_si_alto: Ingurgitación yugular
     codigos: { holonmed: "HM:3146" }
+
+  - parametro: Líneas B por espacio intercostal
+    corte_superior: 3
+    termino_si_alto: Líneas B pulmonares bilaterales
+    codigos: { holonmed: "HM:3148" }
 
   - parametro: Índice de colapsabilidad de la vena cava inferior
     corte_inferior: 50
@@ -148,9 +189,9 @@ ROL: <!-- especialidad y postura: «cardiólogo experto, basado en evidencia» -
 1. Analiza los signos vitales, la exploración y el texto libre.
 2. **Interpreta los valores numéricos** con los cortes declarados
    arriba. Extrae el hallazgo clínico, nunca la cifra suelta:
+   - «Péptido natriurético cerebral en plasma 130» → *Péptido natriurético cerebral elevado*
    - «Altura del punto máximo de pulsación sobre el ángulo esternal 4» → *Ingurgitación yugular*
-   - «Índice de colapsabilidad de la vena cava inferior 42.5» → *Colapsabilidad reducida de la vena cava inferior*
-   - «Presión venosa yugular medida por ecografía 10» → *Presión venosa yugular elevada por ecografía*
+   - «Líneas B por espacio intercostal 4» → *Líneas B pulmonares bilaterales*
 3. No infieras lo que no está escrito. Un dato que falta se pide, no
    se supone.
 

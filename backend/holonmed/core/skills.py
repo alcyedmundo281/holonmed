@@ -67,7 +67,14 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 # Mov Disord 2015;30:1591-601), que separan explícitamente los tres niveles:
 # criterios de exclusión absoluta, banderas rojas contrarrestables, y
 # criterios de apoyo.
-EFECTOS = ("apoya", "bandera_roja", "excluye")
+#
+# `evidencia` es el cuarto, y el único que NO decide: el signo entra en el
+# cálculo de probabilidad por su cociente (`lr`, `lr_negativo`) y en Φ, pero no
+# cuenta como apoyo, no levanta bandera y no veta. Existe para lo que el índice
+# sostiene con una discriminación MEDIDA —un LR de 0.2 reduce la probabilidad,
+# no la anula—: emitirlo como `excluye` lo volvería un veto absoluto, y como
+# `apoya` contaría a favor un hallazgo que va en contra.
+EFECTOS = ("apoya", "bandera_roja", "excluye", "evidencia")
 POLARIDADES = ("presente", "ausente")
 
 # Qué clase de protocolo es, y por tanto qué se le exige.
@@ -120,6 +127,12 @@ class Signo:
         """
         if self.efecto == "bandera_roja":
             return self.dispara_si
+        if self.efecto == "evidencia":
+            # No declara qué polaridad la dispara: la dice su cociente. Un LR+
+            # por debajo de 1 es un hallazgo que, estando presente, resta
+            # (el dolor pleurítico en un infarto); en cualquier otro caso lo
+            # que resta es su ausencia (el dímero D normal).
+            return "presente" if self.lr is not None and self.lr < 1.0 else "ausente"
         return "ausente" if self.dispara_si == "presente" else "presente"
 
     @property
