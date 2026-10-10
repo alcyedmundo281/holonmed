@@ -617,12 +617,34 @@ def _decidir_efecto(
         )
         return None
 
-    if efecto == "excluye" and sostiene == "mecanismo" and arista.get("advertencia"):
-        # Una exclusión por mecanismo no tiene cociente que la gradúe: es un
-        # veto absoluto en `veredicto.py`, y la excepción que la advertencia
-        # describe sólo existiría en un comentario, sin que el motor pueda
-        # honrarla. Se queda en la prosa, donde el clínico la lee. (Las que
-        # sostiene `discriminacion_medida` llevan su LR y no entran aquí.)
+    if efecto == "excluye" and sostiene != "mecanismo":
+        # `excluye` es el veto ABSOLUTO de `veredicto.py` (la apendicectomía que
+        # excluye la apendicitis): precede a todo y no admite grados. Lo que el
+        # índice sostiene con una discriminación MEDIDA es un cociente, y un
+        # cociente de 0.2 no es una exclusión: un infarto con dolor pleurítico
+        # existe. Emitirlo como `excluye` descartaría el diagnóstico entero.
+        # Como no hay un efecto que cuente el cociente sin contarlo a favor
+        # (`apoya` invertiría el signo), no entra en el bloque estructurado y
+        # se queda en la prosa, que es lo que esta función hace con todo lo
+        # que no puede honrar.
+        publicado = "; ".join(
+            f"{e} {_lr(arista.get(c)).get('valor')}"
+            for e, c in (("LR+", "lr_positivo"), ("LR−", "lr_negativo"))
+            if _lr(arista.get(c)).get("valor") is not None
+        )
+        informe.pendiente(
+            termino,
+            f"exclusión sostenida por «{sostiene or 'nada'}», no por mecanismo: es "
+            f"un cociente medido ({publicado or 'sin valor'}) y `excluye` sería un "
+            f"veto absoluto. No entra en el bloque estructurado; decide si merece "
+            f"un veto o se queda en la prosa",
+        )
+        return None
+
+    if efecto == "excluye" and arista.get("advertencia"):
+        # Una exclusión por mecanismo con una excepción declarada: el veto la
+        # aplicaría también al caso de la excepción, que sólo viviría en un
+        # comentario sin que el motor pueda honrarla.
         informe.pendiente(
             termino,
             "exclusión por mecanismo con una advertencia que nombra una "
