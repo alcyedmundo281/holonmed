@@ -49,10 +49,24 @@ def _convertir(identificador, indice):
 
 @pytest.mark.parametrize("identificador", _condiciones())
 def test_el_borrador_parsea_y_se_revisa_solo(identificador, indice):
-    skill, _ = _convertir(identificador, indice)
+    skill, condicion = _convertir(identificador, indice)
     assert skill.meta, "el frontmatter generado no es YAML válido"
     assert skill.descripcion
-    assert skill.problemas() == []
+    problemas = skill.problemas()
+    if not skill.signos and not skill.laboratorio:
+        # Única excepción: una condición cuya evidencia entera es una exclusión
+        # sostenida por un cociente medido. `excluye` sería un veto absoluto y el
+        # conversor se niega a emitirla (HM:6035, HM:6039), así que el borrador
+        # queda sin signos y lo dice. Es lo correcto: nadie puede promoverlo sin
+        # decidir primero qué hacer con esa evidencia.
+        aristas = condicion.get("signos") or []
+        assert aristas and all(
+            a.get("efecto") == "excluye" and a.get("sostiene") != "mecanismo"
+            for a in aristas
+        ), "un borrador sin signos que no se explica por exclusiones medidas"
+        assert problemas == ["no declara signos ni criterios de laboratorio"]
+    else:
+        assert problemas == []
 
 
 @pytest.mark.parametrize("identificador", _condiciones())

@@ -515,3 +515,23 @@ def test_un_lr_publicado_para_un_umbral_no_se_traslada():
     assert "\n    lr:" not in texto and "lr_negativo:" not in texto
     assert "LR+ 2.3 para hCG > 1500 mIU/mL" in texto
     assert any("umbral" in p for p in pendientes)
+
+
+def test_una_exclusion_sostenida_por_un_cociente_medido_no_es_un_veto():
+    """Un LR de 0.2 reduce la probabilidad; no la anula. Emitido como `excluye`
+    se leería como veto absoluto y descartaría el diagnóstico entero."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0101",
+                    "estado_lr": "medido",
+                    "efecto": "excluye",
+                    "sostiene": "discriminacion_medida",
+                    "lr_positivo": {"valor": 0.2},
+                }
+            ]
+        }
+    )
+    assert "Fiebre" not in texto and "excluye" not in texto
+    assert any("LR+ 0.2" in p and "veto absoluto" in p for p in pendientes)

@@ -13,11 +13,6 @@ condicion:
   codigos:
     holonmed: HM:6039
 
-# Ramas del grafo sobre las que actúa este protocolo: los padres de
-# los conceptos enlazados. Poda las que sean demasiado generales.
-ambito_grafo:
-  - HM:3153   # Trauma Screening Questionnaire positivo
-
 modelo_bayesiano:
   # El índice no publica prevalencia para esta condición. Sin probabilidad
   # base el motor no arranca: pon la de tu población.
@@ -31,23 +26,6 @@ modelo_bayesiano:
 # Cada LR conserva la procedencia con la que entró en el índice.
 # Un cociente sin fuente es un número inventado con formato científico.
 signos:
-  - nombre: Trauma Screening Questionnaire positivo
-    codigos: { holonmed: "HM:3153" }
-    rol: prueba_sensible
-    efecto: excluye
-    dispara_si: ausente
-    lr: 1.3
-    lr_negativo: 0.2
-    fuente: >-
-      Spoont MR et al. JAMA 2015;314:501-10. PMID 26241601.
-      doi:10.1001/jama.2015.7877. LR+ IC95% [1.2, 1.4]. LR− IC95% [0.1,
-      0.41]. Población: 152 pacientes, los de la fila del Trauma Screening
-      Questionnaire; la corrección publica además VPP 44 y VPN 89 para esa
-      misma fila. Solo decide cuando es NEGATIVO. Con sensibilidad del 95%
-      y LR− 0.20, un TSQ negativo hace el trastorno bastante improbable.
-      Un TSQ positivo no decide nada: LR+ 1.3 sobre una especificidad del
-      26% apenas mueve la probabilidad, así que cribar positivo obliga a
-      la entrevista diagnóstica y no la sustituye.
 
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.

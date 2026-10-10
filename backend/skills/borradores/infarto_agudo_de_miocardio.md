@@ -80,47 +80,6 @@ signos:
       doi:10.1001/jama.280.14.1256. IC95% [1.6, 6.2]. Marcador
       hemodinámico de compromiso miocárdico o shock cardiogénico.
 
-  - nombre: Dolor torácico pleurítico
-    codigos: { holonmed: "HM:3133" }
-    rol: prueba_sensible
-    efecto: excluye
-    lr: 0.2
-    fuente: >-
-      Panju AA et al. JAMA 1998;280:1256-63. PMID 9786377.
-      doi:10.1001/jama.280.14.1256. IC95% [0.1, 0.4]. Las características
-      pleuríticas reducen fuertemente la probabilidad de IAM (LR 0.2).
-
-  - nombre: Dolor torácico reproducible a la palpación
-    codigos: { holonmed: "HM:3134" }
-    rol: prueba_sensible
-    efecto: excluye
-    lr: 0.3
-    fuente: >-
-      Panju AA et al. JAMA 1998;280:1256-63. PMID 9786377.
-      doi:10.1001/jama.280.14.1256. IC95% [0.2, 0.4]. El dolor
-      reproducible a la presión de la pared torácica orienta a causa
-      osteomuscular.
-
-  - nombre: Dolor torácico punzante o cortante
-    codigos: { holonmed: "HM:3135" }
-    rol: prueba_sensible
-    efecto: excluye
-    lr: 0.3
-    fuente: >-
-      Panju AA et al. JAMA 1998;280:1256-63. PMID 9786377.
-      doi:10.1001/jama.280.14.1256. IC95% [0.1, 0.6]. El dolor punzante
-      desplaza fuertemente la probabilidad en contra de IAM.
-
-  - nombre: Dolor torácico posicional
-    codigos: { holonmed: "HM:3136" }
-    rol: prueba_sensible
-    efecto: excluye
-    lr: 0.3
-    fuente: >-
-      Panju AA et al. JAMA 1998;280:1256-63. PMID 9786377.
-      doi:10.1001/jama.280.14.1256. IC95% [0.1, 0.7]. La modificación
-      postural del dolor aleja la sospecha de isquemia coronaria aguda.
-
 laboratorio:
   - parametro: Presión arterial sistólica
     corte_inferior: 90

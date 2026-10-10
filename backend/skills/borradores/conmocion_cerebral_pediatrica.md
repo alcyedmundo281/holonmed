@@ -17,7 +17,6 @@ condicion:
 # los conceptos enlazados. Poda las que sean demasiado generales.
 ambito_grafo:
   - HM:0100   # Signo vital alterado
-  - HM:0200   # Dolor
   - HM:0400   # Síntoma respiratorio
   - HM:0600   # Signo de exploración
 
@@ -96,17 +95,6 @@ signos:
       Shah SN et al. JAMA 2026. PMID 41941197. doi:10.1001/jama.2026.1233.
       IC95% [2.0, 9.7]. Dismetría sacádica indicativa de alteración en la
       coordinación ocular rápida.
-
-  - nombre: Dolor abdominal
-    codigos: { holonmed: "HM:0201" }
-    rol: prueba_sensible
-    efecto: excluye
-    dispara_si: ausente
-    lr: 0.2
-    fuente: >-
-      Shah SN et al. JAMA 2026. PMID 41941197. doi:10.1001/jama.2026.1233.
-      IC95% [0.1, 0.4]. La ausencia completa de cefalea reduce
-      sustancialmente la probabilidad de conmoción cerebral (LR 0.20).
 
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.
