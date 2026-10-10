@@ -257,6 +257,9 @@ class Informe:
     def __init__(self) -> None:
         self.pendientes: list[tuple[str, str]] = []
         self.rutinarios: dict[str, list[str]] = {}
+        # Cuántos signos salieron con un LR+ o LR− utilizable. `bayes()` lo
+        # consulta: un modelo sin ningún cociente no puede calcular nada.
+        self.signos_con_lr = 0
 
     def pendiente(self, donde: str, texto: str) -> None:
         self.pendientes.append((donde, texto))
@@ -624,6 +627,74 @@ def _decidir_efecto(
     return efecto, dispara
 
 
+def _conceptos_en_conflicto(entradas: list[tuple[dict, str]]) -> set[str]:
+    """Conceptos con dos o más aristas que publican un valor para el MISMO
+    sentido (LR+ o LR−).
+
+    El índice admite varias aristas para un hallazgo, una por población o por
+    estudio. Emitirlas todas haría que el protocolo contara dos veces la misma
+    observación; elegir una sería decidir en silencio qué población es la
+    tuya. Ninguna de las dos es del conversor: el concepto se emite sin
+    cociente y las candidatas quedan comentadas para que un humano elija.
+    Un LR+ en una arista y el LR− en otra no chocan, y siguen como antes.
+    """
+    vistos: dict[tuple[str, str], int] = {}
+    for arista, _ in entradas:
+        for campo in ("lr_positivo", "lr_negativo"):
+            valor = _lr(arista.get(campo)).get("valor")
+            if (
+                isinstance(valor, (int, float))
+                and not isinstance(valor, bool)
+                and valor > 0
+            ):
+                clave = (str(arista.get("concepto") or ""), campo)
+                vistos[clave] = vistos.get(clave, 0) + 1
+    return {codigo for (codigo, _), n in vistos.items() if n > 1}
+
+
+def _emitir_conflicto(
+    salida: Bloque,
+    candidatas: list[dict],
+    termino: str,
+    indice: Indice,
+    informe: Informe,
+) -> None:
+    salida.comentario(
+        "varias aristas del índice publican cociente para este hallazgo "
+        "(poblaciones o estudios distintos). No se traslada ninguno: contarlos "
+        "todos duplicaría la evidencia y elegir uno es decidir qué población es "
+        "la tuya. Elige uno, escribe `lr`/`lr_negativo` y su `fuente`.",
+        sangria=4,
+    )
+    for n, arista in enumerate(candidatas, 1):
+        partes = []
+        for etiqueta, campo in (("LR+", "lr_positivo"), ("LR−", "lr_negativo")):
+            bloque = _lr(arista.get(campo))
+            if bloque.get("valor") is not None:
+                partes.append(f"{etiqueta} {bloque['valor']}")
+            elif bloque.get("rango"):
+                partes.append(f"{etiqueta} rango {bloque['rango']}")
+        poblacion = _plano(arista.get("poblacion") or "") or "población no declarada"
+        referencias = [
+            str(_lr(arista.get(c)).get("ref") or arista.get("ref") or "")
+            for c in ("lr_positivo", "lr_negativo")
+        ]
+        citas = [
+            cita(r, indice, informe, termino)
+            for r in dict.fromkeys(r for r in referencias if r)
+        ]
+        salida.comentario(
+            f"candidata {n}: {' · '.join(partes) or 'sin valor'}. "
+            f"Población: {poblacion}. {' '.join(citas)}".strip(),
+            sangria=4,
+        )
+    informe.pendiente(
+        termino,
+        f"{len(candidatas)} aristas con cociente para el mismo hallazgo: no entra "
+        f"ninguno. Elige el que corresponda a tu población",
+    )
+
+
 def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, list[str]]:
     """Traduce las aristas concepto→condición al bloque `signos`."""
     salida = Bloque()
@@ -644,8 +715,13 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
     entradas = [(a, "apoya") for a in (condicion.get("signos") or [])]
     entradas += [(a, "bandera_roja") for a in (condicion.get("signos_de_alarma") or [])]
 
+    en_conflicto = _conceptos_en_conflicto(entradas)
+    resueltos: set[str] = set()
+
     for arista, efecto_por_defecto in entradas:
         codigo = str(arista.get("concepto") or "")
+        if codigo in resueltos:
+            continue
         concepto = indice.concepto(codigo)
         if not concepto:
             informe.pendiente(
@@ -696,6 +772,17 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         if dispara != "presente":
             salida.campo("dispara_si", dispara, sangria=4)
 
+        if codigo in en_conflicto:
+            resueltos.add(codigo)
+            _emitir_conflicto(
+                salida,
+                [a for a, _ in entradas if str(a.get("concepto") or "") == codigo],
+                termino,
+                indice,
+                informe,
+            )
+            continue
+
         estado = str(arista.get("estado_lr") or "")
         positivo = _lr(arista.get("lr_positivo"))
         negativo = _lr(arista.get("lr_negativo"))
@@ -721,6 +808,8 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
             valor_negativo = (
                 _valor_utilizable(negativo, "LR−", termino, informe) if negativo else None
             )
+            if valor_positivo is not None or valor_negativo is not None:
+                informe.signos_con_lr += 1
             if valor_positivo is not None:
                 salida.campo("lr", valor_positivo, sangria=4)
             if valor_negativo is not None:
@@ -1070,6 +1159,21 @@ def bayes(condicion: dict, indice: Indice, informe: Informe) -> Bloque:
             "modelo_bayesiano",
             "el índice no publica prevalencia: queda en 0.0 y el modelo bayesiano "
             "no se activará hasta que pongas la de tu población",
+        )
+    elif not informe.signos_con_lr:
+        # Una prevalencia sin ningún cociente activaría un modelo que no puede
+        # mover la probabilidad: el protocolo declararía un cálculo vacío.
+        salida.comentario(
+            f"El índice publica prevalencia ({valor}) pero ningún signo de este "
+            "protocolo trae un LR utilizable, así que el modelo bayesiano no se "
+            "activa. Cuando haya cocientes, pon aquí la de tu población.",
+            sangria=2,
+        )
+        salida.campo("probabilidad_base", 0.0, sangria=2)
+        informe.pendiente(
+            "modelo_bayesiano",
+            f"el índice trae prevalencia {valor} pero ningún signo con LR: queda "
+            f"en 0.0 y el modelo no se activa",
         )
     else:
         salida.comentario(
