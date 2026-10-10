@@ -87,7 +87,7 @@ def test_ningun_cociente_sale_de_la_nada(identificador, indice):
             # `sin_efecto` es lo único que se traduce a un número que el
             # índice no escribe: 1.0, que deja el hallazgo sin efecto.
             valores.add(1.0)
-        publicados[termino] = valores
+        publicados.setdefault(termino, set()).update(valores)
 
     for signo in skill.signos:
         for cociente in (signo.lr, signo.lr_negativo):

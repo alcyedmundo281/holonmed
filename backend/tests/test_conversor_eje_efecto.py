@@ -415,3 +415,103 @@ def test_un_balance_sin_fuente_se_denuncia():
     )
     assert skill.balance.declarado
     assert any("sin `fuente`" in p for p in skill.problemas())
+
+
+# ── varias aristas para el mismo hallazgo ────────────────────────────────────
+
+
+def _arista(concepto: str, **lr) -> dict:
+    return {"concepto": concepto, "rol": "apoyo", "estado_lr": "medido", **lr}
+
+
+def test_dos_aristas_con_el_mismo_lr_no_se_trasladan_ni_se_cuentan_dos_veces():
+    """Una arista por población: emitirlas duplicaría la evidencia, y elegir una
+    sería decidir en silencio cuál es la población del usuario."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                _arista("HM:0101", lr_positivo={"valor": 3.0}, poblacion="niños"),
+                _arista("HM:0101", lr_positivo={"valor": 4.7}, poblacion="gestantes"),
+            ]
+        }
+    )
+    assert texto.count("nombre: Fiebre") == 1
+    assert "\n    lr:" not in texto
+    assert "candidata 1: LR+ 3.0" in texto and "candidata 2: LR+ 4.7" in texto
+    assert any("aristas con cociente para el mismo hallazgo" in p for p in pendientes)
+
+
+def test_el_lr_positivo_en_una_arista_y_el_negativo_en_otra_no_chocan():
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                _arista("HM:0101", lr_positivo={"valor": 26.3, "ref": "pmid:26474316"}),
+                _arista("HM:0101", lr_negativo={"valor": 0.4, "ref": "pmid:26474316"}),
+            ]
+        }
+    )
+    assert "lr: 26.3" in texto and "lr_negativo: 0.4" in texto
+    assert not any("mismo hallazgo" in p for p in pendientes)
+
+
+# ── prevalencia sin ningún cociente ──────────────────────────────────────────
+
+
+def test_una_prevalencia_sin_ningun_lr_no_activa_el_modelo_bayesiano():
+    informe = convertir_condicion.Informe()
+    bloque = convertir_condicion.bayes(
+        {"probabilidad_base": {"valor": 0.2}}, indice(), informe
+    )
+    assert "probabilidad_base: 0.0" in bloque.texto()
+    assert any("ningún signo con LR" in t for _, t in informe.pendientes)
+
+
+def test_con_algun_lr_la_prevalencia_del_indice_se_conserva():
+    informe = convertir_condicion.Informe()
+    informe.signos_con_lr = 1
+    bloque = convertir_condicion.bayes(
+        {"probabilidad_base": {"valor": 0.2}}, indice(), informe
+    )
+    assert "probabilidad_base: 0.2" in bloque.texto()
+
+
+# ── lo que el motor no puede honrar no entra en el bloque estructurado ──────
+
+
+def test_una_exclusion_con_advertencia_no_entra_como_veto():
+    """`excluye` es un veto absoluto; la excepción de la advertencia sólo
+    viviría en un comentario y el motor no puede aplicarla."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0900",
+                    "efecto": "excluye",
+                    "sostiene": "mecanismo",
+                    "motivo": "anatomía",
+                    "advertencia": "existe la excepción heterotópica",
+                }
+            ]
+        }
+    )
+    assert "excluye" not in texto
+    assert any("advertencia" in p for p in pendientes)
+
+
+def test_un_lr_publicado_para_un_umbral_no_se_traslada():
+    """El motor no evalúa el valor medido: el número se aplicaría a cualquier
+    mención de la prueba."""
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                _arista(
+                    "HM:0101",
+                    lr_positivo={"valor": 2.3, "umbral": "hCG > 1500 mIU/mL"},
+                    lr_negativo={"valor": 0.91, "umbral": "hCG > 1500 mIU/mL"},
+                )
+            ]
+        }
+    )
+    assert "\n    lr:" not in texto and "lr_negativo:" not in texto
+    assert "LR+ 2.3 para hCG > 1500 mIU/mL" in texto
+    assert any("umbral" in p for p in pendientes)
