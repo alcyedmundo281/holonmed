@@ -517,9 +517,9 @@ def test_un_lr_publicado_para_un_umbral_no_se_traslada():
     assert any("umbral" in p for p in pendientes)
 
 
-def test_una_exclusion_sostenida_por_un_cociente_medido_no_es_un_veto():
+def test_una_exclusion_sostenida_por_un_cociente_medido_es_evidencia_no_veto():
     """Un LR de 0.2 reduce la probabilidad; no la anula. Emitido como `excluye`
-    se leería como veto absoluto y descartaría el diagnóstico entero."""
+    se leería como veto absoluto; como `apoya`, contaría a favor lo que resta."""
     texto, pendientes = convertir_signos(
         {
             "signos": [
@@ -528,10 +528,32 @@ def test_una_exclusion_sostenida_por_un_cociente_medido_no_es_un_veto():
                     "estado_lr": "medido",
                     "efecto": "excluye",
                     "sostiene": "discriminacion_medida",
-                    "lr_positivo": {"valor": 0.2},
+                    "dispara_si": "ausente",
+                    "lr_negativo": {"valor": 0.1, "ref": "pmid:26474316"},
                 }
             ]
         }
     )
-    assert "Fiebre" not in texto and "excluye" not in texto
-    assert any("LR+ 0.2" in p and "veto absoluto" in p for p in pendientes)
+    assert "efecto: evidencia" in texto
+    assert "excluye" not in texto and "efecto: apoya" not in texto
+    assert "lr_negativo: 0.1" in texto
+    # `dispara_si` no significa nada para una evidencia: no se arrastra.
+    assert "dispara_si" not in texto
+    assert not pendientes
+
+
+def test_una_exclusion_medida_sin_ningun_cociente_utilizable_no_entra():
+    texto, pendientes = convertir_signos(
+        {
+            "signos": [
+                {
+                    "concepto": "HM:0101",
+                    "efecto": "excluye",
+                    "sostiene": "discriminacion_medida",
+                    "lr_negativo": {"rango": [0.1, 0.3]},
+                }
+            ]
+        }
+    )
+    assert "Fiebre" not in texto
+    assert any("sin ningún cociente utilizable" in p for p in pendientes)

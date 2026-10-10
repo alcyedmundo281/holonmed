@@ -13,11 +13,20 @@ condicion:
   codigos:
     holonmed: HM:6035
 
+# Ramas del grafo sobre las que actúa este protocolo: los padres de
+# los conceptos enlazados. Poda las que sean demasiado generales.
+ambito_grafo:
+  - HM:0710   # Alteración hematológica
+
 modelo_bayesiano:
-  # El índice publica prevalencia (0.19) pero ningún signo de este protocolo
-  # trae un LR utilizable, así que el modelo bayesiano no se activa. Cuando
-  # haya cocientes, pon aquí la de tu población.
-  probabilidad_base: 0.0
+  # Prevalencia en la población que atiendes, no en la literatura mundial.
+  # El valor del índice queda abajo como referencia.
+  probabilidad_base: 0.19
+  # medida en: pacientes ambulatorios consecutivos y no seleccionados con
+  # sospecha clínica de TVP, sin antecedente de TVP previa salvo que el
+  # modelo lo incorporase
+  # Wells PS et al. JAMA 2006;295:199--207. PMID 16403932.
+  # doi:10.1001/jama.295.2.199.
 
   # OJO: el emparejamiento es por SUBCADENA LITERAL. Hay que declarar las
   # variantes que un clínico escribe de verdad — «bebedor de riesgo» no
@@ -27,6 +36,19 @@ modelo_bayesiano:
 # Cada LR conserva la procedencia con la que entró en el índice.
 # Un cociente sin fuente es un número inventado con formato científico.
 signos:
+  - nombre: Dímero D elevado
+    codigos: { holonmed: "HM:3144" }
+    rol: prueba_sensible
+    efecto: evidencia
+    lr_negativo: 0.1
+    fuente: >-
+      Wells PS et al. JAMA 2006;295:199--207. PMID 16403932.
+      doi:10.1001/jama.295.2.199. IC95% [0.03, 0.37]. Población: sospecha
+      clínica baja, ensayo de alta sensibilidad. Es la lectura que la
+      conclusión de la fuente convierte en decisión. Un dímero D normal
+      descarta la TVP con fuerza, pero cuánta depende de dos cosas que hay
+      que saber antes de aplicarlo: qué ensayo se usó y en qué estrato de
+      probabilidad previa está el paciente.
 
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.

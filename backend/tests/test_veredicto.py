@@ -242,6 +242,78 @@ def test_un_protocolo_sin_los_bloques_nuevos_devuelve_None(evaluador):
     assert evaluador.evaluar(viejo, [infon("Fiebre")]) is None
 
 
+# --- La evidencia: pesa, pero no decide -------------------------------------
+
+EVIDENCIA = """---
+titulo: Protocolo de infarto
+condicion:
+  nombre: Infarto agudo de miocardio
+  codigos: { holonmed: "HM:9101" }
+modelo_bayesiano:
+  probabilidad_base: 0.2
+signos:
+  - nombre: Dolor pleurítico
+    codigos: { holonmed: "HM:9102" }
+    efecto: evidencia
+    lr: 0.2
+    fuente: "pmid:0"
+
+  - nombre: Dímero D elevado
+    codigos: { holonmed: "HM:9103" }
+    efecto: evidencia
+    lr_negativo: 0.1
+    fuente: "pmid:0"
+---
+
+Cuerpo.
+"""
+
+
+def test_la_evidencia_no_veta_ni_cuenta_como_apoyo_ni_declara_criterio(evaluador):
+    """Un LR de 0.2 reduce la probabilidad: ni descarta, ni suma a favor, ni
+    basta para que el protocolo tenga un criterio que aplicar."""
+    evidencia = Skill("infarto", EVIDENCIA)
+    assert {s.efecto for s in evidencia.signos} == {"evidencia"}
+    assert evaluador.evaluar(evidencia, [infon("Dolor pleurítico")]) is None
+
+
+def test_la_evidencia_junto_a_un_criterio_no_veta_y_no_se_cuenta(evaluador):
+    mixto = Skill(
+        "mixto",
+        APENDICITIS.replace(
+            "balance:",
+            """  - nombre: Dolor punzante
+    codigos: { holonmed: "HM:9099" }
+    efecto: evidencia
+    lr: 0.3
+    fuente: "..."
+
+balance:""",
+        ),
+    )
+    res = evaluador.evaluar(mixto, [infon("Dolor punzante"), infon("Fiebre")])
+    assert res.veto is None
+    assert res.apoyos == ["Fiebre"]
+
+
+def test_la_polaridad_adversa_de_una_evidencia_la_dice_su_cociente():
+    skill = Skill("infarto", EVIDENCIA)
+    pleuritico, dimero = skill.signos
+    # LR+ < 1: estando presente resta.
+    assert pleuritico.polaridad_adversa == "presente"
+    # Sólo LR−: lo que resta es su ausencia.
+    assert dimero.polaridad_adversa == "ausente"
+
+
+def test_la_evidencia_si_entra_en_el_calculo_de_probabilidad():
+    """Que no decida no es que no pese: su LR llega a Bayes."""
+    modelo = Skill("infarto", EVIDENCIA).para_bayes()
+    lrs = {
+        s["name"]: (s["bayes_lr"], s["bayes_lr_negativo"]) for s in modelo["signDetected"]
+    }
+    assert lrs == {"Dolor pleurítico": (0.2, None), "Dímero D elevado": (None, 0.1)}
+
+
 # --- Φ categórico -----------------------------------------------------
 
 
