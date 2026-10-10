@@ -44,9 +44,9 @@ publicado desde la última corrida:
     python scripts/convertir_condicion.py --sync-all
     python scripts/convertir_condicion.py --sync-all --vocabulario vocabulario_nuevo.json
 
-Decide qué es «nuevo» por el nombre de archivo de destino en
-`backend/skills/`, igual que `--forzar` en el modo de una sola condición:
-si el archivo ya existe, no lo toca —un protocolo en uso lleva prosa
+Decide qué es «nuevo» por el código de condición que ya declaran los
+protocolos de `backend/skills/` y `backend/skills/borradores/`: si ya hay uno,
+no lo toca —un protocolo en uso lleva prosa
 escrita a mano que este script no reconstruye—. El vocabulario que falte
 de TODAS las condiciones nuevas se consolida en un solo archivo, sin
 repetir un concepto que ya pidió una condición anterior en la misma
@@ -81,6 +81,10 @@ import yaml
 
 RAIZ_REPO = Path(__file__).resolve().parents[2]
 DIRECTORIO_SKILLS = RAIZ_REPO / "backend" / "skills"
+# Los borradores de `--sync-all` viven aquí, un nivel por debajo: el cargador
+# de skills sólo lee `skills/*.md`, así que nada de lo que hay aquí llega al
+# triaje hasta que un humano le escribe la prosa y lo sube un nivel.
+DIRECTORIO_BORRADORES = DIRECTORIO_SKILLS / "borradores"
 RUTA_SEMILLA = RAIZ_REPO / "backend" / "data" / "vocabulario_semilla.json"
 INDICE_POR_DEFECTO = RAIZ_REPO.parent / "medsemiotics-db"
 
@@ -1680,6 +1684,31 @@ def nombre_por_defecto(identificador: str, indice: Indice) -> str:
     return re.sub(r"^HM\d+-", "", stem).replace("-", "_")
 
 
+def condiciones_con_protocolo() -> set[str]:
+    """Códigos «sistema:valor» de las condiciones que ya tienen protocolo,
+    vivo o en borrador.
+
+    Se lee del frontmatter y no del nombre del archivo: un protocolo escrito a
+    mano (`acute_pancreatitis.md`) no se llama como lo llamaría el conversor, y
+    ni siquiera declara el código `holonmed`, sólo SNOMED. Compararlo por
+    nombre, o sólo por el código del índice, lo duplicaría.
+    """
+    cubiertas: set[str] = set()
+    for directorio in (DIRECTORIO_SKILLS, DIRECTORIO_BORRADORES):
+        for ruta in directorio.glob("*.md"):
+            partes = ruta.read_text(encoding="utf-8").split("---", 2)
+            if len(partes) < 3:
+                continue
+            try:
+                meta = yaml.safe_load(partes[1]) or {}
+            except yaml.YAMLError:
+                continue
+            codigos = (meta.get("condicion") or {}).get("codigos") or {}
+            if isinstance(codigos, dict):
+                cubiertas |= {f"{k}:{v}" for k, v in codigos.items() if v}
+    return cubiertas
+
+
 def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
     """Convierte de una sola pasada toda condición del índice que todavía no
     tenga protocolo en `backend/skills/`.
@@ -1695,10 +1724,17 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
     nuevas: list[str] = []
     cubiertas: list[str] = []
+    con_protocolo = condiciones_con_protocolo()
     for identificador in sorted(indice.condiciones):
         nombre = nombre_por_defecto(identificador, indice)
-        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
-        (nuevas if (forzar or not destino.exists()) else cubiertas).append(identificador)
+        destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
+        codigos = {f"holonmed:{identificador}"} | {
+            f"{k}:{v}"
+            for k, v in (indice.condiciones[identificador].get("codigos") or {}).items()
+            if v
+        }
+        existe = bool(codigos & con_protocolo) or destino.exists()
+        (nuevas if (forzar or not existe) else cubiertas).append(identificador)
 
     print(
         f"\nÍndice: {indice.ruta}  ({indice.commit}"
@@ -1738,7 +1774,7 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         conocidos = conocidos | {e["codigo"] for e in faltan}
 
         nombre = nombre_por_defecto(identificador, indice)
-        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
+        destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
 
@@ -1767,11 +1803,12 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         )
 
     print(
-        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_SKILLS}. Ninguno se "
+        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
         f"auto-completa: cada uno necesita prosa (rol, contexto fisiopatológico, "
         f"banderas rojas), fijar `probabilidad_base` y `factores_riesgo` si aplica, "
         f"pasar `holonmed skills --validar` y subirse como pull request — uno por "
-        f"uno o juntos, pero siempre revisados por un humano antes de fusionar.",
+        f"uno o juntos, pero siempre revisados por un humano antes de fusionar. Quedan "
+        f"en `borradores/`, que el cargador no lee: súbelos un nivel para activarlos.",
         file=sys.stderr,
     )
     return 0
