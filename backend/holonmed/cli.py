@@ -64,7 +64,10 @@ async def _check() -> int:
 
     print("\nHolonMed — comprobación del entorno\n" + "=" * 46)
 
-    print(marca(llm_ok) + f"Ollama en {settings.ollama_host}")
+    print(
+        marca(llm_ok)
+        + f"Servidor de modelos ({settings.llm_backend}) en {settings.llm_host}"
+    )
     if llm_ok:
         print(f"        modelos instalados: {', '.join(modelos) or 'ninguno'}")
         for etiqueta, modelo in (
@@ -365,6 +368,42 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     return 0
 
 
+async def _consultar(prompt: str, modelo: str | None) -> int:
+    """Consulta suelta al modelo local, para que el IDE converse con él.
+
+    Pasa por la misma puerta que el pipeline (`llm/client.py`), así que
+    hereda la temperatura y los timeouts de la configuración. No toca la base
+    ni escribe nada: devuelve texto y ya. Fallo cerrado: si el servidor no
+    está o el modelo pedido no está cargado, se detiene y dice por qué.
+    """
+    from .llm import LLMUnavailable, OllamaClient
+
+    settings = get_settings()
+    elegido = modelo or settings.model_clinical
+    async with OllamaClient(settings) as llm:
+        disponibles = await llm.modelos_disponibles()
+        if not disponibles:
+            print(
+                f"Sin respuesta de {settings.llm_host} ({settings.llm_backend}).",
+                file=sys.stderr,
+            )
+            return 1
+        if elegido not in disponibles:
+            print(
+                f"El modelo '{elegido}' no está cargado. Disponibles: "
+                + ", ".join(disponibles),
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            respuesta = await llm.generar(prompt, model=elegido)
+        except LLMUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    print(f"[{elegido}]\n{respuesta.strip()}")
+    return 0
+
+
 def main(argv=None) -> int:
     _consola_utf8()
     parser = argparse.ArgumentParser(prog="holonmed", description=__doc__)
@@ -381,6 +420,14 @@ def main(argv=None) -> int:
     p_tic.add_argument("texto")
     p_tic.add_argument("--paciente", default="demo")
     p_tic.add_argument("--skill", default=None)
+
+    p_consultar = sub.add_parser(
+        "consultar", help="Consulta suelta al modelo local (sin pipeline ni base)"
+    )
+    p_consultar.add_argument(
+        "prompt", nargs="?", help="Si se omite, se lee de la entrada estándar"
+    )
+    p_consultar.add_argument("--modelo", default=None)
 
     p_cuenta = sub.add_parser("cuenta", help="Cuenta y conciliación de un paciente")
     p_cuenta.add_argument("paciente")
@@ -414,6 +461,12 @@ def main(argv=None) -> int:
         return asyncio.run(_check())
     if args.comando == "tic":
         return asyncio.run(_tic(args.texto, args.paciente, args.skill))
+    if args.comando == "consultar":
+        prompt = args.prompt if args.prompt is not None else sys.stdin.read()
+        if not prompt.strip():
+            print("Falta el prompt (argumento o entrada estándar).", file=sys.stderr)
+            return 1
+        return asyncio.run(_consultar(prompt, args.modelo))
     if args.comando == "cuenta":
         return _cuenta(args)
     if args.comando == "skills":
