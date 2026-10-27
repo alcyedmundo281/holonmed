@@ -36,8 +36,35 @@ PROBABILIDAD_MAXIMA = 0.99
 # como un antecedente negado. `(?<!\w)` exige que la marca empiece en una
 # frontera de palabra; se busca sobre el texto entero y no sobre la ventana
 # recortada, para que una ventana que empiece a media palabra tampoco engañe.
-_NEGACION = re.compile(r"(?<!\w)(?:sin|no|niega|ausencia\s+de|descarta)\s")
+_NEGACION = re.compile(r"(?<!\w)(?:sin|no|niega|ausencia\s+de|descarta)\s", re.IGNORECASE)
 _VENTANA_NEGACION = 24
+
+# Lo que CORTA el alcance de una negación antes de llegar al factor: el fin de
+# la frase (. ; : ! ? o salto de línea) y las palabras que vuelven a afirmar o
+# contrastan (con, pero, aunque, salvo, excepto, sino). Sin esto, «Sin fiebre.
+# Alcoholismo crónico» y «Sin fiebre, con alcoholismo» suprimían un factor
+# AFIRMADO porque había un «sin» a menos de 24 caracteres, y la previa bajaba.
+# La coma NO corta: «niega tabaquismo, alcoholismo» es una lista negada, y
+# tratar la coma como corte aplicaría un factor que el texto niega, que es
+# el error que sube la probabilidad. «ni» tampoco corta: continúa la negación.
+_CORTE_NEGACION = re.compile(
+    r"[.;:!?\n]|(?<!\w)(?:con|pero|aunque|salvo|excepto|sino)(?!\w)", re.IGNORECASE
+)
+
+
+def _esta_negado(antecedentes: str, inicio: int) -> bool:
+    """¿Llega una negación hasta el factor que empieza en `inicio`?
+
+    Cuenta la negación MÁS CERCANA dentro de la ventana, y sólo si entre ella y
+    el factor no hay un corte de frase ni una palabra que afirme de nuevo. Se
+    busca sobre el texto entero y no sobre la ventana recortada, para que una
+    ventana que empiece a media palabra tampoco invente una marca.
+    """
+    desde = max(0, inicio - _VENTANA_NEGACION)
+    marcas = list(_NEGACION.finditer(antecedentes, desde, inicio))
+    if not marcas:
+        return False
+    return _CORTE_NEGACION.search(antecedentes, marcas[-1].end(), inicio) is None
 
 
 class _FactorAplicado(NamedTuple):
@@ -112,7 +139,7 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
             )
             continue
 
-        if _NEGACION.search(antecedentes, max(0, inicio - _VENTANA_NEGACION), inicio):
+        if _esta_negado(antecedentes, inicio):
             ocupados.append((inicio, fin))
             salida.append(
                 _FactorAplicado(

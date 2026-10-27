@@ -365,6 +365,52 @@ def test_la_negacion_de_verdad_sigue_negando_con_otras_palabras_delante():
     assert _producto("refiere: sin consumo de alcoholismo") == 1
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Los dos de la revisión: una negación de OTRA cosa, a menos de 24
+        # caracteres, no puede negar un factor que el texto afirma.
+        "sin fiebre. alcoholismo crónico",
+        "sin fiebre, con alcoholismo crónico",
+        "Sin fiebre. Alcoholismo crónico".lower(),
+        "niega dolor; alcoholismo crónico",
+        "sin fiebre\nalcoholismo crónico",
+        "no refiere fiebre pero con alcoholismo",
+        "sin antecedentes, excepto alcoholismo",
+    ],
+)
+def test_la_negacion_no_cruza_la_frase_ni_una_afirmacion(texto):
+    """Una marca de negación sólo llega hasta el fin de su frase o hasta una
+    palabra que vuelve a afirmar. Antes llegaba a cualquier cosa a menos de 24
+    caracteres, y suprimía —avisando falsamente de que «el texto lo niega»— un
+    factor presente, con lo que la previa BAJABA."""
+    assert _producto(texto) == 2.8
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # La negación sigue valiendo dentro de su frase, aunque haya comas,
+        # una lista o un «ni»: equivocarse hacia aquí SUBE la previa.
+        "niega tabaquismo, alcoholismo",
+        "sin fiebre ni alcoholismo",
+        "no tiene alcoholismo",
+        "niega tener alcoholismo",
+        "sin antecedente de alcoholismo",
+        "sin dolor. no bebe alcohol",
+    ],
+)
+def test_la_negacion_sigue_valiendo_dentro_de_su_frase(texto):
+    assert _producto(texto) == 1
+
+
+def test_gana_la_negacion_mas_cercana():
+    """«sin fiebre. no bebe alcohol»: la que manda sobre el factor es la
+    segunda, aunque la primera quede dentro de la ventana."""
+    assert _producto("sin fiebre. no bebe alcohol") == 1
+    assert _producto("no bebe. sin fiebre. alcoholismo") == 2.8
+
+
 def test_dos_factores_DISTINTOS_si_multiplican():
     """El arreglo no puede tragarse los factores que sí son dos."""
     assert _producto("litiasis biliar y alcoholismo") == pytest.approx(4.0 * 2.8)
