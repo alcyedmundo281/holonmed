@@ -70,7 +70,7 @@ class OllamaClient:
         self._client: httpx.AsyncClient | None = None
 
     async def __aenter__(self) -> "OllamaClient":
-        self._client = httpx.AsyncClient(base_url=self.settings.ollama_host)
+        self._ensure_client()
         return self
 
     async def __aexit__(self, *exc_info) -> None:
@@ -83,21 +83,31 @@ class OllamaClient:
 
     def _ensure_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.settings.ollama_host)
+            self._client = httpx.AsyncClient(base_url=self.settings.llm_host)
         return self._client
 
+    @property
+    def _openai(self) -> bool:
+        return self.settings.llm_backend == "openai"
+
+    @property
+    def _ruta_modelos(self) -> str:
+        return "/v1/models" if self._openai else "/api/tags"
+
     async def disponible(self) -> bool:
-        """¿Está Ollama arriba? Se usa en el healthcheck, no en el pipeline."""
+        """¿Está el servidor de modelos arriba? Healthcheck, no el pipeline."""
         try:
-            res = await self._ensure_client().get("/api/tags", timeout=5.0)
+            res = await self._ensure_client().get(self._ruta_modelos, timeout=5.0)
             return res.status_code == 200
         except httpx.HTTPError:
             return False
 
     async def modelos_disponibles(self) -> list[str]:
         try:
-            res = await self._ensure_client().get("/api/tags", timeout=5.0)
+            res = await self._ensure_client().get(self._ruta_modelos, timeout=5.0)
             res.raise_for_status()
+            if self._openai:
+                return [m["id"] for m in res.json().get("data", [])]
             return [m["name"] for m in res.json().get("models", [])]
         except (httpx.HTTPError, KeyError, ValueError):
             return []
@@ -113,6 +123,13 @@ class OllamaClient:
         temperature: float | None = None,
     ) -> str:
         """Completado de texto plano. Devuelve la respuesta cruda."""
+        if self._openai:
+            return await self._generar_openai(
+                prompt,
+                model=model,
+                timeout=timeout,
+                temperature=temperature,
+            )
         payload: dict[str, Any] = {
             "model": model or self.settings.model_clinical,
             "prompt": prompt,
@@ -139,6 +156,43 @@ class OllamaClient:
             raise LLMUnavailable(
                 f"Ollama no respondió en {self.settings.ollama_host}: {exc}"
             ) from exc
+
+    async def _generar_openai(
+        self,
+        prompt: str,
+        *,
+        model: str | None,
+        timeout: float | None,
+        temperature: float | None,
+    ) -> str:
+        """Backend compatible con OpenAI (llama.cpp, LM Studio).
+
+        No se fuerza `response_format`: LM Studio rechaza `json_object` y no
+        todos los servidores lo honran. El JSON lo rescata `extraer_json`, que
+        devuelve `{}` y no una suposición cuando el modelo no lo entrega. El
+        contexto (`num_ctx`) lo fija el servidor al arrancar, no cada petición.
+        """
+        payload: dict[str, Any] = {
+            "model": model or self.settings.model_clinical,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "temperature": (
+                temperature if temperature is not None else self.settings.temperature
+            ),
+        }
+        try:
+            res = await self._ensure_client().post(
+                "/v1/chat/completions",
+                json=payload,
+                timeout=timeout or self.settings.llm_timeout_slow,
+            )
+            res.raise_for_status()
+            contenido = res.json()["choices"][0]["message"]["content"]
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+            raise LLMUnavailable(
+                f"El servidor de modelos no respondió en {self.settings.openai_host}: {exc}"
+            ) from exc
+        return contenido if isinstance(contenido, str) else ""
 
     async def generar_json(
         self,
@@ -189,9 +243,19 @@ class OllamaClient:
             logger.warning("Clasificación degradada a '%s': %s", defecto, exc)
             return defecto
 
-        for opcion in opciones_validas:
-            if opcion.lower() in raw:
-                return opcion
+        nombradas = [o for o in opciones_validas if o.lower() in raw]
+        # Una opción contenida en otra nombrada no cuenta aparte: «ab» nombra
+        # a «ab», no a «a».
+        nombradas = [
+            o
+            for o in nombradas
+            if not any(o != p and o.lower() in p.lower() for p in nombradas)
+        ]
+        if len(nombradas) == 1:
+            return nombradas[0]
 
-        logger.info("Respuesta '%s' fuera del conjunto; usando '%s'", raw[:60], defecto)
+        # Un modelo pequeño que duda suele recitar la lista de opciones. Tomar
+        # la primera sería elegir una al azar; mejor no decidir.
+        motivo = "nombra varias opciones" if nombradas else "fuera del conjunto"
+        logger.info("Respuesta '%s' %s; usando '%s'", raw[:60], motivo, defecto)
         return defecto

@@ -272,6 +272,11 @@ class InferenciaBayesiana(BaseModel):
 
     @property
     def veredicto(self) -> str:
+        # Una probabilidad que sólo viene del a priori no es una conclusión:
+        # sin ningún hallazgo con LR que la haya movido, por alta que sea,
+        # no se declara PROBABLE ni confirmada.
+        if not self.evidencia_utilizada:
+            return "BAJA_SOSPECHA"
         if self.probabilidad_porcentaje > 90:
             return "HIPOTESIS_CONFIRMADA"
         if self.probabilidad_porcentaje > 50:

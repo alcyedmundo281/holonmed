@@ -92,7 +92,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         faltantes = sorted(m for m in requeridos if m.split(":")[0] not in instalados)
 
         estado["llm"] = {
-            "host": settings.ollama_host,
+            "host": settings.llm_host,
             "disponible": await ctx.llm.disponible(),
             "modelos": modelos,
             "faltantes": faltantes,

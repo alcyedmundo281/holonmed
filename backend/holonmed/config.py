@@ -8,6 +8,7 @@ ajustas son de seguridad clínica.
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,7 +25,14 @@ class Settings(BaseSettings):
     )
 
     # --- LLM ---------------------------------------------------------
+    # Qué protocolo habla el servidor local de modelos:
+    #   ollama — API nativa de Ollama (/api/generate).
+    #   openai — API compatible con OpenAI (/v1/chat/completions), que
+    #            sirven llama.cpp (`llama-server`) y LM Studio.
+    # El procesamiento sigue siendo local: ambos hosts son 127.0.0.1.
+    llm_backend: Literal["ollama", "openai"] = "ollama"
     ollama_host: str = "http://127.0.0.1:11434"
+    openai_host: str = "http://127.0.0.1:8080"
     model_clinical: str = "gemma2:9b"
     model_router: str = "llama3"
     temperature: float = 0.0
@@ -103,6 +111,10 @@ class Settings(BaseSettings):
     # siempre, antes de que haya ninguna hipótesis.
     base_dir: Path = RAIZ / "base"
     docs_dir: Path = RAIZ / "generated_docs"
+
+    @property
+    def llm_host(self) -> str:
+        return self.openai_host if self.llm_backend == "openai" else self.ollama_host
 
     @field_validator("cors_origins", mode="before")
     @classmethod

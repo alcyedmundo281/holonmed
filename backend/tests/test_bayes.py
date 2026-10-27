@@ -108,6 +108,46 @@ def test_veredicto_por_umbrales():
     assert alta.veredicto in {"PROBABLE", "HIPOTESIS_CONFIRMADA"}
 
 
+def test_un_a_priori_alto_sin_evidencia_no_es_una_conclusion():
+    """Sin ningún hallazgo con LR el veredicto no pasa de BAJA_SOSPECHA,
+    por alta que sea la probabilidad que sale sólo del a priori."""
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {
+            "probabilidad_base": 0.09,
+            "factores_riesgo_a_priori": {"cirugía": 21.7},
+        },
+        "signDetected": [{"name": "Hallazgo con LR", "bayes_lr": 5.0}],
+    }
+    resultado = AntigenPresentingCell().calcular(
+        {"antecedentes": "cirugía de cadera"}, skill, []
+    )
+    assert resultado.probabilidad_porcentaje > 50
+    assert resultado.evidencia_utilizada == []
+    assert resultado.veredicto == "BAJA_SOSPECHA"
+
+
+def test_un_hallazgo_sin_lr_tampoco_levanta_el_veredicto():
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {"probabilidad_base": 0.8},
+        "signDetected": [{"name": "Con LR", "bayes_lr": 5.0}],
+    }
+    resultado = AntigenPresentingCell().calcular({}, skill, [infon("Sin LR")])
+    assert resultado.veredicto == "BAJA_SOSPECHA"
+
+
+def test_con_evidencia_con_lr_el_veredicto_vuelve_a_depender_de_la_probabilidad():
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {"probabilidad_base": 0.4},
+        "signDetected": [{"name": "Con LR", "bayes_lr": 5.0}],
+    }
+    # odds 0.667 × 5 = 3.33 -> 76.9 %
+    resultado = AntigenPresentingCell().calcular({}, skill, [infon("Con LR")])
+    assert resultado.veredicto == "PROBABLE"
+
+
 def test_los_factores_de_riesgo_de_la_nota_actual_cuentan():
     """En una primera consulta la ficha está vacía y el riesgo sólo está
     en el texto que el clínico acaba de escribir. Ignorarlo hacía que la
