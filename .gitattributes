@@ -1,0 +1,48 @@
+# =====================================================================
+# HolonMed — finales de línea
+# Se desarrolla en Windows y CI corre en Linux. Sin esta declaración, un
+# archivo entra en CRLF según qué editor lo tocó, y su siguiente diff es
+# el archivo entero: el cambio real queda enterrado en 400 líneas que no
+# cambiaron. Ya pasó con tres archivos de este repositorio.
+# =====================================================================
+
+# Todo lo que git reconozca como texto se almacena en LF. Es lo que se
+# guarda, no lo que se ve: en el árbol de trabajo cada sistema recibe lo
+# que use.
+* text=auto eol=lf
+
+# Explícitos, para no depender de la heurística de git en archivos que
+# sabemos que son texto.
+*.py        text eol=lf
+*.pyi       text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.sql       text eol=lf
+*.css       text eol=lf
+*.html      text eol=lf
+*.txt       text eol=lf
+*.cff       text eol=lf
+*.Modelfile text eol=lf
+
+# Binarios: git no los toca ni intenta diferenciarlos. Casi todos están
+# además en .gitignore; la regla existe para el día que uno se versione a
+# propósito —los PDF bajo docs/ ya tienen esa excepción allí—.
+*.pdf         binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.webp        binary
+*.ico         binary
+*.db          binary
+*.sqlite      binary
+*.sqlite3     binary
+*.gguf        binary
+*.safetensors binary
+*.pkl         binary

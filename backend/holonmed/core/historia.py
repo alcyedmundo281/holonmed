@@ -137,11 +137,13 @@ class Historia:
         decir lo contrario sería afirmar más de lo que se ha mirado.
         """
         ejecutados = {
-            (a.codigo or a.termino).lower() for a in self.acciones
+            (a.codigo or a.termino).lower()
+            for a in self.acciones
             if a.clase == "ejecucion"
         }
         return [
-            a for a in self.acciones
+            a
+            for a in self.acciones
             if a.clase == "orden" and (a.codigo or a.termino).lower() not in ejecutados
         ]
 
@@ -150,7 +152,9 @@ class Historia:
         for a in self.acciones:
             cuenta[a.clase] = cuenta.get(a.clase, 0) + 1
         piezas = [f"{cuenta[c]} {c}" for c in CLASES if c in cuenta]
-        texto = f"{self.total} acciones ({', '.join(piezas)})" if piezas else "sin acciones"
+        texto = (
+            f"{self.total} acciones ({', '.join(piezas)})" if piezas else "sin acciones"
+        )
         if self.ambito:
             texto += f" bajo {', '.join(self.ambito)}"
             texto += f"; {self.fuera_de_territorio} fuera del territorio"
@@ -260,8 +264,11 @@ class HistoriaRepo:
     ) -> Iterable[Accion]:
         cx = self._db.conexion()
         for consulta in (
-            self._tics, self._ordenes, self._ejecuciones,
-            self._documentos, self._hallazgos,
+            self._tics,
+            self._ordenes,
+            self._ejecuciones,
+            self._documentos,
+            self._hallazgos,
         ):
             yield from consulta(cx, paciente_id, desde, hasta, limite)
 
@@ -285,7 +292,8 @@ class HistoriaRepo:
         )
         return [
             Accion(
-                momento=str(f["timestamp"]), clase="consulta",
+                momento=str(f["timestamp"]),
+                clase="consulta",
                 termino=str(f["skill"] or "consulta"),
                 actor=str(f["actor"] or f["origen"] or ""),
                 detalle=str(f["resumen"] or "")[:120],
@@ -299,18 +307,22 @@ class HistoriaRepo:
         filas = cx.execute(
             "SELECT id, timestamp, termino, codigo, sistema, concepto_id, "
             "       prescriptor, detalle, estado, tic_id, texto_origen "
-            "FROM orden WHERE paciente_id = ?" + filtro
+            "FROM orden WHERE paciente_id = ?"
+            + filtro
             + " ORDER BY timestamp DESC LIMIT ?",
             [paciente_id, *binds, limite],
         )
         return [
             Accion(
-                momento=str(f["timestamp"]), clase="orden",
+                momento=str(f["timestamp"]),
+                clase="orden",
                 termino=str(f["termino"]),
                 actor=str(f["prescriptor"] or ""),
                 detalle=_detalle(f["detalle"]),
-                concepto_id=f["concepto_id"], codigo=f["codigo"],
-                sistema=f["sistema"], tic_id=_texto(f["tic_id"]),
+                concepto_id=f["concepto_id"],
+                codigo=f["codigo"],
+                sistema=f["sistema"],
+                tic_id=_texto(f["tic_id"]),
                 estado=str(f["estado"] or ""),
                 texto_origen=str(f["texto_origen"] or ""),
             )
@@ -322,7 +334,8 @@ class HistoriaRepo:
         filas = cx.execute(
             "SELECT id, timestamp, termino, codigo, sistema, actor, origen, "
             "       detalle, tic_id, texto_origen, campos_faltantes "
-            "FROM ejecucion WHERE paciente_id = ?" + filtro
+            "FROM ejecucion WHERE paciente_id = ?"
+            + filtro
             + " ORDER BY timestamp DESC LIMIT ?",
             [paciente_id, *binds, limite],
         )
@@ -331,15 +344,18 @@ class HistoriaRepo:
             faltan = _lista(f["campos_faltantes"])
             salida.append(
                 Accion(
-                    momento=str(f["timestamp"]), clase="ejecucion",
+                    momento=str(f["timestamp"]),
+                    clase="ejecucion",
                     termino=str(f["termino"]),
                     actor=str(f["actor"] or f["origen"] or ""),
                     detalle=_detalle(f["detalle"]),
                     concepto_id=self._concepto_por_codigo(f["codigo"], f["sistema"]),
-                    codigo=f["codigo"], sistema=f["sistema"],
+                    codigo=f["codigo"],
+                    sistema=f["sistema"],
                     tic_id=_texto(f["tic_id"]),
                     estado=f"registro incompleto: falta {', '.join(faltan)}"
-                    if faltan else "",
+                    if faltan
+                    else "",
                     texto_origen=str(f["texto_origen"] or ""),
                 )
             )
@@ -360,8 +376,10 @@ class HistoriaRepo:
         )
         return [
             Accion(
-                momento=str(f["momento"]), clase="documento",
-                termino=str(f["tipo"]), tic_id=_texto(f["tic_id"]),
+                momento=str(f["momento"]),
+                clase="documento",
+                termino=str(f["tipo"]),
+                tic_id=_texto(f["tic_id"]),
             )
             for f in filas
         ]
@@ -371,17 +389,21 @@ class HistoriaRepo:
         filas = cx.execute(
             "SELECT timestamp, termino, codigo, sistema, concepto_id, polaridad, "
             "       estado, tic_id, texto_origen FROM infon "
-            "WHERE paciente_id = ? AND estado = 'VALIDADO'" + filtro
+            "WHERE paciente_id = ? AND estado = 'VALIDADO'"
+            + filtro
             + " ORDER BY timestamp DESC LIMIT ?",
             [paciente_id, *binds, limite],
         )
         return [
             Accion(
-                momento=str(f["timestamp"]), clase="hallazgo",
+                momento=str(f["timestamp"]),
+                clase="hallazgo",
                 termino=str(f["termino"]),
                 detalle="" if str(f["polaridad"]) == "presente" else "ausente",
-                concepto_id=f["concepto_id"], codigo=f["codigo"],
-                sistema=f["sistema"], tic_id=_texto(f["tic_id"]),
+                concepto_id=f["concepto_id"],
+                codigo=f["codigo"],
+                sistema=f["sistema"],
+                tic_id=_texto(f["tic_id"]),
                 estado=str(f["estado"] or ""),
                 texto_origen=str(f["texto_origen"] or ""),
             )

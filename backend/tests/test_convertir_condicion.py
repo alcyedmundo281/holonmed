@@ -87,7 +87,7 @@ def test_ningun_cociente_sale_de_la_nada(identificador, indice):
             # `sin_efecto` es lo único que se traduce a un número que el
             # índice no escribe: 1.0, que deja el hallazgo sin efecto.
             valores.add(1.0)
-        publicados[termino] = valores
+        publicados.setdefault(termino, set()).update(valores)
 
     for signo in skill.signos:
         for cociente in (signo.lr, signo.lr_negativo):
@@ -117,3 +117,28 @@ def test_el_ambito_del_grafo_no_incluye_la_raiz(indice):
         for rama in skill.ambito_grafo:
             semantica = indice.concepto(rama).get("semantica")
             assert semantica != "raiz", f"{identificador}: ámbito en la raíz {rama}"
+
+
+# ── los borradores de --sync-all no se activan solos ─────────────────────────
+
+
+def test_los_borradores_no_los_lee_el_cargador_de_skills():
+    """El cargador sólo lee `skills/*.md`: un borrador sin prosa ni prevalencia
+    no puede llegar al triaje hasta que un humano lo suba un nivel."""
+    from holonmed.config import get_settings
+    from holonmed.core.skills import SkillManager
+
+    directorio = convertir_condicion.DIRECTORIO_BORRADORES
+    assert directorio.parent == convertir_condicion.DIRECTORIO_SKILLS
+    cargados = set(SkillManager(get_settings()).listar())
+    asignados = {p.stem for p in directorio.glob("*.md")}
+    assert asignados, "no hay borradores que comprobar"
+    assert not cargados & asignados
+
+
+def test_lo_ya_cubierto_se_detecta_por_codigo_no_por_nombre_de_archivo():
+    """`acute_pancreatitis.md` no se llama como lo llamaría el conversor y sólo
+    declara SNOMED: compararlo por nombre lo duplicaría."""
+    cubiertas = convertir_condicion.condiciones_con_protocolo()
+    assert "snomed:197456007" in cubiertas
+    assert "holonmed:HM:6016" in cubiertas

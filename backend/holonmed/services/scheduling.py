@@ -34,7 +34,7 @@ class SchedulingService:
 
     @staticmethod
     def _interpretar(texto: str) -> datetime | None:
-        """"el próximo martes" -> datetime. Devuelve None si no se entiende."""
+        """ "el próximo martes" -> datetime. Devuelve None si no se entiende."""
         try:
             import dateparser
         except ImportError:

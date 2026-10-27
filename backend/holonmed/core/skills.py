@@ -67,7 +67,14 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 # Mov Disord 2015;30:1591-601), que separan explícitamente los tres niveles:
 # criterios de exclusión absoluta, banderas rojas contrarrestables, y
 # criterios de apoyo.
-EFECTOS = ("apoya", "bandera_roja", "excluye")
+#
+# `evidencia` es el cuarto, y el único que NO decide: el signo entra en el
+# cálculo de probabilidad por su cociente (`lr`, `lr_negativo`) y en Φ, pero no
+# cuenta como apoyo, no levanta bandera y no veta. Existe para lo que el índice
+# sostiene con una discriminación MEDIDA —un LR de 0.2 reduce la probabilidad,
+# no la anula—: emitirlo como `excluye` lo volvería un veto absoluto, y como
+# `apoya` contaría a favor un hallazgo que va en contra.
+EFECTOS = ("apoya", "bandera_roja", "excluye", "evidencia")
 POLARIDADES = ("presente", "ausente")
 
 # Qué clase de protocolo es, y por tanto qué se le exige.
@@ -99,15 +106,15 @@ class Signo:
     nombre: str
     codigos: dict[str, str] = field(default_factory=dict)
     rol: str = "apoyo"
-    lr: float | None = None            # LR+ (alias histórico: `lr`)
-    lr_negativo: float | None = None   # LR- cuando consta como ausente
+    lr: float | None = None  # LR+ (alias histórico: `lr`)
+    lr_negativo: float | None = None  # LR- cuando consta como ausente
     fuente: str = ""
 
     # Los dos ejes de la decisión. Por defecto un signo apoya cuando está
     # presente, que es lo que declaran todos los protocolos escritos antes
     # de existir estas claves: así siguen valiendo sin tocarlos.
     efecto: str = "apoya"
-    dispara_si: str = "presente"       # la polaridad que activa el efecto
+    dispara_si: str = "presente"  # la polaridad que activa el efecto
 
     @property
     def polaridad_adversa(self) -> str:
@@ -120,6 +127,12 @@ class Signo:
         """
         if self.efecto == "bandera_roja":
             return self.dispara_si
+        if self.efecto == "evidencia":
+            # No declara qué polaridad la dispara: la dice su cociente. Un LR+
+            # por debajo de 1 es un hallazgo que, estando presente, resta
+            # (el dolor pleurítico en un infarto); en cualquier otro caso lo
+            # que resta es su ausencia (el dímero D normal).
+            return "presente" if self.lr is not None and self.lr < 1.0 else "ausente"
         return "ausente" if self.dispara_si == "presente" else "presente"
 
     @property
@@ -274,7 +287,7 @@ class Nucleo:
     un diagnóstico en un paciente del que no consta absolutamente nada.
     """
 
-    requiere: list[str] = field(default_factory=list)          # todos
+    requiere: list[str] = field(default_factory=list)  # todos
     y_al_menos_uno_de: list[str] = field(default_factory=list)  # al menos uno
     # Balance sí guardaba su procedencia y el núcleo no. Es la misma asimetría
     # que el conversor denuncia en su cabecera —«un cociente sin fuente es un
@@ -315,7 +328,7 @@ class NivelCerteza:
     nombre: str
     apoyos_minimos: int = 0
     banderas_maximas: int = 0
-    contrapeso: int = 0   # apoyos exigidos POR CADA bandera roja presente
+    contrapeso: int = 0  # apoyos exigidos POR CADA bandera roja presente
 
     def satisface(self, apoyos: int, banderas: int) -> bool:
         if apoyos < self.apoyos_minimos:
@@ -446,9 +459,7 @@ class Skill:
         """
         import json
 
-        limpio = (
-            contenido.replace("&nbsp;", " ").replace("\xa0", " ").replace("\\", "")
-        )
+        limpio = contenido.replace("&nbsp;", " ").replace("\xa0", " ").replace("\\", "")
         inicio, fin = limpio.find("{"), limpio.rfind("}")
         if inicio == -1 or fin <= inicio:
             return {}, contenido
@@ -610,9 +621,7 @@ class Skill:
 
         umbral = _num(bloque.get("umbral_postest"))
         if umbral is not None and not 0.0 < umbral <= 1.0:
-            self._problemas.append(
-                f"promocion.umbral_postest {umbral} fuera de (0, 1]"
-            )
+            self._problemas.append(f"promocion.umbral_postest {umbral} fuera de (0, 1]")
             umbral = None
 
         promocion = Promocion(
@@ -636,9 +645,7 @@ class Skill:
             return Nucleo()
         return Nucleo(
             requiere=[str(x) for x in (bloque.get("requiere") or [])],
-            y_al_menos_uno_de=[
-                str(x) for x in (bloque.get("y_al_menos_uno_de") or [])
-            ],
+            y_al_menos_uno_de=[str(x) for x in (bloque.get("y_al_menos_uno_de") or [])],
             fuente=str(bloque.get("fuente", "")),
         )
 
@@ -938,7 +945,14 @@ class Skill:
             if not criterio.terminos():
                 fallos.append(f"criterio '{criterio.parametro}': sin término asociado")
 
-        if self.bayes.declarado and not any(s.lr for s in self.signos):
+        # Un signo que sólo descarta aporta LR igual que uno que sólo
+        # confirma: el dímero D de alta sensibilidad en la trombosis venosa
+        # profunda no sirve para otra cosa, y ésa es toda su utilidad. Mirar
+        # sólo `lr` —que es el LR+— daba por vacío un modelo que tiene
+        # cociente. Es el mismo criterio que ya usa `resumen()` más arriba.
+        if self.bayes.declarado and not any(
+            s.lr is not None or s.lr_negativo is not None for s in self.signos
+        ):
             fallos.append("declara modelo bayesiano pero ningún signo aporta LR")
 
         if index is not None:

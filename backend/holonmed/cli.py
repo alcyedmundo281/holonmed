@@ -64,7 +64,10 @@ async def _check() -> int:
 
     print("\nHolonMed — comprobación del entorno\n" + "=" * 46)
 
-    print(marca(llm_ok) + f"Ollama en {settings.ollama_host}")
+    print(
+        marca(llm_ok)
+        + f"Servidor de modelos ({settings.llm_backend}) en {settings.llm_host}"
+    )
     if llm_ok:
         print(f"        modelos instalados: {', '.join(modelos) or 'ninguno'}")
         for etiqueta, modelo in (
@@ -92,7 +95,9 @@ async def _check() -> int:
         print(f"        {bd['error']}")
     else:
         st = bd["estadisticas"]
-        print(f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones")
+        print(
+            f"        {st['pacientes']} pacientes, {st['tics']} tics, {st['infones']} infones"
+        )
 
     print(marca(bool(estado["skills"])) + f"skills: {', '.join(estado['skills'])}")
 
@@ -122,8 +127,7 @@ def _lineas_veredicto(veredicto) -> list[str]:
             "",
             f"HIPÓTESIS RETIRADA: {veredicto.veto.hipotesis}",
             f"  {veredicto.veto.motivo}",
-            "  Una exclusión absoluta no es una probabilidad baja: es una "
-            "imposibilidad,",
+            "  Una exclusión absoluta no es una probabilidad baja: es una imposibilidad,",
             "  y ninguna cantidad de evidencia la contrarresta.",
         ]
 
@@ -235,9 +239,7 @@ def _lineas_reapertura(reapertura) -> list[str]:
         )
 
     if reapertura.alternativa:
-        lineas.append(
-            f"  La competencia abductiva prefiere «{reapertura.alternativa}»."
-        )
+        lineas.append(f"  La competencia abductiva prefiere «{reapertura.alternativa}».")
     for pregunta in reapertura.preguntas:
         lineas.append(f"    ? {pregunta}")
     return lineas
@@ -286,7 +288,9 @@ def _lineas_competencia(resultado) -> list[str]:
     if resultado.triaje_coincide is None:
         lineas.append("  No hubo candidata admitida con la que comparar el triaje.")
     elif resultado.triaje_coincide:
-        lineas.append(f"  El triaje y el grafo coinciden en {resultado.ganadora_abductiva}.")
+        lineas.append(
+            f"  El triaje y el grafo coinciden en {resultado.ganadora_abductiva}."
+        )
     else:
         lineas.append(
             f"  DISCREPAN: el triaje usó {resultado.skill_activa} y el grafo "
@@ -389,14 +393,14 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     # Con un veto no se dice nada más sobre esa hipótesis: imprimir
     # «Φ 0.69 ARMONIA» debajo de «hipótesis retirada» sería la
     # contradicción que Φ existe justo para delatar.
-    vetada = bool(
-        resultado.veredicto_declarado and resultado.veredicto_declarado.veto
-    )
+    vetada = bool(resultado.veredicto_declarado and resultado.veredicto_declarado.veto)
     if not vetada:
         if resultado.inferencia:
             inf = resultado.inferencia
             print(f"\nInferencia: {inf.diagnostico}")
-            print(f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%")
+            print(
+                f"  previa {inf.probabilidad_previa}% → posterior {inf.probabilidad_porcentaje}%"
+            )
             print(f"  veredicto: {inf.veredicto}")
             for paso in inf.traza_logica:
                 print(f"    · {paso}")
@@ -404,9 +408,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
                 print(f"    → {ev}")
 
         for bloque in (
-            _lineas_acoplamiento(
-                resultado.acoplamiento, resultado.reapertura is None
-            ),
+            _lineas_acoplamiento(resultado.acoplamiento, resultado.reapertura is None),
             _lineas_reapertura(resultado.reapertura),
             _lineas_competencia(resultado),
         ):
@@ -414,6 +416,42 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
                 print(linea)
 
     print()
+    return 0
+
+
+async def _consultar(prompt: str, modelo: str | None) -> int:
+    """Consulta suelta al modelo local, para que el IDE converse con él.
+
+    Pasa por la misma puerta que el pipeline (`llm/client.py`), así que
+    hereda la temperatura y los timeouts de la configuración. No toca la base
+    ni escribe nada: devuelve texto y ya. Fallo cerrado: si el servidor no
+    está o el modelo pedido no está cargado, se detiene y dice por qué.
+    """
+    from .llm import LLMUnavailable, OllamaClient
+
+    settings = get_settings()
+    elegido = modelo or settings.model_clinical
+    async with OllamaClient(settings) as llm:
+        disponibles = await llm.modelos_disponibles()
+        if not disponibles:
+            print(
+                f"Sin respuesta de {settings.llm_host} ({settings.llm_backend}).",
+                file=sys.stderr,
+            )
+            return 1
+        if elegido not in disponibles:
+            print(
+                f"El modelo '{elegido}' no está cargado. Disponibles: "
+                + ", ".join(disponibles),
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            respuesta = await llm.generar(prompt, model=elegido)
+        except LLMUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    print(f"[{elegido}]\n{respuesta.strip()}")
     return 0
 
 
@@ -434,12 +472,28 @@ def main(argv=None) -> int:
     p_tic.add_argument("--paciente", default="demo")
     p_tic.add_argument("--skill", default=None)
 
+    p_consultar = sub.add_parser(
+        "consultar", help="Consulta suelta al modelo local (sin pipeline ni base)"
+    )
+    p_consultar.add_argument(
+        "prompt", nargs="?", help="Si se omite, se lee de la entrada estándar"
+    )
+    p_consultar.add_argument("--modelo", default=None)
+
     p_cuenta = sub.add_parser("cuenta", help="Cuenta y conciliación de un paciente")
     p_cuenta.add_argument("paciente")
     p_cuenta.add_argument(
         "--calcular",
         action="store_true",
         help="Deriva cargos de las parejas conciliadas antes de mostrar",
+    )
+
+    p_base = sub.add_parser("base", help="Inspecciona la base de datos definida")
+    p_base.add_argument("--nombre", default=None)
+    p_base.add_argument(
+        "--validar",
+        action="store_true",
+        help="Comprueba que las bases declaradas se sostengan",
     )
 
     p_skill = sub.add_parser("skills", help="Inspecciona los protocolos")
@@ -458,10 +512,18 @@ def main(argv=None) -> int:
         return asyncio.run(_check())
     if args.comando == "tic":
         return asyncio.run(_tic(args.texto, args.paciente, args.skill))
+    if args.comando == "consultar":
+        prompt = args.prompt if args.prompt is not None else sys.stdin.read()
+        if not prompt.strip():
+            print("Falta el prompt (argumento o entrada estándar).", file=sys.stderr)
+            return 1
+        return asyncio.run(_consultar(prompt, args.modelo))
     if args.comando == "cuenta":
         return _cuenta(args)
     if args.comando == "skills":
         return _skills(args)
+    if args.comando == "base":
+        return _base(args)
     return 1
 
 
@@ -483,7 +545,9 @@ def _cuenta(args) -> int:
         print()
         for c in cuenta.cargos:
             marca = {"propuesto": "?", "confirmado": "+", "anulado": "-"}[c.estado.value]
-            print(f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}")
+            print(
+                f"  {marca} {c.descripcion[:44]:46} {c.cantidad:>4g} x {c.importe_unitario:>8.2f} = {c.importe:>9.2f}"
+            )
             print(f"      {c.sistema_tarifario}:{c.codigo_tarifario}  orden {c.orden_id}")
     else:
         print("\n  Sin cargos.")
@@ -516,6 +580,56 @@ def _cuenta(args) -> int:
             pend.append(f"{len(cuenta.descuadres)} descuadre(s)")
         print(f"  NO cerrable: {', '.join(pend)}.")
     print()
+    return 0
+
+
+def _base(args) -> int:
+    """Muestra las bases declaradas y, con `--validar`, lo que no se sostiene.
+
+    Existe para que la base no sea otro campo declarado y nunca leído. Que
+    CI la recorra es lo que impide que se pudra en silencio, igual que con
+    los protocolos.
+    """
+    from .config import get_settings
+    from .core.base import cargar_todas, validar
+
+    bases = cargar_todas(get_settings().base_dir)
+    if not bases:
+        print("No hay ninguna base declarada.", file=sys.stderr)
+        return 1
+
+    nombres = [args.nombre] if args.nombre else sorted(bases)
+    problemas_totales = 0
+
+    for nombre in nombres:
+        base = bases.get(nombre)
+        if base is None:
+            print(f"No existe la base '{nombre}'", file=sys.stderr)
+            return 1
+
+        print()
+        print(f"{base.titulo}  ({base.alcance.value}, v{base.version})")
+        for seccion in base.secciones:
+            print(f"  {seccion.nombre}")
+            for item in seccion.items:
+                edades = ""
+                if item.desde_edad is not None:
+                    edades += f" desde {item.desde_edad}"
+                if item.hasta_edad is not None:
+                    edades += f" hasta {item.hasta_edad}"
+                print(f"    - {item.nombre}  [{item.quien.value}]{edades}")
+
+        if args.validar:
+            problemas = validar([base])
+            problemas_totales += len(problemas)
+            for problema in problemas:
+                print(f"  ! {problema}", file=sys.stderr)
+
+    if args.validar:
+        if problemas_totales:
+            print(f"{problemas_totales} problemas.", file=sys.stderr)
+            return 1
+        print("Todas las bases son válidas.")
     return 0
 
 

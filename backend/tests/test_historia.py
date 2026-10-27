@@ -90,6 +90,7 @@ def repo(base):
 
 # --- Que las cinco tablas lleguen ────────────────────────────────────────────
 
+
 def test_la_historia_lee_las_cinco_tablas(repo):
     h = repo.del_holon("P1")
     clases = {a.clase for a in h.acciones}
@@ -109,12 +110,16 @@ def test_la_historia_va_de_lo_mas_reciente_a_lo_mas_antiguo(repo):
 
 
 def test_el_detalle_json_se_lee_en_prosa(repo):
-    orden = next(a for a in repo.del_holon("P1").acciones if a.termino == "Apendicectomía"
-                 and a.clase == "orden")
+    orden = next(
+        a
+        for a in repo.del_holon("P1").acciones
+        if a.termino == "Apendicectomía" and a.clase == "orden"
+    )
     assert "laparoscopica" in orden.detalle
 
 
 # --- La orden y la ejecución no se funden ───────────────────────────────────
+
 
 def test_una_orden_sin_ejecucion_se_distingue_de_una_cumplida(repo):
     """Una orden es una regla de acción declarada; una ejecución es el acto.
@@ -132,6 +137,7 @@ def test_una_ejecucion_incompleta_lo_dice(repo):
 
 
 # --- El territorio, y lo que no puede colocarse ─────────────────────────────
+
 
 def test_el_ambito_recorta_por_territorio(repo):
     h = repo.del_holon("P1", ambito=["T:AB"])
@@ -173,6 +179,7 @@ def test_un_ambito_roto_no_es_un_territorio_vacio(repo):
 
 # --- La ventana temporal ────────────────────────────────────────────────────
 
+
 def test_la_ventana_temporal_recorta_por_los_dos_lados(repo):
     h = repo.del_holon("P1", desde="2024-03-02T00:00:00", hasta="2024-03-02T23:59:59")
     assert {a.termino for a in h.acciones} == {"Levodopa", "receta"}
@@ -186,6 +193,7 @@ def test_una_historia_recortada_por_limite_lo_dice(repo):
 
 
 # --- El texto para el modelo ────────────────────────────────────────────────
+
 
 def test_el_texto_para_el_modelo_lleva_el_resumen_y_los_pendientes(repo):
     texto = repo.del_holon("P1").para_llm()

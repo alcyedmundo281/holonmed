@@ -132,11 +132,49 @@ CREATE INDEX IF NOT EXISTS idx_paciente_nombre ON paciente(nombre);
 -- `actor` es quién lo asertó. Hoy es informativo porque no hay
 -- autenticación; existe desde ahora para que añadirla después no obligue
 -- a migrar registros clínicos ya escritos.
+-- Un episodio: el contenedor con principio y fin dentro del cual la
+-- secuencia de Weed tiene sentido.
+--
+-- Sin él, `clínica-1` sería ambigua entre tres ingresos del mismo paciente
+-- y la epicrisis no tendría qué cerrar. Todo colgaba de `paciente_id`, que
+-- es la persona, no el episodio de atención.
+--
+-- `alcance_base` dice bajo qué base se atendió. Un episodio atendido con la
+-- base mínima NO puede presentarse como si se hubiera hecho la
+-- comprehensiva: es la razón entera de que la excepción esté declarada.
+CREATE TABLE IF NOT EXISTS episodio (
+    id           INTEGER PRIMARY KEY,
+    paciente_id  TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
+    abierto      TEXT NOT NULL,
+    -- NULL mientras el episodio sigue vivo. Lo escribe la epicrisis, y
+    -- sólo la epicrisis: un episodio no se cierra por dejar de escribir.
+    cerrado      TEXT,
+    motivo       TEXT NOT NULL DEFAULT '',
+    alcance_base TEXT NOT NULL DEFAULT 'comprehensiva'
+);
+
+CREATE INDEX IF NOT EXISTS idx_episodio_paciente
+    ON episodio(paciente_id, abierto DESC);
+
 CREATE TABLE IF NOT EXISTS tic (
     id             INTEGER PRIMARY KEY,
     paciente_id    TEXT NOT NULL REFERENCES paciente(id) ON DELETE CASCADE,
     timestamp      TEXT NOT NULL,
     origen         TEXT NOT NULL DEFAULT 'consulta',
+    -- Qué clase de documento es, que es un eje distinto de quién lo
+    -- produjo: base | evolucion | clinica. El grueso son de evolución, y
+    -- por eso es el defecto; sin la columna, una nota clínica y un
+    -- resultado de laboratorio se leen igual.
+    tipo           TEXT NOT NULL DEFAULT 'evolucion',
+    -- NULL en los tics escritos antes de que existieran los episodios. No
+    -- se les inventa uno: agruparlos afirmaría que pertenecieron al mismo
+    -- ingreso, y nadie lo sabe. NULL se lee como «anterior al episodio».
+    episodio_id    INTEGER REFERENCES episodio(id) ON DELETE SET NULL,
+    -- El ordinal de una nota clínica dentro de su episodio: el «2» de
+    -- clínica-2. Se asigna al crearla y no se recalcula, porque el número
+    -- es parte de su identidad: si se derivara del orden, insertar una nota
+    -- con fecha anterior renumeraría notas que ya se citaron.
+    ordinal_clinica INTEGER,
     actor          TEXT,
     skill          TEXT NOT NULL,
     -- La versión del protocolo, junto a su nombre. Es la columna que
@@ -205,6 +243,24 @@ CREATE TABLE IF NOT EXISTS infon (
     termino_propuesto TEXT NOT NULL,
     termino           TEXT NOT NULL,
     polaridad         TEXT NOT NULL DEFAULT 'presente',
+    -- Quién lo asevera: subjetivo | objetivo | derivado. El eje es del
+    -- infón y no del tic, porque una nota de consulta lleva las dos clases
+    -- en el mismo párrafo. El defecto es 'objetivo' porque es lo que eran
+    -- todos los infones escritos antes de que existiera la distinción: los
+    -- producía el validador contra un protocolo, no el relato de nadie.
+    procedencia       TEXT NOT NULL DEFAULT 'objetivo',
+    -- Potencia y acto. `acto` NULL es el estado inicial correcto —el
+    -- sistema lo propuso y nadie lo ha ratificado— y no un hueco que
+    -- rellenar. `estado` de al lado es otra cosa: el veredicto del
+    -- validador, que es juicio de la máquina.
+    acto              TEXT,
+    actualizado_por   TEXT,
+    actualizado_en    TEXT,
+    correccion        TEXT,            -- JSON: {campo: [antes, después]}
+    -- Serendipia: llegó sin orden que lo pidiera. Entra en la historia y
+    -- abre un problema, pero no cuenta como prueba de la hipótesis activa.
+    abre_problema     INTEGER NOT NULL DEFAULT 0,
+    responde_a        TEXT,            -- la orden a la que responde
     derivado_de       TEXT,            -- JSON: términos que lo satisfacen
     criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,
@@ -256,7 +312,12 @@ CREATE TABLE IF NOT EXISTS orden (
     sistema      TEXT,
     concepto_id  INTEGER REFERENCES concepto(id) ON DELETE SET NULL,
     texto_origen TEXT NOT NULL DEFAULT '',   -- cita de la nota
-    prescriptor  TEXT,
+    prescriptor  TEXT,                       -- quién FIRMA. Siempre una persona.
+    -- Quién ORIGINÓ la petición: medico | acoplamiento | bayes | promocion.
+    -- No sustituye a la firma, la acompaña. Sin esta columna no hay forma
+    -- de medir nunca si lo que el sistema propone vale algo.
+    solicitante  TEXT NOT NULL DEFAULT 'medico',
+    motivo       TEXT NOT NULL DEFAULT '',   -- por qué, cuando no lo pidió una persona
     detalle      TEXT,                        -- JSON: dosis, vía, frecuencia
     estado       TEXT NOT NULL DEFAULT 'pendiente',
     referencias  TEXT                         -- JSON: ids en sistemas del centro

@@ -12,9 +12,11 @@
     "y rechaza lo que no reconoce. Para codificar de verdad (facturación,",
     "interoperabilidad) hay que importar una terminología con licencia:",
     "  python scripts/importar_terminologia.py --help",
-    "v1.6.0: suma los conceptos acuñados por medsemiotics-db al modelar embarazo ectópico (HM:6016), conjuntivitis bacteriana (HM:6017) y apnea obstructiva del sueño (HM:6018), todas con cociente de verosimilitud verificado contra PubMed."
+    "v1.6.0: suma los conceptos acuñados por medsemiotics-db al modelar embarazo ectópico (HM:6016), conjuntivitis bacteriana (HM:6017) y apnea obstructiva del sueño (HM:6018), todas con cociente de verosimilitud verificado contra PubMed.",
+    "v1.7.0: suma HM:3165 (embarazo intrauterino confirmado en ecografía) y HM:3189 (hCG sérica cuantitativa), que medsemiotics-db añadió al protocolo de embarazo ectópico (HM:6016).",
+    "v1.8.0: suma 136 conceptos que medsemiotics-db acuñó para las condiciones HM:6001–6048 sin protocolo en holonmed; los protocolos viven como borradores en skills/borradores/. Quedan fuera por colisionar al normalizar con conceptos existentes: HM:3083 y HM:3085 (AUDIT ≥ 8 y < 8 comparten forma normalizada con sentido opuesto), HM:6046 y HM:6047 (trastornos con el mismo término que los hallazgos HM:0609 y HM:0603); HM:3145 no lleva el sinónimo «dificultad respiratoria», que ya es de HM:0401. La búsqueda exacta no desempata: los cuatro se resuelven en medsemiotics-db antes de promover los protocolos HM:6021, HM:6046 y HM:6047."
   ],
-  "version": "1.6.0",
+  "version": "1.8.0",
   "licencia": "AGPL-3.0-or-later, igual que el resto del proyecto",
   "conceptos": [
     {
@@ -1944,6 +1946,1348 @@
       "sinonimos": [
         "SAOS",
         "apnea del sueño"
+      ]
+    },
+    {
+      "codigo": "HM:3165",
+      "termino": "Embarazo intrauterino confirmado en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "gestación intrauterina confirmada",
+        "saco gestacional intrauterino con saco vitelino o embrión",
+        "embarazo intrauterino definitivo"
+      ]
+    },
+    {
+      "codigo": "HM:3189",
+      "termino": "hCG sérica cuantitativa",
+      "semantica": "hallazgo",
+      "padre": "HM:0710",
+      "sinonimos": [
+        "beta-hCG cuantitativa",
+        "gonadotropina coriónica humana sérica",
+        "subunidad beta de gonadotropina coriónica humana",
+        "fracción beta de hCG"
+      ]
+    },
+    {
+      "codigo": "HM:6001",
+      "termino": "Hepatitis viral aguda",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "hepatitis aguda",
+        "hepatitis vírica aguda"
+      ]
+    },
+    {
+      "codigo": "HM:6002",
+      "termino": "Síndrome de intestino irritable",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "colon irritable",
+        "SII",
+        "intestino irritable"
+      ]
+    },
+    {
+      "codigo": "HM:6003",
+      "termino": "Mononucleosis infecciosa",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "mononucleosis",
+        "enfermedad del beso"
+      ]
+    },
+    {
+      "codigo": "HM:3238",
+      "termino": "Signo de Kernig",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:3239",
+      "termino": "Signo de Brudzinski",
+      "semantica": "hallazgo",
+      "padre": "HM:0500"
+    },
+    {
+      "codigo": "HM:6004",
+      "termino": "Meningitis aguda",
+      "semantica": "trastorno",
+      "padre": "HM:1000"
+    },
+    {
+      "codigo": "HM:6005",
+      "termino": "Derrame pleural exudativo",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "exudado pleural",
+        "derrame pleural tipo exudado"
+      ]
+    },
+    {
+      "codigo": "HM:6006",
+      "termino": "Aneurisma de aorta abdominal",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "AAA",
+        "aneurisma aórtico abdominal"
+      ]
+    },
+    {
+      "codigo": "HM:6008",
+      "termino": "Hipovolemia",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "depleción de volumen",
+        "hipovolemia aguda"
+      ]
+    },
+    {
+      "codigo": "HM:6009",
+      "termino": "Faringitis estreptocócica",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "faringoamigdalitis estreptocócica",
+        "faringitis por estreptococo del grupo A"
+      ]
+    },
+    {
+      "codigo": "HM:6010",
+      "termino": "Síncope cardíaco",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "síncope de origen cardíaco",
+        "síncope arrítmico"
+      ]
+    },
+    {
+      "codigo": "HM:6011",
+      "termino": "Infección precoz por VIH",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "primoinfección por VIH"
+      ]
+    },
+    {
+      "codigo": "HM:6012",
+      "termino": "Artrosis de cadera",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "coxartrosis",
+        "osteoartritis de cadera"
+      ]
+    },
+    {
+      "codigo": "HM:6013",
+      "termino": "Enfermedad del manguito rotador",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "patología del manguito rotador",
+        "tendinopatía del manguito"
+      ]
+    },
+    {
+      "codigo": "HM:6014",
+      "termino": "Rotura completa del manguito rotador",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "rotura de espesor completo del manguito",
+        "desgarro transmural del manguito"
+      ]
+    },
+    {
+      "codigo": "HM:3061",
+      "termino": "Bradicinesia",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "hipocinesia",
+        "lentitud del movimiento",
+        "acinesia",
+        "enlentecimiento motor"
+      ]
+    },
+    {
+      "codigo": "HM:3062",
+      "termino": "Temblor de reposo",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "temblor en reposo",
+        "temblor parkinsoniano"
+      ]
+    },
+    {
+      "codigo": "HM:3063",
+      "termino": "Rigidez parkinsoniana",
+      "semantica": "hallazgo",
+      "padre": "HM:0500",
+      "sinonimos": [
+        "rigidez en rueda dentada",
+        "rigidez plástica",
+        "hipertonía plástica"
+      ]
+    },
+    {
+      "codigo": "HM:6015",
+      "termino": "Enfermedad de Parkinson",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "parkinson",
+        "EP",
+        "enfermedad de Parkinson idiopática"
+      ]
+    },
+    {
+      "codigo": "HM:3075",
+      "termino": "Maniobras de Barlow y Ortolani positivas",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "maniobra de Barlow positiva",
+        "maniobra de Ortolani positiva",
+        "signo de luxación y reducción de cadera"
+      ]
+    },
+    {
+      "codigo": "HM:3076",
+      "termino": "Limitación de la abducción de la cadera en el lactante",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "abducción limitada de cadera",
+        "asimetría de abducción de cadera en lactante"
+      ]
+    },
+    {
+      "codigo": "HM:3077",
+      "termino": "Chasquido o click articular de cadera en el lactante",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "click de cadera",
+        "chasquido benigno de cadera"
+      ]
+    },
+    {
+      "codigo": "HM:6019",
+      "termino": "Luxación de cadera en el lactante",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "displasia del desarrollo de la cadera",
+        "luxación congénita de cadera",
+        "displasia de cadera del lactante"
+      ]
+    },
+    {
+      "codigo": "HM:3078",
+      "termino": "Test de mordida del labio superior clase 3",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "prueba de la mordida del labio superior grado 3",
+        "incapacidad de los incisivos inferiores para alcanzar el labio superior"
+      ]
+    },
+    {
+      "codigo": "HM:3079",
+      "termino": "Distancia hiodomentoniana o tiromentoniana corta",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "distancia tiromentoniana reducida",
+        "distancia hiodomentoniana menor de 3 a 5.5 cm"
+      ]
+    },
+    {
+      "codigo": "HM:3080",
+      "termino": "Retrognatia o longitud mandibular reducida",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "mandíbula corta",
+        "micrognatia clínica",
+        "longitud del ángulo mandibular al mentón menor de 9 cm"
+      ]
+    },
+    {
+      "codigo": "HM:3082",
+      "termino": "Score de Wilson de riesgo aumentado",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "escala de Wilson para vía aérea difícil"
+      ]
+    },
+    {
+      "codigo": "HM:3081",
+      "termino": "Escala de Mallampati modificada clase 3 o 4",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "Mallampati grado III o IV",
+        "visualización limitada al paladar blando o base de úvula"
+      ]
+    },
+    {
+      "codigo": "HM:6020",
+      "termino": "Intubación difícil",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "vía aérea difícil",
+        "intubación orotraqueal dificultosa",
+        "laringoscopia difícil"
+      ]
+    },
+    {
+      "codigo": "HM:3084",
+      "termino": "Cuestionario AUDIT-C positivo (hombres ≥ 4, mujeres ≥ 3)",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "AUDIT abreviado positivo para consumo de riesgo"
+      ]
+    },
+    {
+      "codigo": "HM:3086",
+      "termino": "Cuestionario AUDIT con puntuación ≥ 4 en postparto",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "AUDIT positivo en puerperio inmediato (primeras 48 h)"
+      ]
+    },
+    {
+      "codigo": "HM:3087",
+      "termino": "Cuestionario TWEAK o T-ACE con puntuación < 2 en postparto",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "cribado negativo de alcohol en gestación/postparto con TWEAK o T-ACE"
+      ]
+    },
+    {
+      "codigo": "HM:6021",
+      "termino": "Trastorno por consumo de alcohol",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "alcoholismo",
+        "dependencia del alcohol",
+        "abuso de alcohol",
+        "consumo perjudicial de alcohol"
+      ]
+    },
+    {
+      "codigo": "HM:3088",
+      "termino": "Relación copa-disco aumentada",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "excavación papilar aumentada",
+        "relación copa-disco mayor o igual a 0.7"
+      ]
+    },
+    {
+      "codigo": "HM:3089",
+      "termino": "Asimetría de la relación copa-disco",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "asimetría papilar interocular",
+        "diferencia de excavación entre ambos ojos mayor o igual a 0.2"
+      ]
+    },
+    {
+      "codigo": "HM:3090",
+      "termino": "Hemorragia en astilla del disco óptico",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "hemorragia de Drance",
+        "microhemorragia peripapilar"
+      ]
+    },
+    {
+      "codigo": "HM:3091",
+      "termino": "Presión intraocular elevada",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "PIO mayor o igual a 22 mmHg",
+        "hipertensión ocular"
+      ]
+    },
+    {
+      "codigo": "HM:6022",
+      "termino": "Glaucoma primario de ángulo abierto",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "GPAA",
+        "glaucoma crónico simple"
+      ]
+    },
+    {
+      "codigo": "HM:3094",
+      "termino": "Niebla mental",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "sensación de lentitud o embotamiento cognitivo",
+        "mente nublada tras traumatismo craneoencefálico"
+      ]
+    },
+    {
+      "codigo": "HM:3097",
+      "termino": "Punto próximo de convergencia anormal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "insuficiencia de convergencia ocular",
+        "NPC mayor o igual a 6 cm tras traumatismo"
+      ]
+    },
+    {
+      "codigo": "HM:3095",
+      "termino": "Fonofobia o sensibilidad al ruido",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "hiperacusia postraumática",
+        "intolerancia a estímulos auditivos"
+      ]
+    },
+    {
+      "codigo": "HM:3096",
+      "termino": "Fotofobia o sensibilidad a la luz",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "intolerancia lumínica postraumática"
+      ]
+    },
+    {
+      "codigo": "HM:3098",
+      "termino": "Movimientos de persecución suave anormales",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "seguimiento ocular entrecortado",
+        "disfunción de seguimiento visual continuo"
+      ]
+    },
+    {
+      "codigo": "HM:3099",
+      "termino": "Sacadas oculares anormales",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "dismetría sacádica",
+        "movimientos sacádicos imprecisos o lentificados"
+      ]
+    },
+    {
+      "codigo": "HM:6023",
+      "termino": "Conmoción cerebral pediátrica",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "traumatismo craneoencefálico leve pediátrico",
+        "concusión cerebral en niños"
+      ]
+    },
+    {
+      "codigo": "HM:3104",
+      "termino": "Hemorragias retinianas en niño pequeño",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "hemorragias retinianas múltiples o estratificadas en lactante",
+        "estigma de traumatismo craneoencefálico por sacudida"
+      ]
+    },
+    {
+      "codigo": "HM:3100",
+      "termino": "Lesión oral o desgarro del frenillo",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "desgarro del frenillo labial",
+        "traumatismo mucoso intraoral no accidental"
+      ]
+    },
+    {
+      "codigo": "HM:3108",
+      "termino": "Fracturas múltiples en serie esquelética",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "fracturas óseas en distintos estadios de consolidación"
+      ]
+    },
+    {
+      "codigo": "HM:3102",
+      "termino": "Equimosis con patrón",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "hematomas con impronta de objeto",
+        "equimosis por cinturón, mano u objeto punzocortante"
+      ]
+    },
+    {
+      "codigo": "HM:3101",
+      "termino": "Equimosis en nalgas o cuello",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "hematomas en nalgas",
+        "equimosis cervicales sospechosas de maltrato"
+      ]
+    },
+    {
+      "codigo": "HM:3106",
+      "termino": "Hematoma subdural en lactante",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "colección subdural intracraneal"
+      ]
+    },
+    {
+      "codigo": "HM:3107",
+      "termino": "Fractura única en serie esquelética",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "fractura aislada en radiología pediátrica"
+      ]
+    },
+    {
+      "codigo": "HM:6024",
+      "termino": "Maltrato físico infantil",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "traumatismo no accidental en niños",
+        "violencia física infantil",
+        "síndrome del niño maltratado"
+      ]
+    },
+    {
+      "codigo": "HM:3113",
+      "termino": "Microalbuminuria",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "excreción urinaria de albúmina elevada",
+        "cociente albúmina/creatinina urinario patológico"
+      ]
+    },
+    {
+      "codigo": "HM:3115",
+      "termino": "Carga tensional aumentada en monitorización ambulatoria (MAPA)",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "carga de presión arterial sistólica elevada en MAPA de 24 horas"
+      ]
+    },
+    {
+      "codigo": "HM:3109",
+      "termino": "Antecedente familiar de hipertensión secundaria",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "historia familiar de nefropatía o displasia fibromuscular"
+      ]
+    },
+    {
+      "codigo": "HM:3110",
+      "termino": "Peso menor o igual al percentil 10 en niño con hipertensión",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "peso bajo para la edad en hipertensión pediátrica",
+        "niño hipertenso no obeso"
+      ]
+    },
+    {
+      "codigo": "HM:3114",
+      "termino": "Ácido úrico sérico menor de 5.5 mg/dL",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "uricemia normal o baja en niño hipertenso"
+      ]
+    },
+    {
+      "codigo": "HM:3111",
+      "termino": "Antecedente de prematuridad",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "nacimiento pretérmino",
+        "antecedente de cateterismo de arteria umbilical"
+      ]
+    },
+    {
+      "codigo": "HM:3112",
+      "termino": "Edad menor o igual a 6 años con hipertensión arterial",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "debut precoz de hipertensión pediátrica"
+      ]
+    },
+    {
+      "codigo": "HM:6025",
+      "termino": "Hipertensión arterial secundaria pediátrica",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "HTA secundaria en niños",
+        "hipertensión renovascular o renal pediátrica"
+      ]
+    },
+    {
+      "codigo": "HM:3116",
+      "termino": "Soplo diastólico precoz",
+      "semantica": "hallazgo",
+      "padre": "HM:0608",
+      "sinonimos": [
+        "soplo en decrescendo en foco aórtico accesorio",
+        "soplo aspirativo diastólico"
+      ]
+    },
+    {
+      "codigo": "HM:3118",
+      "termino": "Maniobra de oclusión arterial transitoria",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "acentuación de soplo tras oclusión arterial con manguito"
+      ]
+    },
+    {
+      "codigo": "HM:3117",
+      "termino": "Presión de pulso amplia",
+      "semantica": "hallazgo",
+      "padre": "HM:0109",
+      "sinonimos": [
+        "presión diferencial aumentada",
+        "presión sistólica menos diastólica mayor de 50 o 60 mmHg"
+      ]
+    },
+    {
+      "codigo": "HM:6026",
+      "termino": "Insuficiencia aórtica",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "regurgitación aórtica",
+        "valvulopatía aórtica incompetente"
+      ]
+    },
+    {
+      "codigo": "HM:3119",
+      "termino": "Prueba de Lachman positiva",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "maniobra de Lachman con tope blando o traslación tibial aumentada"
+      ]
+    },
+    {
+      "codigo": "HM:3123",
+      "termino": "Examen compuesto de rodilla positivo para ligamento cruzado anterior",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "combinación de Lachman y traslación tibial positiva"
+      ]
+    },
+    {
+      "codigo": "HM:3120",
+      "termino": "Prueba del cajón anterior de rodilla positiva",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "signo del cajón anterior a 90 grados de flexión"
+      ]
+    },
+    {
+      "codigo": "HM:6027",
+      "termino": "Rotura del ligamento cruzado anterior",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "desgarro del LCA",
+        "rotura del ligamento cruzado de la rodilla"
+      ]
+    },
+    {
+      "codigo": "HM:3126",
+      "termino": "Prueba cutánea a determinantes de penicilina",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "prick test e intradermorreacción a determinantes mayores y menores de penicilina"
+      ]
+    },
+    {
+      "codigo": "HM:3125",
+      "termino": "Antecedente referido de alergia a penicilina",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "historia clínica referida de reacción a betalactámicos"
+      ]
+    },
+    {
+      "codigo": "HM:6028",
+      "termino": "Alergia a penicilina",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "hipersensibilidad a penicilina mediada por IgE",
+        "reacción alérgica a betalactámicos"
+      ]
+    },
+    {
+      "codigo": "HM:3127",
+      "termino": "Presión arterial en consulta mayor o igual a 140/90 mmHg",
+      "semantica": "hallazgo",
+      "padre": "HM:0109",
+      "sinonimos": [
+        "cifras tensionales elevadas en la toma clínica de cribado"
+      ]
+    },
+    {
+      "codigo": "HM:3128",
+      "termino": "Automonitorización domiciliaria (AMPA) mayor o igual a 135/85 mmHg",
+      "semantica": "hallazgo",
+      "padre": "HM:0109",
+      "sinonimos": [
+        "registro tensional ambulatorio domiciliario patológico"
+      ]
+    },
+    {
+      "codigo": "HM:6029",
+      "termino": "Hipertensión arterial en adultos",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "HTA esencial",
+        "hipertensión arterial primaria en adultos"
+      ]
+    },
+    {
+      "codigo": "HM:3130",
+      "termino": "Elevación nueva del segmento ST en el ECG",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "supradesnivel del ST",
+        "lesión subepicárdica aguda"
+      ]
+    },
+    {
+      "codigo": "HM:3131",
+      "termino": "Nueva onda Q patológica en el ECG",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "onda Q de necrosis"
+      ]
+    },
+    {
+      "codigo": "HM:3132",
+      "termino": "Tercer tono cardíaco (R3)",
+      "semantica": "hallazgo",
+      "padre": "HM:0608",
+      "sinonimos": [
+        "galope ventricular"
+      ]
+    },
+    {
+      "codigo": "HM:3133",
+      "termino": "Dolor torácico pleurítico",
+      "semantica": "hallazgo",
+      "padre": "HM:0206",
+      "sinonimos": [
+        "dolor torácico en puntada de costado"
+      ]
+    },
+    {
+      "codigo": "HM:3134",
+      "termino": "Dolor torácico reproducible a la palpación",
+      "semantica": "hallazgo",
+      "padre": "HM:0206",
+      "sinonimos": [
+        "dolor a la palpación de la pared torácica"
+      ]
+    },
+    {
+      "codigo": "HM:3135",
+      "termino": "Dolor torácico punzante o cortante",
+      "semantica": "hallazgo",
+      "padre": "HM:0206",
+      "sinonimos": [
+        "dolor punzante en tórax"
+      ]
+    },
+    {
+      "codigo": "HM:3136",
+      "termino": "Dolor torácico posicional",
+      "semantica": "hallazgo",
+      "padre": "HM:0206",
+      "sinonimos": [
+        "dolor torácico que varía con los cambios posturales"
+      ]
+    },
+    {
+      "codigo": "HM:6030",
+      "termino": "Infarto agudo de miocardio",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "IAM",
+        "ataque cardíaco",
+        "infarto de miocardio"
+      ]
+    },
+    {
+      "codigo": "HM:3137",
+      "termino": "Cuestionario GAD-7 positivo",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "escala de ansiedad generalizada de 7 ítems mayor o igual a 10"
+      ]
+    },
+    {
+      "codigo": "HM:6031",
+      "termino": "Trastorno de ansiedad generalizada",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "TAG",
+        "GAD",
+        "ansiedad crónica"
+      ]
+    },
+    {
+      "codigo": "HM:3138",
+      "termino": "Cuestionario PHQ de pánico positivo",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "módulo de pánico del Patient Health Questionnaire positivo"
+      ]
+    },
+    {
+      "codigo": "HM:6032",
+      "termino": "Trastorno de pánico",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "crisis de angustia",
+        "ataques de pánico",
+        "ansiedad paroxística episódica"
+      ]
+    },
+    {
+      "codigo": "HM:3139",
+      "termino": "Criterios ABCD de lesión pigmentada positivos",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "regla ABCD de dermatología"
+      ]
+    },
+    {
+      "codigo": "HM:3140",
+      "termino": "Asimetría y bordes irregulares en lesión cutánea",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "lesión pigmentada asimétrica"
+      ]
+    },
+    {
+      "codigo": "HM:3141",
+      "termino": "Color heterogéneo y diámetro mayor de 6 mm en lesión cutánea",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "policromía en nevus"
+      ]
+    },
+    {
+      "codigo": "HM:6033",
+      "termino": "Melanoma cutáneo",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "melanoma maligno",
+        "cáncer de piel tipo melanoma"
+      ]
+    },
+    {
+      "codigo": "HM:3142",
+      "termino": "Masa mamaria palpable o hallazgo sospechoso en la exploración",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "nódulo mamario sospechoso"
+      ]
+    },
+    {
+      "codigo": "HM:3143",
+      "termino": "Examen clínico de mama reglado normal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "palpación mamaria reglada negativa"
+      ]
+    },
+    {
+      "codigo": "HM:6034",
+      "termino": "Cáncer de mama",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "carcinoma mamario",
+        "neoplasia maligna de mama"
+      ]
+    },
+    {
+      "codigo": "HM:3144",
+      "termino": "Dímero D elevado",
+      "semantica": "hallazgo",
+      "padre": "HM:0710",
+      "sinonimos": [
+        "dímero D positivo",
+        "D-dímero elevado",
+        "productos de degradación de la fibrina elevados"
+      ]
+    },
+    {
+      "codigo": "HM:6035",
+      "termino": "Trombosis venosa profunda",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "TVP",
+        "trombosis venosa profunda de miembros inferiores",
+        "trombosis de venas profundas"
+      ]
+    },
+    {
+      "codigo": "HM:3145",
+      "termino": "Aumento del trabajo respiratorio",
+      "semantica": "hallazgo",
+      "padre": "HM:0400",
+      "sinonimos": [
+        "distrés respiratorio",
+        "quejido, aleteo y tiraje"
+      ]
+    },
+    {
+      "codigo": "HM:6036",
+      "termino": "Neumonía infantil",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "neumonía pediátrica",
+        "neumonía radiográfica del niño",
+        "neumonía adquirida en la comunidad en la infancia"
+      ]
+    },
+    {
+      "codigo": "HM:3147",
+      "termino": "Congestión vascular en la radiografía de tórax",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "redistribución vascular pulmonar",
+        "congestión pulmonar radiográfica",
+        "patrón de congestión venosa pulmonar"
+      ]
+    },
+    {
+      "codigo": "HM:3151",
+      "termino": "Péptido natriurético cerebral elevado",
+      "semantica": "hallazgo",
+      "padre": "HM:0700",
+      "sinonimos": [
+        "BNP elevado",
+        "péptido natriurético tipo B elevado",
+        "BNP plasmático elevado"
+      ]
+    },
+    {
+      "codigo": "HM:3146",
+      "termino": "Ingurgitación yugular",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "ingurgitación venosa yugular",
+        "distensión venosa yugular",
+        "plétora yugular"
+      ]
+    },
+    {
+      "codigo": "HM:3148",
+      "termino": "Líneas B pulmonares bilaterales",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "colas de cometa",
+        "líneas B ecográficas",
+        "síndrome intersticial ecográfico bilateral"
+      ]
+    },
+    {
+      "codigo": "HM:3149",
+      "termino": "Colapsabilidad reducida de la vena cava inferior",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "índice de colapsabilidad de la VCI disminuido",
+        "vena cava inferior pletórica",
+        "VCI no colapsable"
+      ]
+    },
+    {
+      "codigo": "HM:3150",
+      "termino": "Presión venosa yugular elevada por ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "PVY ecográfica elevada",
+        "presión venosa yugular medida con ecografía"
+      ]
+    },
+    {
+      "codigo": "HM:6037",
+      "termino": "Sobrecarga de volumen",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "sobrecarga hídrica",
+        "hipervolemia",
+        "congestión volémica"
+      ]
+    },
+    {
+      "codigo": "HM:3152",
+      "termino": "Puntuación de Glasgow menor de 14 a las dos horas del traumatismo",
+      "semantica": "hallazgo",
+      "padre": "HM:0501",
+      "sinonimos": [
+        "Glasgow por debajo de 14 a las dos horas",
+        "deterioro persistente del Glasgow a las dos horas"
+      ]
+    },
+    {
+      "codigo": "HM:6038",
+      "termino": "Lesión intracraneal en el traumatismo craneal leve del adulto",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "lesión intracraneal grave tras traumatismo craneal leve",
+        "hemorragia intracraneal postraumática del adulto",
+        "indicación de neuroimagen en el traumatismo craneal leve"
+      ]
+    },
+    {
+      "codigo": "HM:3153",
+      "termino": "Trauma Screening Questionnaire positivo",
+      "semantica": "hallazgo",
+      "padre": "HM:0001",
+      "sinonimos": [
+        "TSQ positivo",
+        "cuestionario de cribado de estrés postraumático positivo"
+      ]
+    },
+    {
+      "codigo": "HM:6039",
+      "termino": "Trastorno de estrés postraumático",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "TEPT",
+        "PTSD",
+        "estrés postraumático"
+      ]
+    },
+    {
+      "codigo": "HM:3166",
+      "termino": "Colección de partes blandas en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "absceso de partes blandas en ecografía",
+        "colección subcutánea con refuerzo acústico posterior"
+      ]
+    },
+    {
+      "codigo": "HM:6041",
+      "termino": "Absceso de partes blandas",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "absceso cutáneo",
+        "absceso de piel y partes blandas"
+      ]
+    },
+    {
+      "codigo": "HM:3175",
+      "termino": "Signo ecográfico de colecistitis aguda",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "colecistitis aguda en ecografía",
+        "engrosamiento de pared vesicular con cálculo y Murphy ecográfico",
+        "Murphy ecográfico positivo con litiasis"
+      ]
+    },
+    {
+      "codigo": "HM:6042",
+      "termino": "Colecistitis aguda",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "colecistitis litiásica aguda",
+        "colecistitis aguda alitiásica",
+        "inflamación aguda de la vesícula biliar"
+      ]
+    },
+    {
+      "codigo": "HM:3177",
+      "termino": "Signo ecográfico de apendicitis aguda",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "apendicitis aguda en ecografía",
+        "apéndice no compresible con diámetro mayor de 6 mm",
+        "signo de la diana apendicular"
+      ]
+    },
+    {
+      "codigo": "HM:6043",
+      "termino": "Apendicitis aguda",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "apendicitis",
+        "inflamación aguda del apéndice cecal"
+      ]
+    },
+    {
+      "codigo": "HM:3162",
+      "termino": "Ventrículo derecho dilatado en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "sobrecarga aguda de presión del VD",
+        "signo de la D",
+        "signo de McConnell"
+      ]
+    },
+    {
+      "codigo": "HM:6044",
+      "termino": "Tromboembolia pulmonar",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "embolia pulmonar",
+        "TEP",
+        "tromboembolismo pulmonar"
+      ]
+    },
+    {
+      "codigo": "HM:3163",
+      "termino": "Taponamiento cardíaco en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "fisiología de taponamiento",
+        "colapso diastólico del ventrículo derecho"
+      ]
+    },
+    {
+      "codigo": "HM:3155",
+      "termino": "Derrame pericárdico en ecografía",
+      "semantica": "hallazgo",
+      "padre": "HM:0900",
+      "sinonimos": [
+        "líquido pericárdico",
+        "derrame pericárdico ecográfico"
+      ]
+    },
+    {
+      "codigo": "HM:6045",
+      "termino": "Taponamiento cardíaco",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "taponamiento pericárdico",
+        "compromiso hemodinámico por derrame pericárdico"
+      ]
+    },
+    {
+      "codigo": "HM:3178",
+      "termino": "Signo de la onda líquida abdominal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "onda ascítica",
+        "signo de la ola líquida abdominal",
+        "signo de la fluctuación abdominal",
+        "fluid wave"
+      ]
+    },
+    {
+      "codigo": "HM:3179",
+      "termino": "Matidez cambiante abdominal",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "matidez desplazable abdominal",
+        "signo de la matidez cambiante",
+        "shifting dullness"
+      ]
+    },
+    {
+      "codigo": "HM:3180",
+      "termino": "Matidez en flancos abdominales",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "matidez en los flancos",
+        "percusión mate de flancos",
+        "flank dullness"
+      ]
+    },
+    {
+      "codigo": "HM:3181",
+      "termino": "Flancos abdominales abultados",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "abombamiento de flancos",
+        "flancos prominentes",
+        "bulging flanks"
+      ]
+    },
+    {
+      "codigo": "HM:3182",
+      "termino": "Signo del charco",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "puddle sign",
+        "signo del charco de Lawson"
+      ]
+    },
+    {
+      "codigo": "HM:3183",
+      "termino": "Aumento del perímetro abdominal",
+      "semantica": "hallazgo",
+      "padre": "HM:0300",
+      "sinonimos": [
+        "distensión abdominal referida",
+        "aumento de cintura",
+        "ensanchamiento del abdomen",
+        "ropa apretada en abdomen"
+      ]
+    },
+    {
+      "codigo": "HM:3186",
+      "termino": "Ganancia de peso reciente",
+      "semantica": "hallazgo",
+      "padre": "HM:0800",
+      "sinonimos": [
+        "aumento de peso reciente",
+        "ganancia ponderal involuntaria",
+        "aumento ponderal reciente"
+      ]
+    },
+    {
+      "codigo": "HM:3184",
+      "termino": "Matidez en el espacio de Traube",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "percusión mate en espacio de Traube",
+        "matidez de Traube",
+        "pérdida del timpanismo en espacio de Traube"
+      ]
+    },
+    {
+      "codigo": "HM:3185",
+      "termino": "Signo de percusión de Castell",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "signo de Castell",
+        "maniobra de Castell",
+        "signo esplénico de Castell"
+      ]
+    },
+    {
+      "codigo": "HM:3187",
+      "termino": "Agrandamiento tiroideo palpable en posición neutra",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "bocio palpable en posición neutra",
+        "tiroides palpable en posición anatómica",
+        "bocio evidente a la exploración"
+      ]
+    },
+    {
+      "codigo": "HM:3188",
+      "termino": "Lóbulo tiroideo palpable mayor que la falange distal del pulgar",
+      "semantica": "hallazgo",
+      "padre": "HM:0600",
+      "sinonimos": [
+        "criterio de la falange distal para bocio",
+        "lóbulo tiroideo mayor que el pulgar",
+        "bocio por regla de la falange distal"
+      ]
+    },
+    {
+      "codigo": "HM:6048",
+      "termino": "Bocio",
+      "semantica": "trastorno",
+      "padre": "HM:1000",
+      "sinonimos": [
+        "tiromegalia",
+        "agrandamiento tiroideo",
+        "hipertrofia de la glándula tiroides",
+        "bocio tiroideo"
       ]
     }
   ]

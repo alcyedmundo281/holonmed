@@ -34,6 +34,8 @@ dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
+    "mypy>=1.13",
+    "types-PyYAML",
 ]
 
 [project.scripts]
@@ -61,3 +63,19 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["holonmed"]
+# Un sistema que prefiere no decir nada antes que decir algo falso no puede
+# permitirse un `None` que se multiplica ni un atributo que no existe. Estos
+# tres son los que cazan esa clase de fallo sin exigir anotar el mundo.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+# `dateparser` y `reportlab` no publican tipos. Se silencia el import, no el
+# uso: lo que hacemos con ellos sigue comprobándose.
+[[tool.mypy.overrides]]
+module = ["dateparser.*", "reportlab.*"]
+ignore_missing_imports = true

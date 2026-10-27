@@ -40,7 +40,63 @@ class OrigenTic(str, Enum):
     FARMACIA = "farmacia"
     ENFERMERIA = "enfermeria"
     IMAGEN = "imagen"
+    # El paciente es quien más variables conoce sobre su propio cuadro, y
+    # hasta ahora no tenía por dónde entrar: los cinco actores de arriba
+    # son todos del centro sanitario. Sin esta clave, un dato que trae el
+    # enfermo se registra como si lo hubiera producido la consulta, y deja
+    # de poder auditarse aparte.
+    PACIENTE = "paciente"
+    # HolonMed también produce documentos, sobre todo notas clínicas: la
+    # síntesis periódica del holón es trabajo suyo, no del clínico.
+    #
+    # Que sea un actor con nombre propio y no un `OTRO` disfrazado es la
+    # condición de la partida doble. Si lo que redacta el sistema entrara
+    # bajo el origen de la consulta, los dos libros se habrían fundido en
+    # uno y la discrepancia —que es el producto— dejaría de existir.
+    #
+    # Autor no es firmante. Lo que HolonMed redacta es un borrador hasta
+    # que una persona nombrada lo firma, y la epicrisis además sale de la
+    # institución. El sistema es minucioso; la responsabilidad es humana.
+    HOLONMED = "holonmed"
     OTRO = "otro"
+
+
+class TipoNota(str, Enum):
+    """Qué clase de documento es un tic.
+
+    Es un eje distinto de `OrigenTic`, y confundirlos era el error. El
+    origen dice QUIÉN produjo el dato; el tipo dice QUÉ clase de documento
+    es. Un laboratorio y un paciente pueden producir los dos una nota de
+    evolución, y una misma consulta produce a veces la base y a veces una
+    nota clínica.
+
+    Los tres tipos son las tres primeras fases de Weed, en el orden en que
+    ocurren:
+
+    * `BASE` — la historia clínica completa. Weed insiste en que sea
+      DEFINIDA y se obtenga siempre, porque la lista de problemas es un
+      artefacto de la base: si no se define, la lista depende de dónde se
+      formó quien preguntó y de cuántos ingresos hubo anoche.
+    * `EVOLUCION` — la nota de evolución. Es el grueso del tráfico y no la
+      escribe sólo el médico: un resultado de laboratorio solicitado es
+      también una nota de evolución.
+    * `CLINICA` — la nota clínica: el holón revelado en un instante. No es
+      un documento aparte del holón, es su corte con fecha y firma.
+    * `EPICRISIS` — la síntesis que cierra el episodio.
+
+    La primera nota clínica y las intermedias son el MISMO tipo. Su
+    diferencia es de posición —una no tiene predecesora— y la posición se
+    lee del orden, no del tipo. Meterla aquí sería el mismo error que
+    congelar el umbral dentro del nombre de un signo.
+
+    La epicrisis sí es otra cosa, y por dos razones: cierra el episodio en
+    vez de cortarlo, y es el único de los cuatro que sale de la institución.
+    """
+
+    BASE = "base"
+    EVOLUCION = "evolucion"
+    CLINICA = "clinica"
+    EPICRISIS = "epicrisis"
 
 
 class Polaridad(str, Enum):
@@ -84,6 +140,16 @@ class Infon(BaseModel):
     # proyecto, SNOMED CT si tienes licencia, o cualquier otro importado.
     termino: str = Field(description="Término preferente tras la normalización")
     polaridad: Polaridad = Polaridad.PRESENTE
+    procedencia: str = Field(
+        default="objetivo",
+        description=(
+            "Quién asevera este infón: 'subjetivo' lo expresó el paciente, "
+            "'objetivo' lo observó el clínico o lo midió quien informa, "
+            "'derivado' no lo aseveró nadie y se sigue de otros infones. "
+            "Lo que clasifica es quién asevera, no el instrumento: una "
+            "glucemia que el paciente refiere es subjetiva."
+        ),
+    )
     codigo: str | None = None
     sistema: str | None = Field(
         default=None, description="'holonmed' | 'snomed' | 'hpo' | …"
@@ -114,14 +180,71 @@ class Infon(BaseModel):
     razon_auditoria: str = "No evaluado"
     origen_skill: str = "general_triage"
 
+    # --- Potencia y acto ---------------------------------------------
+    # Separado de `estado` a propósito. `estado` es el veredicto del
+    # validador de tres capas —juicio de la máquina, con su traza y su
+    # score—; esto es la ratificación humana. Fundirlos haría que
+    # «validado» significara dos cosas distintas según quién leyera.
+    acto: str | None = Field(
+        default=None,
+        description="'aceptado' | 'corregido' | 'rechazado'. `None` = potencial.",
+    )
+    actualizado_por: str | None = Field(
+        default=None,
+        description=(
+            "Nombre de quien lo ratificó. El contrato exige aprobación humana "
+            "nombrada: «alguien lo validó» no se puede auditar."
+        ),
+    )
+    actualizado_en: str | None = None
+    correccion: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Qué cambió al corregirlo: {campo: [antes, después]}. Es la materia "
+            "prima de la tasa de corrección, que es la medida de cuánto se "
+            "equivoca el sistema."
+        ),
+    )
+
     @property
     def es_valido(self) -> bool:
+        """El validador de tres capas lo confirmó. NO es una ratificación."""
         return self.estado == EstadoInfon.VALIDADO
 
     @property
+    def es_real(self) -> bool:
+        """Un humano lo actualizó. Lo demás es potencia, por bien validada que esté."""
+        return self.acto in ("aceptado", "corregido")
+
+    # --- Serendipia ---------------------------------------------------
+    # Un resultado que nadie pidió no es prueba de la hipótesis activa:
+    # nadie lo eligió para ponerla a prueba. Abre un problema, que es otra
+    # cosa. `False` es el defecto y el caso de todo lo escrito hasta hoy.
+    abre_problema: bool = Field(
+        default=False,
+        description=(
+            "Llegó sin orden que lo pidiera. Entra en la historia y en la "
+            "lista de problemas, pero no cuenta como evidencia."
+        ),
+    )
+    responde_a: str | None = Field(
+        default=None, description="La orden a la que responde, si responde a alguna."
+    )
+
+    @property
     def confirma(self) -> bool:
-        """Un hallazgo validado y presente. El que suma en la inferencia."""
-        return self.es_valido and self.polaridad is Polaridad.PRESENTE
+        """Un hallazgo validado y presente. El que suma en la inferencia.
+
+        Un hallazgo serendípico queda fuera, y no por desconfianza: contar
+        como prueba de una hipótesis un dato recogido para otra cosa —o
+        para nada— sería inflar el numerador de Bayes con evidencia que
+        nadie eligió. Sigue en la historia y en la lista de problemas.
+        """
+        return (
+            self.es_valido
+            and self.polaridad is Polaridad.PRESENTE
+            and not self.abre_problema
+        )
 
     @property
     def descarta(self) -> bool:
@@ -149,6 +272,11 @@ class InferenciaBayesiana(BaseModel):
 
     @property
     def veredicto(self) -> str:
+        # Una probabilidad que sólo viene del a priori no es una conclusión:
+        # sin ningún hallazgo con LR que la haya movido, por alta que sea,
+        # no se declara PROBABLE ni confirmada.
+        if not self.evidencia_utilizada:
+            return "BAJA_SOSPECHA"
         if self.probabilidad_porcentaje > 90:
             return "HIPOTESIS_CONFIRMADA"
         if self.probabilidad_porcentaje > 50:
@@ -201,9 +329,9 @@ class VeredictoDeclarado(BaseModel):
 class EstadoDimension(str, Enum):
     """Qué hace el registro en una dimensión del espacio de hallazgos."""
 
-    CONCUERDA = "concuerda"            # el registro dice lo que la hipótesis exige
-    CONTRADICE = "contradice"          # el registro dice lo contrario
-    SIN_MEDIR = "sin_medir"            # nadie lo ha mirado: no es ausencia, es vacío
+    CONCUERDA = "concuerda"  # el registro dice lo que la hipótesis exige
+    CONTRADICE = "contradice"  # el registro dice lo contrario
+    SIN_MEDIR = "sin_medir"  # nadie lo ha mirado: no es ausencia, es vacío
     NO_SIMBOLIZADO = "no_simbolizado"  # hallazgo real que la hipótesis no explica
 
 
@@ -215,11 +343,11 @@ class VeredictoSemiotico(str, Enum):
     solas, nunca para sustituirlo.
     """
 
-    ARMONIA = "ARMONIA"                            # la creencia es operable
+    ARMONIA = "ARMONIA"  # la creencia es operable
     ACOPLAMIENTO_PARCIAL = "ACOPLAMIENTO_PARCIAL"  # encaja, pero queda por mirar
-    INERCIA = "INERCIA"                            # ortogonal: no toca este caso
-    FRICCION = "FRICCION"                          # el contexto empieza a disentir
-    DESARMONIA = "DESARMONIA"                      # el contexto la contradice
+    INERCIA = "INERCIA"  # ortogonal: no toca este caso
+    FRICCION = "FRICCION"  # el contexto empieza a disentir
+    DESARMONIA = "DESARMONIA"  # el contexto la contradice
 
 
 class ComponenteAcoplamiento(BaseModel):
@@ -411,8 +539,8 @@ class CausaDeLaDuda(str, Enum):
     fundido dice que la creencia no funciona y no dice por qué.
     """
 
-    DIRECCION = "direccion"      # lo que se miró disiente: cambiar de hipótesis
-    COBERTURA = "cobertura"      # casi nada se ha puesto a prueba: indagar
+    DIRECCION = "direccion"  # lo que se miró disiente: cambiar de hipótesis
+    COBERTURA = "cobertura"  # casi nada se ha puesto a prueba: indagar
     EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
 
 
@@ -475,7 +603,7 @@ class TrayectoriaDeLaCreencia(str, Enum):
     una trayectoria que nadie ha medido.
     """
 
-    SE_ROMPIO = "se_rompio"        # venía por encima del mínimo y cayó
+    SE_ROMPIO = "se_rompio"  # venía por encima del mínimo y cayó
     NUNCA_ARRAIGO = "nunca_arraigo"  # ya estaba por debajo la vez anterior
 
 
@@ -614,6 +742,26 @@ class ResultadoTic(BaseModel):
     texto_original: str
 
     origen: OrigenTic = OrigenTic.CONSULTA
+    tipo: TipoNota = Field(
+        default=TipoNota.EVOLUCION,
+        description="Qué clase de documento es. Por defecto, nota de evolución.",
+    )
+    episodio_id: str | None = Field(
+        default=None,
+        description=(
+            "El episodio al que pertenece. `None` en los tics anteriores a que "
+            "existieran los episodios, y ahí se lee como «sin episodio "
+            "declarado»: no se les inventa uno, porque agruparlos afirmaría "
+            "que pertenecieron al mismo ingreso y nadie lo sabe."
+        ),
+    )
+    ordinal_clinica: int | None = Field(
+        default=None,
+        description=(
+            "El «2» de clínica-2. Lo asigna el almacén al escribirla, no quien "
+            "la redacta: si dos sitios lo calcularan, un día diferirían."
+        ),
+    )
     actor: str | None = Field(
         default=None,
         description="Quién asertó estos datos. Sin autenticación es informativo.",
@@ -687,10 +835,10 @@ class ResultadoTic(BaseModel):
     todas_vetadas: str | None = Field(
         default=None,
         description=(
-            'Se rellena cuando el grafo propuso candidatas y el veto las retiró '
-            'TODAS. No es «no encontré hipótesis»: es que todo lo que este '
-            'paciente sugiere es estructuralmente imposible, y eso o pide '
-            'ampliar el ámbito o dice que los antecedentes están mal.'
+            "Se rellena cuando el grafo propuso candidatas y el veto las retiró "
+            "TODAS. No es «no encontré hipótesis»: es que todo lo que este "
+            "paciente sugiere es estructuralmente imposible, y eso o pide "
+            "ampliar el ámbito o dice que los antecedentes están mal."
         ),
     )
 

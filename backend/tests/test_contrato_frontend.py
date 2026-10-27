@@ -30,9 +30,7 @@ import pytest
 
 from holonmed import models as m
 
-TYPES_TS = (
-    Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "types.ts"
-)
+TYPES_TS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "types.ts"
 
 pytestmark = pytest.mark.skipif(
     not TYPES_TS.exists(), reason="no hay frontend en este árbol"

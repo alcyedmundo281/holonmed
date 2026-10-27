@@ -19,6 +19,7 @@ condicion:
 ambito_grafo:
   - HM:0200   # Dolor
   - HM:0600   # Signo de exploración
+  - HM:0710   # Alteración hematológica
   - HM:0900   # Hallazgo de imagen
   - HM:3069   # Sangrado vaginal en la gestación precoz
 
@@ -108,13 +109,32 @@ signos:
     # Crochet JR et al. JAMA 2013;309:1722-9. PMID 23613077.
     # doi:10.1001/jama.2013.3914.
 
+  - nombre: hCG sérica cuantitativa
+    codigos: { holonmed: "HM:3189" }
+    rol: prueba_especifica
+    # el índice publica este cociente PARA UN UMBRAL y el motor no evalúa el
+    # valor medido: aplicado tal cual, cualquier mención de la prueba
+    # recibiría el cociente. No se traslada. Modela el corte como criterio
+    # de `laboratorio` y cuelga el cociente del hallazgo umbralizado.
+    # LR+ 2.3 para hCG > 1500 mIU/mL
+    # LR− 0.91 para hCG > 1500 mIU/mL
+    # Condous G et al. Ultrasound Obstet Gynecol 2005;26:770-5. PMID
+    # 16308901. doi:10.1002/uog.2636. LR+ umbral: hCG > 1500 mIU/mL. LR−
+    # umbral: hCG > 1500 mIU/mL. Población: 527 mujeres con embarazo de
+    # localización no determinada (PUL) tras ecografía transvaginal en
+    # unidad especializada. Ningún valor aislado de hCG por encima de la
+    # zona discriminatoria confirma el ectópico, y un valor por debajo nunca
+    # lo descarta (LR− 0.90-0.94). La zona discriminatoria define cuándo un
+    # embarazo intrauterino viable debería verse, no cuándo un embarazo es
+    # obligadamente ectópico.
+
 # De dónde salió este archivo. No lo edites a mano: si vuelves a
 # pasar el conversor, se regenera y el PR queda auditable.
 procedencia:
   indice: medsemiotics-db
   condicion: HM:6016
-  commit: 22f8b9c
-  generado: 2026-08-23
+  commit: 9505ae0
+  generado: 2026-10-10
   herramienta: scripts/convertir_condicion.py
 ---
 
@@ -147,7 +167,17 @@ ROL: ginecólogo experto, basado en evidencia.
    abdominal y sangrado vaginal en la gestación precoz son lo que trae a
    la paciente a consulta, no lo que diagnostica: no tienen cociente
    propio en este modelo.
-5. No infieras lo que no está escrito. Un dato que falta se pide, no
+5. **Un embarazo intrauterino confirmado en la ecografía lo vuelve muy
+   improbable, pero no lo descarta.** El embarazo heterotópico existe,
+   sobre todo tras reproducción asistida, y un seudosaco (colección
+   endometrial central sin saco vitelino ni embrión) no es este hallazgo.
+   Regístralo como dato; este protocolo no lo trata como exclusión.
+   Sin intrauterino confirmado no hay alta: hay un embarazo de
+   localización no determinada.
+6. **La hCG no tiene cociente aquí.** El índice lo publica para un umbral
+   (hCG > 1500 mIU/mL) que este modelo no evalúa. Regístrala como dato;
+   ningún valor aislado confirma ni descarta el ectópico.
+7. No infieras lo que no está escrito. Un dato que falta se pide, no
    se supone.
 
 ## Lo que la fuente concluye

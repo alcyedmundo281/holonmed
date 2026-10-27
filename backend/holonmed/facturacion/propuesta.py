@@ -131,7 +131,9 @@ GENERICOS = {
 class ProponedorOrdenes:
     """Extrae órdenes candidatas del plan, sin crear ninguna."""
 
-    def __init__(self, skills: SkillManager, llm: OllamaClient, terminologia, settings=None):
+    def __init__(
+        self, skills: SkillManager, llm: OllamaClient, terminologia, settings=None
+    ):
         self.skills = skills
         self.llm = llm
         self.terminologia = terminologia
@@ -166,8 +168,8 @@ class ProponedorOrdenes:
             detalle = {
                 clave: str(cruda[clave]).strip()
                 for clave in ("dosis", "via", "frecuencia", "duracion")
-                if cruda.get(clave) and str(cruda[clave]).strip().lower()
-                not in {"null", "none", "n/a", "-"}
+                if cruda.get(clave)
+                and str(cruda[clave]).strip().lower() not in {"null", "none", "n/a", "-"}
             }
 
             propuesta = OrdenPropuesta(
@@ -187,9 +189,7 @@ class ProponedorOrdenes:
                 propuesta.reconocida = True
 
             if detalle.get("dosis"):
-                propuesta.faltantes = [
-                    c for c in CLAVES_MEDICACION if not detalle.get(c)
-                ]
+                propuesta.faltantes = [c for c in CLAVES_MEDICACION if not detalle.get(c)]
 
             propuesta.generico = termino.strip().lower() in GENERICOS
 

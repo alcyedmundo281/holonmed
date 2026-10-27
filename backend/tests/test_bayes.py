@@ -59,9 +59,7 @@ def test_la_evidencia_no_validada_no_mueve_la_aguja():
     motor = AntigenPresentingCell()
     base = motor.calcular({}, SKILL, [])
     for estado in (EstadoInfon.ALERTA, EstadoInfon.RUIDO):
-        resultado = motor.calcular(
-            {}, SKILL, [infon("Hiperlipasemia (>3x)", estado)]
-        )
+        resultado = motor.calcular({}, SKILL, [infon("Hiperlipasemia (>3x)", estado)])
         assert resultado.probabilidad_porcentaje == base.probabilidad_porcentaje
         assert resultado.evidencia_utilizada == []
 
@@ -94,9 +92,7 @@ def test_skill_sin_modelo_bayesiano_no_inventa_uno():
 
 def test_emparejamiento_por_termino_parcial():
     """'Hiperlipasemia' debe casar con la clave 'Hiperlipasemia (>3x)'."""
-    resultado = AntigenPresentingCell().calcular(
-        {}, SKILL, [infon("Hiperlipasemia")]
-    )
+    resultado = AntigenPresentingCell().calcular({}, SKILL, [infon("Hiperlipasemia")])
     assert len(resultado.evidencia_utilizada) == 1
 
 
@@ -110,6 +106,46 @@ def test_veredicto_por_umbrales():
         [infon("Hiperlipasemia (>3x)"), infon("Dolor epigástrico")],
     )
     assert alta.veredicto in {"PROBABLE", "HIPOTESIS_CONFIRMADA"}
+
+
+def test_un_a_priori_alto_sin_evidencia_no_es_una_conclusion():
+    """Sin ningún hallazgo con LR el veredicto no pasa de BAJA_SOSPECHA,
+    por alta que sea la probabilidad que sale sólo del a priori."""
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {
+            "probabilidad_base": 0.09,
+            "factores_riesgo_a_priori": {"cirugía": 21.7},
+        },
+        "signDetected": [{"name": "Hallazgo con LR", "bayes_lr": 5.0}],
+    }
+    resultado = AntigenPresentingCell().calcular(
+        {"antecedentes": "cirugía de cadera"}, skill, []
+    )
+    assert resultado.probabilidad_porcentaje > 50
+    assert resultado.evidencia_utilizada == []
+    assert resultado.veredicto == "BAJA_SOSPECHA"
+
+
+def test_un_hallazgo_sin_lr_tampoco_levanta_el_veredicto():
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {"probabilidad_base": 0.8},
+        "signDetected": [{"name": "Con LR", "bayes_lr": 5.0}],
+    }
+    resultado = AntigenPresentingCell().calcular({}, skill, [infon("Sin LR")])
+    assert resultado.veredicto == "BAJA_SOSPECHA"
+
+
+def test_con_evidencia_con_lr_el_veredicto_vuelve_a_depender_de_la_probabilidad():
+    skill = {
+        "name": "Hipótesis",
+        "modelo_bayesiano": {"probabilidad_base": 0.4},
+        "signDetected": [{"name": "Con LR", "bayes_lr": 5.0}],
+    }
+    # odds 0.667 × 5 = 3.33 -> 76.9 %
+    resultado = AntigenPresentingCell().calcular({}, skill, [infon("Con LR")])
+    assert resultado.veredicto == "PROBABLE"
 
 
 def test_los_factores_de_riesgo_de_la_nota_actual_cuentan():
@@ -200,9 +236,7 @@ def test_una_prueba_negativa_baja_la_probabilidad():
 
 def test_la_presencia_y_la_ausencia_van_en_direcciones_opuestas():
     motor = AntigenPresentingCell()
-    presente = motor.calcular(
-        {}, SKILL_CON_LR_NEGATIVO, [infon("Hiperlipasemia (>3x)")]
-    )
+    presente = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [infon("Hiperlipasemia (>3x)")])
     ausente = motor.calcular(
         {}, SKILL_CON_LR_NEGATIVO, [infon_ausente("Hiperlipasemia (>3x)")]
     )

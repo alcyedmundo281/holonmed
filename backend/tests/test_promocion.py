@@ -46,8 +46,12 @@ def skill():
 
 def infon(termino, polaridad=Polaridad.PRESENTE, estado=EstadoInfon.VALIDADO):
     return Infon(
-        texto_origen=termino, termino_propuesto=termino, termino=termino,
-        polaridad=polaridad, estado=estado, confianza=95.0,
+        texto_origen=termino,
+        termino_propuesto=termino,
+        termino=termino,
+        polaridad=polaridad,
+        estado=estado,
+        confianza=95.0,
         razon_auditoria="[lexico] emparejado",
     )
 
@@ -55,7 +59,8 @@ def infon(termino, polaridad=Polaridad.PRESENTE, estado=EstadoInfon.VALIDADO):
 def inferencia(porcentaje):
     return InferenciaBayesiana(
         diagnostico="Faringitis estreptocócica",
-        probabilidad_porcentaje=porcentaje, probabilidad_previa=0.1,
+        probabilidad_porcentaje=porcentaje,
+        probabilidad_previa=0.1,
     )
 
 
@@ -64,12 +69,15 @@ TUPLA = ["Odinofagia", "Adenopatía cervical anterior dolorosa", "Exudado amigda
 
 # --- La tupla ---------------------------------------------------------------
 
+
 def test_con_los_tres_elementos_y_el_umbral_promueve(skill):
-    r = EvaluadorDePromocion().evaluar(
-        skill, [infon(t) for t in TUPLA], inferencia(94)
-    )
+    r = EvaluadorDePromocion().evaluar(skill, [infon(t) for t in TUPLA], inferencia(94))
     assert r.promueve
-    assert r.cumplido == {"manifestacion": 1, "prueba_sensible": 1, "prueba_especifica": 1}
+    assert r.cumplido == {
+        "manifestacion": 1,
+        "prueba_sensible": 1,
+        "prueba_especifica": 1,
+    }
 
 
 @pytest.mark.parametrize("falta", TUPLA)
@@ -106,7 +114,9 @@ def test_una_prueba_sensible_NEGATIVA_impide_promover(skill):
 
 def test_una_ausencia_documentada_satisface_si_el_signo_dispara_por_ausencia():
     """«Positiva» es la polaridad que sostiene la hipótesis, no «presente»."""
-    skill = Skill("x", """---
+    skill = Skill(
+        "x",
+        """---
 titulo: X
 promocion:
   exige: {manifestacion: 1}
@@ -117,7 +127,8 @@ signos:
 ---
 
 P
-""")
+""",
+    )
     r = EvaluadorDePromocion().evaluar(
         skill, [infon("Dolor al caminar", Polaridad.AUSENTE)]
     )
@@ -126,10 +137,9 @@ P
 
 # --- El umbral, con sus tres estados ----------------------------------------
 
+
 def test_por_debajo_del_umbral_no_promueve_y_dice_que_es_por_el_umbral(skill):
-    r = EvaluadorDePromocion().evaluar(
-        skill, [infon(t) for t in TUPLA], inferencia(71)
-    )
+    r = EvaluadorDePromocion().evaluar(skill, [infon(t) for t in TUPLA], inferencia(71))
     assert not r.promueve
     assert not r.faltan, "la tupla estaba completa: el motivo es el umbral"
     assert r.umbral_cumplido is False
@@ -150,7 +160,9 @@ def test_sin_probabilidad_el_umbral_no_se_declara_incumplido(skill):
 
 
 def test_sin_umbral_declarado_basta_la_tupla():
-    skill = Skill("x", """---
+    skill = Skill(
+        "x",
+        """---
 titulo: X
 promocion:
   exige: {manifestacion: 1}
@@ -160,7 +172,8 @@ signos:
 ---
 
 P
-""")
+""",
+    )
     r = EvaluadorDePromocion().evaluar(skill, [infon("Odinofagia")], None)
     assert r.promueve
     assert r.umbral_cumplido is None
@@ -168,12 +181,17 @@ P
 
 # --- Qué evidencia cuenta ---------------------------------------------------
 
+
 def test_solo_cuenta_la_evidencia_validada(skill):
     """Un hallazgo en ALERTA se le muestra al clínico y no promueve nada."""
     infones = [infon(t, estado=EstadoInfon.ALERTA) for t in TUPLA]
     r = EvaluadorDePromocion().evaluar(skill, infones, inferencia(99))
     assert not r.promueve
-    assert r.cumplido == {"manifestacion": 0, "prueba_sensible": 0, "prueba_especifica": 0}
+    assert r.cumplido == {
+        "manifestacion": 0,
+        "prueba_sensible": 0,
+        "prueba_especifica": 0,
+    }
 
 
 def test_un_signo_cuenta_una_vez_aunque_lo_toquen_dos_infones(skill):
@@ -185,6 +203,7 @@ def test_un_signo_cuenta_una_vez_aunque_lo_toquen_dos_infones(skill):
 
 # --- Que no haya regla no es que la regla falle -----------------------------
 
+
 def test_un_protocolo_sin_promocion_devuelve_None():
     """None dice «nadie ha declarado qué haría falta»; un veredicto que no
     promueve dice «la tupla no se completó». Son cosas distintas."""
@@ -194,10 +213,13 @@ def test_un_protocolo_sin_promocion_devuelve_None():
 
 # --- El esquema se denuncia a sí mismo --------------------------------------
 
+
 def test_un_rol_desconocido_en_la_tupla_se_denuncia():
     """Exigir un rol que nadie puede satisfacer haría la promoción imposible
     sin decir por qué. Lista blanca, como `efecto` y `dispara_si`."""
-    skill = Skill("x", """---
+    skill = Skill(
+        "x",
+        """---
 titulo: X
 promocion:
   exige: {prueba_magica: 1}
@@ -206,7 +228,8 @@ signos:
 ---
 
 P
-""")
+""",
+    )
     assert any("prueba_magica" in p for p in skill.problemas())
     assert "prueba_magica" not in skill.promocion.exige
 
@@ -219,7 +242,9 @@ def test_un_umbral_sin_motivo_se_denuncia():
     justamente porque no hay PMID que decir que un paciente sin apéndice no
     puede tener apendicitis.
     """
-    skill = Skill("x", """---
+    skill = Skill(
+        "x",
+        """---
 titulo: X
 promocion:
   umbral_postest: 0.9
@@ -228,12 +253,15 @@ signos:
 ---
 
 P
-""")
+""",
+    )
     assert any("sin `motivo`" in p for p in skill.problemas())
 
 
 def test_un_umbral_fuera_de_rango_no_se_acepta():
-    skill = Skill("x", """---
+    skill = Skill(
+        "x",
+        """---
 titulo: X
 promocion:
   umbral_postest: 90
@@ -243,6 +271,7 @@ signos:
 ---
 
 P
-""")
+""",
+    )
     assert skill.promocion.umbral_postest is None
     assert any("fuera de (0, 1]" in p for p in skill.problemas())

@@ -35,8 +35,19 @@ jobs:
         run: git clone --depth 1 https://github.com/alcyedmundo281/medsemiotics-db.git ../../medsemiotics-db
         working-directory: backend
 
+      # Las cuatro puertas, en el orden en que cuesta menos fallar: primero
+      # lo que se arregla solo, luego lo que exige pensar.
       - name: Linter
         run: ruff check .
+
+      - name: Formato
+        run: ruff format --check .
+
+      - name: Tipos
+        # Caza la clase de fallo que este dominio no puede permitirse: un
+        # `None` que se multiplica, un atributo que el tipo no garantiza.
+        # No sustituye a las pruebas; llega antes que ellas.
+        run: mypy
 
       - name: Tests
         # No requieren Ollama ni ninguna terminología externa: el pipeline
@@ -50,6 +61,15 @@ jobs:
         run: |
           python scripts/importar_terminologia.py --semilla
           python scripts/importar_terminologia.py --estado
+
+      - name: La base definida se sostiene
+        # Weed: la lista de problemas es un artefacto de la base. Una base
+        # declarada que nadie recorre se pudre en silencio —`resumen_vivo`
+        # llevaba así desde el primer día— y con ella se pudre la única
+        # garantía de que la lista de problemas no dependa de quién preguntó.
+        run: |
+          python -m holonmed.cli base --validar | tee /tmp/base.txt
+          grep -q "Todas las bases son válidas" /tmp/base.txt
 
       - name: Los protocolos anclan lo que acuñan
         # Con el vocabulario ya cargado, comprueba que ningún protocolo

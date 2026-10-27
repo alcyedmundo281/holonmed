@@ -1,192 +1,150 @@
-# HolonMed v0.4.0
+# HolonMed v0.5.0
 
-La versión en la que el sistema deja de terminar en el diagnóstico y llega
-hasta la cuenta, sin que en ningún punto haya que fiarse de un modelo de
-lenguaje.
+La versión en la que el sistema deja de contestar sólo *cuánta* evidencia
+hay y empieza a contestar *si el argumento se sostiene* — y, cuando no se
+sostiene, por qué y hacia dónde ir.
 
-Tres cosas nuevas, y todas descansan sobre la misma idea: **una orden
-médica es un acto de autorización de una persona**. Lo que el modelo hace
-es proponer; lo que el código hace es impedir que una propuesta pase por
-autorización.
+Bayes suma, y una suma pierde información sobre sus sumandos. Dos historias
+pueden dar el mismo posterior siendo cosas clínicamente distintas: en una,
+todo apunta al mismo sitio y nada del paciente queda sin explicar; en otra,
+una única prueba muy específica arrastra la probabilidad mientras cuatro
+hallazgos hablan de otra enfermedad. La segunda tiene nombre —**sesgo de
+anclaje**— y un sistema que sólo muestre la probabilidad no protege de ese
+error: **lo autoriza con un número**.
 
-## La facturación empieza en la orden, no en la factura
+Todo lo que sigue nace de ahí.
 
-La cadena no permite saltarse ningún eslabón:
+## Φ, y por qué hubo que partirlo en tres
+
+El Coeficiente de Acoplamiento mide la dimensión que la probabilidad no ve:
+si la hipótesis, **tomada como regla de acción**, armoniza con el paciente
+entero. Φ = α · cos(h, e), donde α es el anclaje documental del protocolo y
+el coseno es el acoplamiento entre lo que la hipótesis afirma y lo que el
+paciente presenta.
+
+Pero un coseno fundido dice que la creencia no funciona y no dice por qué.
+Partirlo es lo que convierte una alarma en una instrucción:
 
 ```
-plan de la nota ──► ORDEN ──► ejecución del actor ──► cargo
-                      ↑                 ↑
-                  autoriza       confirma que se hizo
+cos = dirección · √(cobertura · explicación)
 ```
 
-`cargo` referencia siempre una `orden`. Sin autorización no hay cargo, y no
-porque se lo pidamos amablemente a un modelo en un prompt, sino porque no
-existe la fila. La propiedad antifraude es **estructural**.
+| Factor | Qué mide | Qué significa que esté bajo |
+|--------|----------|-----------------------------|
+| **dirección** | de lo mirado, cuánto concuerda | lo que se miró **disiente** |
+| **cobertura** | de lo que la hipótesis afirma, cuánto se puso a prueba | la hipótesis está **sin comprobar** |
+| **explicación** | de lo que el paciente tiene, cuánto cae dentro | la hipótesis **no explica al paciente** |
 
-Eso hace que el módulo se llame `conciliacion` y no `facturador`: factura
-como efecto secundario de comprobar que lo ordenado se cumplió. De los tres
-resultados de esa comprobación, sólo uno es de dinero:
+Los tres factores se exponen también en la lectura categórica, para los
+protocolos que no declaran likelihood ratios. Antes, el Φ categórico era
+ciego al resto no simbolizado, que es justo donde vive el anclaje.
 
-| Situación | Qué significa |
-|-----------|---------------|
-| Orden sin ejecución | El paciente no recibió lo prescrito |
-| Ejecución sin orden | Administración no autorizada |
-| Orden + ejecución | Facturable |
+## dΦ/dt: la duda es un movimiento, no una foto
 
-Los dos primeros son incidentes clínicos que hoy se detectan tarde o nunca.
-El mismo mecanismo que cuadra la cuenta cuadra la medicación, y de las dos
-cosas la segunda importa más.
+`Acoplamiento.duda` existía desde el primer día y **nadie la leía**. El
+sistema calculaba que su hipótesis había dejado de funcionar como regla de
+acción, y seguía adelante sin decirlo.
 
-También cambia *cuándo* se calcula. Las horas de espera al alta no son un
-problema de velocidad de proceso sino de arquitectura: la cuenta se
-calculaba en bloque al final. Aquí los cargos se acumulan según se
-concilian, y consultar la cuenta no recalcula nada.
+La duda no es el veto, y la distinción importa: un veto dice que el
+diagnóstico es imposible y **termina** la pregunta; una duda dice que el
+argumento dejó de sostenerse con lo que hay y la **reabre**. Por eso la
+salida no es un recálculo sino algo accionable — preguntas, o una orden de
+prueba cuya respuesta llegará en otro tic.
 
-**Los tarifarios son un vocabulario más.** Se cargan con su `sistema` y su
-fecha de vigencia, y el enlace entre concepto clínico y código facturable
-usa la misma tabla `mapeo` que SNOMED o CIE-10. No hay mecanismo nuevo:
-cada hospital o aseguradora carga el suyo y el resto del sistema no se
-entera. Una entrada antigua nunca se sobrescribe, porque una cuenta de hace
-un año debe poder reconstruirse con los precios de entonces.
+Y aquí es donde se cobra lo de partir el coseno, porque cada porqué manda a
+un sitio distinto:
+
+- **dirección baja** → no se arregla mirando más: cada dato que confirme lo
+  ya visto la hunde más. Se arregla **cambiando de hipótesis**.
+- **cobertura baja** → ésta es la duda que se resuelve **indagando**, y el
+  sistema ya calculó por dónde: la dimensión donde la hipótesis hace su
+  afirmación más fuerte y nadie ha mirado todavía.
+- **explicación baja** → la hipótesis puede ser cierta y ser irrelevante.
+  Es la forma que toma el sesgo de anclaje, y se resuelve **volviendo a la
+  abducción**.
+
+## La competencia abductiva, y por qué viene apagada
+
+La etapa que se llamaba «inferencia abductiva» era Bayes, y Bayes no genera
+hipótesis: pesa una que ya alguien eligió. La abducción real ocurría en el
+triaje —un prompt— y de él colgaba todo lo demás: la validación de tres
+capas, el veto, los cocientes con su cita y el coseno. Era **la pieza menos
+medida del sistema, en el sitio más temprano**.
+
+Peirce lo llamaría abducción: *se observa el hecho sorprendente C; si A
+fuera verdadera, C sería de curso natural; luego hay razón para sospechar
+A*. Un coseno alto es exactamente eso, así que elegir la A que maximiza
+cos(h, e) **es** la regla abductiva escrita como argmax — y el grafo del
+paciente puede proponer las candidatas sin preguntarle nada al modelo.
+
+El mecanismo está construido y **no está encendido**. `HOLONMED_ABDUCCION_DECIDE`
+vale `false` por defecto, y es deliberado: el propio diseño puso una
+precondición que hoy no se cumple —«antes de sustituir el prompt por esa
+regla hay que saber cuánto se equivoca»— y esa cifra sale del acuerdo del
+triaje sobre el histórico, que todavía no existe. Encenderla sin ella sería
+cambiar el mecanismo que elige el diagnóstico apoyándose en una intuición,
+que es exactamente lo que la competencia existe para evitar.
+
+El interruptor gobierna la forma, no sólo el voto:
+
+```
+apagada     una lectura, con el protocolo del triaje. Sin segunda pasada.
+encendida   lectura genérica, competencia, relectura con la ganadora.
+```
+
+La competencia **mide en los dos modos**. Un interruptor que apagara también
+la medida haría imposible justificar nunca el encendido.
+
+## La tupla: cuándo un problema pasa a ser diagnóstico
+
+Weed separó esa pregunta en 1968 y el sistema la tenía fundida con la
+probabilidad. Una probabilidad alta no promueve por sí sola: un dato fuerte
+puede empujarla al 95 % con el resto del cuadro sin mirar.
+
+Promover exige tres cosas a la vez, y las tres tienen que estar:
+
+| | Rol | |
+|---|---|---|
+| una clínica positiva | `manifestacion` | |
+| una prueba sensible positiva | `prueba_sensible` | SnNOut |
+| una prueba específica positiva | `prueba_especifica` | SpPIn |
+
+Exigir la sensible **en positivo** parece redundante junto a la específica y
+no lo es: significa que **una sensible negativa impide la promoción**. Es
+SnNOut usado como compuerta.
+
+## Conocimiento nuevo
+
+Cuatro protocolos, traídos del índice `medsemiotics-db` con el conversor:
+**síndrome coronario agudo**, **embarazo ectópico**, **conjuntivitis
+bacteriana** y **apnea obstructiva del sueño**.
+
+El vocabulario semilla pasa de **1.3.0 con 136 conceptos** a **1.6.0 con
+209**. Y los protocolos ahora se validan también por lo que **acuñan**, no
+sólo por lo que consumen: un código colgado en la condición que representa
+o en el término que su clasificación acuña no fallaba, emitía el
+diagnóstico sin linaje ni CIE-10, en silencio. Ahora CI lo caza.
+
+## Las cuatro puertas, y el contrato que las declara
+
+De los cuatro gates que el contrato da por no negociables sólo corrían dos.
+Ahora corren los cuatro, en CI y en local:
 
 ```bash
-python scripts/importar_tarifario.py --json tarifario_hospital.json
-python scripts/importar_tarifario.py --csv tarifas.csv --sistema privado
+ruff check . && ruff format --check . && mypy && pytest -q
 ```
 
-Mismo principio de licencias que con la terminología: el código que lee los
-catálogos es libre, los catálogos los aporta quien tenga derecho a usarlos.
-El repositorio incluye uno de demostración con importes inventados para que
-el circuito pueda recorrerse recién clonado.
+`AGENTS.md` es el contrato que faltaba, y tiene un apartado incómodo a
+propósito: **«Lo que todavía no es cierto»**. La auditoría append-only que
+incluya lecturas, la tabla de política y la aprobación humana nombrada son
+requisitos vigentes y sin implementar. Escribirlos como si existieran habría
+sido la primera mentira del documento.
 
-## El botón junto al plan: proponer no es autorizar
+## Lo que este release no es
 
-El eslabón que más trabajo cuesta en la vida real es el primero, pasar de
-lo que el médico escribe a una orden estructurada. HolonMed lee el plan y
-**propone**; el médico firma con un clic.
+No hay ningún cambio que acerque el sistema a emitir una conclusión
+directiva. Φ, la duda y la promoción **describen el estado del argumento**;
+ninguna decide por nadie, y la competencia abductiva —lo único que podría
+cambiar qué hipótesis se persigue— viene apagada.
 
-```
-POST /api/facturacion/ordenes/proponer    devuelve borradores, no escribe
-POST /api/facturacion/ordenes/autorizar   crea las órdenes reales
-```
-
-Son dos endpoints a propósito. Entre ellos está la firma, que es lo único
-que convierte un texto sugerido por un modelo en algo que obliga a otros a
-actuar. La propuesta no toca la base y no tiene identificador de orden: no
-puede facturar nada aunque alguien se equivoque de llamada.
-
-El borrador es editable, y lo es porque probarlo con el modelo local mostró
-exactamente cómo falla. Con `gemma-4-E4B`, «Ondansetrón 8 mg si náusea»
-volvía como término **«Medicamento»**, y «morfina 3 mg IV» como
-«Administración intravenosa»: el fármaco desaparecía justo de la orden que
-manda administrarlo. Una regla en el prompt lo corrigió, pero como volverá
-a fallar quedan dos defensas que no dependen del modelo:
-
-- **Una categoría genérica se marca y no se corrige sola.** Adivinar cuál
-  era el fármaco es precisamente lo que no debe hacer.
-- **Lo que el plan no especifica se muestra como hueco vacío**, nunca
-  relleno a ojo. Un hueco visible se corrige antes de firmar; uno inventado
-  se firma sin mirar y acaba administrándose.
-
-Cambiar el término borra el código asociado: un código que ya no
-corresponde al término factura otra cosa.
-
-## Protocolos operativos por rol
-
-`tipo: operativo` describe lo que debe constar cuando un actor cumple una
-orden. `enfermeria.md` y `farmacia.md` declaran sus campos en YAML.
-
-Lo valioso no es lo que extraen sino **lo que señalan que falta**. Un
-registro a medias es una causa real de que un procedimiento no se cobre —no
-es que no se haga, es que se documenta a medias mientras se atiende— y aquí
-se detecta cuando todavía se puede corregir:
-
-```
-completo: false
-faltantes: ['Horario indicado', 'Horario de administración']
-```
-
-La cuenta se exporta en XML, JSON o CSV, con la orden y la ejecución dentro
-de cada línea: un cargo sin su orden no se puede defender ante una
-auditoría. HolonMed no conoce el esquema de ningún organismo ni hospital y
-no debería; entrega la estructura trazable y el mapeo al esquema de cada
-sitio es una capa de integración de ese despliegue. Por la misma razón,
-`referencias` es un diccionario libre: las claves las decide quien
-despliega, no este repositorio.
-
-## Los criterios de clasificación son bayesianos, y lo ausente informa
-
-Un criterio diagnóstico parece booleano, pero tiene casi siempre la misma
-forma: **manifestación de alta sospecha + prueba sensible + prueba
-específica**. Eso es razonamiento bayesiano congelado en una regla, y ahora
-el sistema lo trata como tal.
-
-- **`lr_negativo`**: la ausencia documentada de un signo mueve la
-  probabilidad igual que su presencia. Una lipasa normal es información,
-  no silencio.
-- **«No consta» no es «ausente».** Un auditor aparte decide si el texto
-  niega el hallazgo o simplemente no lo menciona, y sólo la negación
-  explícita produce evidencia. El silencio no genera ningún infón.
-- **Infones de nivel 2.** Cuando los criterios de clasificación se
-  satisfacen, el sistema acuña el término del trastorno (Atlanta 2012 para
-  pancreatitis aguda) **derivándolo de los hallazgos**, no citándolo de la
-  narrativa. Es lo que hace un clínico experimentado al reunir varios
-  hallazgos anormales bajo un nombre.
-- **Lo que falta pregunta.** Si un criterio queda sin datos, el sistema
-  propone la prueba que lo resolvería — y no vuelve a pedir algo que ya
-  salió normal.
-
-## Los cortes del protocolo llegan al modelo, y se midió cómo presentarlos
-
-Los cortes de laboratorio declarados en el frontmatter no estaban llegando
-al prompt: el modelo auditaba sin saber el umbral que tenía que aplicar.
-
-Al arreglarlo apareció la pregunta de en qué formato presentarlos, y en vez
-de decidirlo por intuición se midió, con tres variantes sobre la misma
-nota. La hipótesis de partida —mía— era que las etiquetas tipo XML
-ayudarían a localizar el dato:
-
-| Variante | Validados | Alertas | Inventados |
-|----------|-----------|---------|------------|
-| `minimo` (sin cortes) | 27/33 | 3 | **9** |
-| `prosa` | 24/27 | 12 | 0 |
-| `etiquetas` (estilo XML) | 21/24 | 12 | 0 |
-
-Dos conclusiones, una de ellas contra lo que yo esperaba:
-
-**El formato no importa.** `prosa` y `etiquetas` son indistinguibles. La
-hipótesis de las etiquetas queda refutada con este modelo y esta nota, así
-que el sistema usa prosa por defecto: misma fiabilidad, ~10 % menos de
-tokens.
-
-**Cuidado con la métrica fácil.** `minimo` es el que más hallazgos valida en
-términos absolutos y es el peor de los tres: sin los cortes reales, el
-modelo se inventó nueve. Contar validados sin mirar de dónde salen premia
-justo el comportamiento que este proyecto existe para impedir.
-
-Eso deja el criterio del proyecto sobre XML donde debe estar: **XML donde
-un tercero con esquema consume el documento —la exportación de la cuenta—;
-prosa donde lo lee un modelo de lenguaje.**
-
-## Lo que sigue sin estar validado
-
-Con la misma franqueza de siempre: **no hay corpus anotado de referencia.**
-Todo lo medido aquí sale de una nota de prueba y de ejecuciones manuales
-contra el modelo local. Sirve para detectar fallos gruesos —y ha detectado
-unos cuantos— pero no es validación clínica y no debe presentarse como tal.
-
-Sigue siendo una herramienta de apoyo a la decisión, sin autenticación, no
-es un dispositivo médico, y ninguna de sus salidas sustituye el juicio de
-un profesional sanitario.
-
-## Migración desde v0.3.0
-
-El esquema añade las tablas de la cadena de facturación y algunas columnas.
-La migración es automática al arrancar y no toca los datos existentes. No
-hay cambios incompatibles en la API previa.
-
-Los protocolos operativos ya no aparecen en `/api/skills`: viven en
-`/api/facturacion/roles`. Si algo consumía esa lista esperando encontrar
-`enfermeria` o `farmacia`, ahí están.
-
-151 tests, ruff limpio, CI en verde.
+Sigue sin ser un dispositivo médico. Lee [DISCLAIMER.md](../DISCLAIMER.md).

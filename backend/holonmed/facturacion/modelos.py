@@ -58,6 +58,37 @@ class TipoDescuadre(str, Enum):
     EJECUCION_SIN_ORDEN = "ejecucion_sin_orden"
 
 
+class Solicitante(str, Enum):
+    """Quién ORIGINÓ la petición, que no es quién la firmó.
+
+    `prescriptor` dice quién autoriza, y esa firma es innegociable: el
+    contrato exige aprobación humana nombrada antes de cualquier acción que
+    salga del sistema, y pedir un laboratorio lo es. Φ y Bayes NO ordenan.
+
+    Pero si sólo se guarda la firma, todas las órdenes se parecen y no hay
+    forma de saber nunca si lo que el sistema sugiere vale algo. Es el mismo
+    argumento por el que `triaje_coincide` se persiste aunque la competencia
+    abductiva no decida: sin registrar quién lo propuso, la medida que
+    justificaría hacerle caso no existe.
+
+    Las tres fuentes automáticas piden por razones distintas, y por eso se
+    distinguen en vez de colapsarse en un genérico «el sistema»:
+
+    * `ACOPLAMIENTO` — Φ señala la dimensión donde la hipótesis hace su
+      afirmación más fuerte y nadie ha mirado. Pide para resolver una duda
+      de cobertura.
+    * `BAYES` — el hallazgo cuyo likelihood ratio más movería la
+      probabilidad. Pide para separar hipótesis.
+    * `PROMOCION` — la pieza que falta de la tupla. Pide para poder
+      promover un problema a diagnóstico, no para saber más.
+    """
+
+    MEDICO = "medico"
+    ACOPLAMIENTO = "acoplamiento"
+    BAYES = "bayes"
+    PROMOCION = "promocion"
+
+
 class Orden(BaseModel):
     """Lo que el profesional autorizó. La fuente de verdad de la cadena."""
 
@@ -75,6 +106,14 @@ class Orden(BaseModel):
     # ante una auditoría ni ante el propio paciente.
     texto_origen: str = ""
     prescriptor: str | None = None
+    # Quién la originó. Por defecto el médico: es el caso que existía antes
+    # de que el sistema pudiera proponer, y el que no hay que anotar.
+    solicitante: Solicitante = Solicitante.MEDICO
+    # Por qué la pidió, cuando no la pidió una persona. La frase que Φ o la
+    # promoción ya producen: «sin ella no se puede descartar», «es la
+    # afirmación más fuerte que nadie ha comprobado». Se guarda porque una
+    # propuesta sin su razón es indefendible ante quien tiene que firmarla.
+    motivo: str = ""
 
     detalle: dict = Field(
         default_factory=dict,

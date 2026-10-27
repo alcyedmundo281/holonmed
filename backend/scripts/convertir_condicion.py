@@ -44,9 +44,9 @@ publicado desde la última corrida:
     python scripts/convertir_condicion.py --sync-all
     python scripts/convertir_condicion.py --sync-all --vocabulario vocabulario_nuevo.json
 
-Decide qué es «nuevo» por el nombre de archivo de destino en
-`backend/skills/`, igual que `--forzar` en el modo de una sola condición:
-si el archivo ya existe, no lo toca —un protocolo en uso lleva prosa
+Decide qué es «nuevo» por el código de condición que ya declaran los
+protocolos de `backend/skills/` y `backend/skills/borradores/`: si ya hay uno,
+no lo toca —un protocolo en uso lleva prosa
 escrita a mano que este script no reconstruye—. El vocabulario que falte
 de TODAS las condiciones nuevas se consolida en un solo archivo, sin
 repetir un concepto que ya pidió una condición anterior en la misma
@@ -81,6 +81,10 @@ import yaml
 
 RAIZ_REPO = Path(__file__).resolve().parents[2]
 DIRECTORIO_SKILLS = RAIZ_REPO / "backend" / "skills"
+# Los borradores de `--sync-all` viven aquí, un nivel por debajo: el cargador
+# de skills sólo lee `skills/*.md`, así que nada de lo que hay aquí llega al
+# triaje hasta que un humano le escribe la prosa y lo sube un nivel.
+DIRECTORIO_BORRADORES = DIRECTORIO_SKILLS / "borradores"
 RUTA_SEMILLA = RAIZ_REPO / "backend" / "data" / "vocabulario_semilla.json"
 INDICE_POR_DEFECTO = RAIZ_REPO.parent / "medsemiotics-db"
 
@@ -97,6 +101,7 @@ def _consola_en_utf8() -> None:
         if isinstance(flujo, io.TextIOWrapper):
             flujo.reconfigure(encoding="utf-8", errors="replace")
 
+
 # Roles del índice que holonmed entiende. Coinciden hoy; si el índice acuña
 # uno nuevo, el parseo de skills lo degradaría a «apoyo» en silencio, así que
 # se avisa aquí en vez de dejar que pase desapercibido.
@@ -105,7 +110,7 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 # Las dos taxonomías del eje `efecto`. Se repiten aquí y en `skills.py` por la
 # misma razón que `ROLES`: este script no importa el paquete. Que no diverjan lo
 # comprueba `test_las_taxonomias_del_eje_no_divergen`.
-EFECTOS = ("apoya", "bandera_roja", "excluye")
+EFECTOS = ("apoya", "bandera_roja", "excluye", "evidencia")
 POLARIDADES = ("presente", "ausente")
 
 # Claves de una arista que este conversor sabe traducir. Cada condición nueva
@@ -113,11 +118,26 @@ POLARIDADES = ("presente", "ausente")
 # modificadores—; lo que no esté aquí se anota como pendiente en vez de
 # perderse.
 CLAVES_ARISTA = {
-    "concepto", "rol", "estado_lr", "lr_positivo", "lr_negativo",
-    "motivo", "decision", "nota", "advertencia", "ref", "poblacion",
-    "sensibilidad", "especificidad", "ic95_sensibilidad", "ic95_especificidad",
+    "concepto",
+    "rol",
+    "estado_lr",
+    "lr_positivo",
+    "lr_negativo",
+    "motivo",
+    "decision",
+    "nota",
+    "advertencia",
+    "ref",
+    "poblacion",
+    "sensibilidad",
+    "especificidad",
+    "ic95_sensibilidad",
+    "ic95_especificidad",
     # Eje `efecto`: qué papel juega el hallazgo en un criterio contado.
-    "efecto", "dispara_si", "sostiene", "odds_ratio",
+    "efecto",
+    "dispara_si",
+    "sostiene",
+    "odds_ratio",
 }
 
 # Meter una clave en CLAVES_ARISTA sin emitirla la pasa de «denunciada» a
@@ -218,7 +238,9 @@ def _git(ruta: Path, *args: str) -> str:
     try:
         salida = subprocess.run(
             ["git", "-C", str(ruta), *args],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
         return ""
@@ -239,6 +261,9 @@ class Informe:
     def __init__(self) -> None:
         self.pendientes: list[tuple[str, str]] = []
         self.rutinarios: dict[str, list[str]] = {}
+        # Cuántos signos salieron con un LR+ o LR− utilizable. `bayes()` lo
+        # consulta: un modelo sin ningún cociente no puede calcular nada.
+        self.signos_con_lr = 0
 
     def pendiente(self, donde: str, texto: str) -> None:
         self.pendientes.append((donde, texto))
@@ -256,8 +281,10 @@ class Informe:
                 print(f"  · {donde}", file=sys.stderr)
                 print(
                     textwrap.fill(
-                        texto, width=ANCHO,
-                        initial_indent="      ", subsequent_indent="      ",
+                        texto,
+                        width=ANCHO,
+                        initial_indent="      ",
+                        subsequent_indent="      ",
                     ),
                     file=sys.stderr,
                 )
@@ -268,8 +295,10 @@ class Informe:
             print(f"\n--- {etiqueta} ({len(casos)}) ---", file=sys.stderr)
             print(
                 textwrap.fill(
-                    ", ".join(casos), width=ANCHO,
-                    initial_indent="  ", subsequent_indent="  ",
+                    ", ".join(casos),
+                    width=ANCHO,
+                    initial_indent="  ",
+                    subsequent_indent="  ",
                 ),
                 file=sys.stderr,
             )
@@ -297,7 +326,12 @@ def _escalar(valor: Any) -> str:
     texto = str(valor)
     if not texto:
         return '""'
-    if texto[0] in _INICIAL_ESPECIAL or ": " in texto or " #" in texto or texto != texto.strip():
+    if (
+        texto[0] in _INICIAL_ESPECIAL
+        or ": " in texto
+        or " #" in texto
+        or texto != texto.strip()
+    ):
         return '"' + texto.replace("\\", "\\\\").replace('"', '\\"') + '"'
     return texto
 
@@ -320,11 +354,15 @@ class Bloque:
         for linea in textwrap.wrap(_plano(texto), width=ANCHO - sangria) or [""]:
             self.lineas.append(prefijo + linea)
 
-    def campo(self, clave: str, valor: Any, sangria: int = 0, guion: bool = False) -> None:
+    def campo(
+        self, clave: str, valor: Any, sangria: int = 0, guion: bool = False
+    ) -> None:
         marca = "- " if guion else ""
         self.lineas.append(f"{' ' * sangria}{marca}{clave}: {_escalar(valor)}")
 
-    def prosa(self, clave: str, texto: str, sangria: int = 0, guion: bool = False) -> None:
+    def prosa(
+        self, clave: str, texto: str, sangria: int = 0, guion: bool = False
+    ) -> None:
         """Escalar plegado `>-`, que es como el índice guarda el texto largo."""
         marca = "- " if guion else ""
         self.lineas.append(f"{' ' * sangria}{marca}{clave}: >-")
@@ -579,6 +617,40 @@ def _decidir_efecto(
         )
         return None
 
+    if efecto == "excluye" and sostiene != "mecanismo":
+        # `excluye` es el veto ABSOLUTO de `veredicto.py` (la apendicectomía que
+        # excluye la apendicitis): precede a todo y no admite grados. Lo que el
+        # índice sostiene con una discriminación MEDIDA es un cociente, y un
+        # cociente de 0.2 no es una exclusión: un infarto con dolor pleurítico
+        # existe. Tampoco puede ser `apoya`, que invertiría el signo. Es
+        # `evidencia`: entra en la probabilidad por su LR y no decide nada.
+        # Sin ningún cociente utilizable no hay evidencia que trasladar.
+        if any(
+            isinstance(_lr(arista.get(c)).get("valor"), (int, float))
+            and _lr(arista.get(c))["valor"] > 0
+            for c in ("lr_positivo", "lr_negativo")
+        ):
+            return "evidencia", "presente"
+        informe.pendiente(
+            termino,
+            f"exclusión sostenida por «{sostiene or 'nada'}», no por mecanismo, y "
+            f"sin ningún cociente utilizable: `excluye` sería un veto absoluto y "
+            f"no hay LR con que trasladarla. No entra en el bloque estructurado",
+        )
+        return None
+
+    if efecto == "excluye" and arista.get("advertencia"):
+        # Una exclusión por mecanismo con una excepción declarada: el veto la
+        # aplicaría también al caso de la excepción, que sólo viviría en un
+        # comentario sin que el motor pueda honrarla.
+        informe.pendiente(
+            termino,
+            "exclusión por mecanismo con una advertencia que nombra una "
+            "excepción: no entra en el bloque estructurado, porque `excluye` "
+            "vetaría también el caso de la excepción. Se queda en la prosa",
+        )
+        return None
+
     if dispara not in POLARIDADES:
         # Una bandera que debía dispararse por ausencia y se emite por
         # presencia dispara justo al revés. Tampoco se emite.
@@ -593,11 +665,121 @@ def _decidir_efecto(
     return efecto, dispara
 
 
+def _emitir_umbral(
+    salida: Bloque,
+    positivo: dict,
+    negativo: dict,
+    arista: dict,
+    termino: str,
+    indice: Indice,
+    informe: Informe,
+) -> None:
+    """Un LR que sólo vale por encima o por debajo de un corte no se traslada.
+
+    El motor aplica `lr` cuando el hallazgo está presente y `lr_negativo` cuando
+    consta ausente; no evalúa el valor medido. Trasladar el número dejaría que
+    «hCG 200» recibiera el cociente de «hCG > 1500» sólo por mencionarse la
+    prueba. El corte tiene que modelarse como criterio de `laboratorio` y el
+    cociente colgarse del hallazgo ya umbralizado: eso es una decisión humana.
+    """
+    salida.comentario(
+        "el índice publica este cociente PARA UN UMBRAL y el motor no evalúa el "
+        "valor medido: aplicado tal cual, cualquier mención de la prueba "
+        "recibiría el cociente. No se traslada. Modela el corte como criterio de "
+        "`laboratorio` y cuelga el cociente del hallazgo umbralizado.",
+        sangria=4,
+    )
+    emitidos = [(e, lr) for e, lr in (("LR+", positivo), ("LR−", negativo)) if lr]
+    for etiqueta, lr in emitidos:
+        salida.comentario(
+            f"{etiqueta} {lr.get('valor')} para {_plano(lr.get('umbral') or 'sin umbral')}",
+            sangria=4,
+        )
+    texto = _fuente(emitidos, arista, indice, informe, termino)
+    if texto:
+        salida.comentario(texto, sangria=4)
+    informe.pendiente(
+        termino,
+        "el cociente está publicado para un umbral y no se traslada: el motor no "
+        "lo evaluaría. Modela el corte en `laboratorio` antes de usarlo",
+    )
+
+
+def _conceptos_en_conflicto(entradas: list[tuple[dict, str]]) -> set[str]:
+    """Conceptos con dos o más aristas que publican un valor para el MISMO
+    sentido (LR+ o LR−).
+
+    El índice admite varias aristas para un hallazgo, una por población o por
+    estudio. Emitirlas todas haría que el protocolo contara dos veces la misma
+    observación; elegir una sería decidir en silencio qué población es la
+    tuya. Ninguna de las dos es del conversor: el concepto se emite sin
+    cociente y las candidatas quedan comentadas para que un humano elija.
+    Un LR+ en una arista y el LR− en otra no chocan, y siguen como antes.
+    """
+    vistos: dict[tuple[str, str], int] = {}
+    for arista, _ in entradas:
+        for campo in ("lr_positivo", "lr_negativo"):
+            valor = _lr(arista.get(campo)).get("valor")
+            if (
+                isinstance(valor, (int, float))
+                and not isinstance(valor, bool)
+                and valor > 0
+            ):
+                clave = (str(arista.get("concepto") or ""), campo)
+                vistos[clave] = vistos.get(clave, 0) + 1
+    return {codigo for (codigo, _), n in vistos.items() if n > 1}
+
+
+def _emitir_conflicto(
+    salida: Bloque,
+    candidatas: list[dict],
+    termino: str,
+    indice: Indice,
+    informe: Informe,
+) -> None:
+    salida.comentario(
+        "varias aristas del índice publican cociente para este hallazgo "
+        "(poblaciones o estudios distintos). No se traslada ninguno: contarlos "
+        "todos duplicaría la evidencia y elegir uno es decidir qué población es "
+        "la tuya. Elige uno, escribe `lr`/`lr_negativo` y su `fuente`.",
+        sangria=4,
+    )
+    for n, arista in enumerate(candidatas, 1):
+        partes = []
+        for etiqueta, campo in (("LR+", "lr_positivo"), ("LR−", "lr_negativo")):
+            bloque = _lr(arista.get(campo))
+            if bloque.get("valor") is not None:
+                partes.append(f"{etiqueta} {bloque['valor']}")
+            elif bloque.get("rango"):
+                partes.append(f"{etiqueta} rango {bloque['rango']}")
+        poblacion = _plano(arista.get("poblacion") or "") or "población no declarada"
+        referencias = [
+            str(_lr(arista.get(c)).get("ref") or arista.get("ref") or "")
+            for c in ("lr_positivo", "lr_negativo")
+        ]
+        citas = [
+            cita(r, indice, informe, termino)
+            for r in dict.fromkeys(r for r in referencias if r)
+        ]
+        salida.comentario(
+            f"candidata {n}: {' · '.join(partes) or 'sin valor'}. "
+            f"Población: {poblacion}. {' '.join(citas)}".strip(),
+            sangria=4,
+        )
+    informe.pendiente(
+        termino,
+        f"{len(candidatas)} aristas con cociente para el mismo hallazgo: no entra "
+        f"ninguno. Elige el que corresponda a tu población",
+    )
+
+
 def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, list[str]]:
     """Traduce las aristas concepto→condición al bloque `signos`."""
     salida = Bloque()
     salida.crudo("# Cada LR conserva la procedencia con la que entró en el índice.")
-    salida.crudo("# Un cociente sin fuente es un número inventado con formato científico.")
+    salida.crudo(
+        "# Un cociente sin fuente es un número inventado con formato científico."
+    )
     salida.crudo("signos:")
 
     usados: list[str] = []
@@ -611,11 +793,18 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
     entradas = [(a, "apoya") for a in (condicion.get("signos") or [])]
     entradas += [(a, "bandera_roja") for a in (condicion.get("signos_de_alarma") or [])]
 
+    en_conflicto = _conceptos_en_conflicto(entradas)
+    resueltos: set[str] = set()
+
     for arista, efecto_por_defecto in entradas:
         codigo = str(arista.get("concepto") or "")
+        if codigo in resueltos:
+            continue
         concepto = indice.concepto(codigo)
         if not concepto:
-            informe.pendiente(codigo or "?", "la arista apunta a un concepto que no existe")
+            informe.pendiente(
+                codigo or "?", "la arista apunta a un concepto que no existe"
+            )
             continue
 
         termino = str(concepto.get("termino") or codigo)
@@ -637,7 +826,9 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
 
         rol = str(arista.get("rol") or "apoyo")
         if rol not in ROLES:
-            informe.pendiente(termino, f"rol «{rol}» que holonmed no conoce; se leerá como «apoyo»")
+            informe.pendiente(
+                termino, f"rol «{rol}» que holonmed no conoce; se leerá como «apoyo»"
+            )
 
         salida.campo("nombre", termino, sangria=2, guion=True)
 
@@ -659,6 +850,17 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         if dispara != "presente":
             salida.campo("dispara_si", dispara, sangria=4)
 
+        if codigo in en_conflicto:
+            resueltos.add(codigo)
+            _emitir_conflicto(
+                salida,
+                [a for a, _ in entradas if str(a.get("concepto") or "") == codigo],
+                termino,
+                indice,
+                informe,
+            )
+            continue
+
         estado = str(arista.get("estado_lr") or "")
         positivo = _lr(arista.get("lr_positivo"))
         negativo = _lr(arista.get("lr_negativo"))
@@ -672,10 +874,15 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
             motivo = _plano(arista.get("motivo") or "")
             salida.comentario(
                 "sin_efecto en el índice: se reconoce el término pero no desplaza "
-                "la probabilidad" + (f". {motivo[:1].upper()}{motivo[1:]}" if motivo else ""),
+                "la probabilidad"
+                + (f". {motivo[:1].upper()}{motivo[1:]}" if motivo else ""),
                 sangria=4,
             )
             _comentar_contexto(salida, arista, indice, informe, termino)
+        elif (positivo or negativo) and (
+            positivo.get("umbral") or negativo.get("umbral")
+        ):
+            _emitir_umbral(salida, positivo, negativo, arista, termino, indice, informe)
         elif positivo or negativo:
             valor_positivo = (
                 _valor_utilizable(positivo, "LR+", termino, informe) if positivo else None
@@ -683,6 +890,8 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
             valor_negativo = (
                 _valor_utilizable(negativo, "LR−", termino, informe) if negativo else None
             )
+            if valor_positivo is not None or valor_negativo is not None:
+                informe.signos_con_lr += 1
             if valor_positivo is not None:
                 salida.campo("lr", valor_positivo, sangria=4)
             if valor_negativo is not None:
@@ -699,13 +908,18 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
             # Si no se traslada ninguno, la procedencia se comenta igual: es
             # lo que necesita quien vaya a decidir qué número entra.
             texto = _fuente(
-                emitidos or [(e, lr) for e, lr in (("LR+", positivo), ("LR−", negativo)) if lr],
-                arista, indice, informe, termino,
+                emitidos
+                or [(e, lr) for e, lr in (("LR+", positivo), ("LR−", negativo)) if lr],
+                arista,
+                indice,
+                informe,
+                termino,
             )
             if valor_positivo is None and valor_negativo is None:
                 salida.comentario(
                     "el índice trae cociente pero no se traslada ninguno todavía; "
-                    "ver el informe.", sangria=4,
+                    "ver el informe.",
+                    sangria=4,
                 )
                 salida.comentario(texto, sangria=4)
             elif texto:
@@ -737,16 +951,13 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
                 "la fuente trae "
                 + ", ".join(f"«{c}»" for c in sobrantes)
                 + " y holonmed no tiene dónde guardarlo: decide si va a la prosa "
-                  "del cuerpo o se pierde",
+                "del cuerpo o se pierde",
             )
 
     return salida, usados
 
 
-
-def nucleo_y_balance(
-    condicion: dict, indice: Indice, informe: Informe
-) -> Bloque | None:
+def nucleo_y_balance(condicion: dict, indice: Indice, informe: Informe) -> Bloque | None:
     """Emite `nucleo` y `balance`, o se niega y enumera por qué.
 
     Dos traducciones que no son evidentes:
@@ -778,7 +989,7 @@ def nucleo_y_balance(
         roto = False
         for campo in ("requiere", "y_al_menos_uno_de"):
             terminos[campo] = []
-            for codigo in (nucleo.get(campo) or []):
+            for codigo in nucleo.get(campo) or []:
                 concepto = indice.concepto(str(codigo))
                 if not concepto:
                     informe.pendiente(
@@ -797,8 +1008,10 @@ def nucleo_y_balance(
             salida.crudo("# Sin el núcleo el criterio ni siquiera se aplica: no es una")
             salida.crudo("# exclusión, es que la pregunta todavía no se puede hacer.")
             salida.crudo("nucleo:")
-            for campo, etiqueta in (("requiere", "requiere"),
-                                    ("y_al_menos_uno_de", "y_al_menos_uno_de")):
+            for campo, etiqueta in (
+                ("requiere", "requiere"),
+                ("y_al_menos_uno_de", "y_al_menos_uno_de"),
+            ):
                 if terminos[campo]:
                     lista = ", ".join(f'"{t}"' for t in terminos[campo])
                     salida.crudo(f"  {etiqueta}: [{lista}]")
@@ -851,7 +1064,9 @@ def laboratorio(codigos: list[str], indice: Indice, informe: Informe) -> Bloque 
     «lipasa 890» escribió «>3x el límite normal (aprox. 250-300)» cuando el
     protocolo declara 60.
     """
-    criterios = [c for c in codigos if (indice.concepto(c).get("umbral") or {}).get("parametro")]
+    criterios = [
+        c for c in codigos if (indice.concepto(c).get("umbral") or {}).get("parametro")
+    ]
     if not criterios:
         return None
 
@@ -875,10 +1090,13 @@ def laboratorio(codigos: list[str], indice: Indice, informe: Informe) -> Bloque 
         if umbral.get("multiplicador"):
             salida.campo("multiplicador", umbral["multiplicador"], sangria=4)
 
-        direccion = str(umbral.get("direccion") or ("alto" if alto is not None else "bajo"))
+        direccion = str(
+            umbral.get("direccion") or ("alto" if alto is not None else "bajo")
+        )
         salida.campo(
             "termino_si_alto" if direccion == "alto" else "termino_si_bajo",
-            termino, sangria=4,
+            termino,
+            sangria=4,
         )
 
         pares = [f'holonmed: "{codigo}"']
@@ -929,10 +1147,14 @@ def clasificacion(condicion: dict, indice: Indice, informe: Informe) -> Bloque |
         return None
 
     salida = Bloque()
-    salida.crudo("# ── Propuesta de clasificación, sin activar ──────────────────────────")
+    salida.crudo(
+        "# ── Propuesta de clasificación, sin activar ──────────────────────────"
+    )
     salida.crudo("# El índice declara estas reglas con sus componentes y su fuente. Para")
     salida.crudo("# activarlas hay que decidir dos cosas que el origen no dice: cuántos")
-    salida.crudo("# criterios se exigen y qué término se acuña al cumplirse. Descoméntalo")
+    salida.crudo(
+        "# criterios se exigen y qué término se acuña al cumplirse. Descoméntalo"
+    )
     salida.crudo("# cuando lo hayas resuelto.")
     salida.crudo("#")
     salida.crudo("# clasificacion:")
@@ -954,7 +1176,7 @@ def clasificacion(condicion: dict, indice: Indice, informe: Informe) -> Bloque |
             salida.crudo(f"#         # {codigo}  {indice.termino(str(codigo))}")
     salida.crudo("#   produce:")
     salida.crudo(f"#     termino: {condicion.get('termino')}")
-    salida.crudo(f"#     codigos: {{ holonmed: \"{condicion.get('id')}\" }}")
+    salida.crudo(f'#     codigos: {{ holonmed: "{condicion.get("id")}" }}')
     salida.crudo("#     semantica: trastorno")
 
     informe.pendiente(
@@ -1020,6 +1242,21 @@ def bayes(condicion: dict, indice: Indice, informe: Informe) -> Bloque:
             "el índice no publica prevalencia: queda en 0.0 y el modelo bayesiano "
             "no se activará hasta que pongas la de tu población",
         )
+    elif not informe.signos_con_lr:
+        # Una prevalencia sin ningún cociente activaría un modelo que no puede
+        # mover la probabilidad: el protocolo declararía un cálculo vacío.
+        salida.comentario(
+            f"El índice publica prevalencia ({valor}) pero ningún signo de este "
+            "protocolo trae un LR utilizable, así que el modelo bayesiano no se "
+            "activa. Cuando haya cocientes, pon aquí la de tu población.",
+            sangria=2,
+        )
+        salida.campo("probabilidad_base", 0.0, sangria=2)
+        informe.pendiente(
+            "modelo_bayesiano",
+            f"el índice trae prevalencia {valor} pero ningún signo con LR: queda "
+            f"en 0.0 y el modelo no se activa",
+        )
     else:
         salida.comentario(
             "Prevalencia en la población que atiendes, no en la literatura "
@@ -1053,7 +1290,10 @@ def bayes(condicion: dict, indice: Indice, informe: Informe) -> Bloque:
     for factor in condicion.get("factores_riesgo") or []:
         if isinstance(factor, dict):
             nombre = _plano(
-                factor.get("nombre") or factor.get("factor") or factor.get("termino") or ""
+                factor.get("nombre")
+                or factor.get("factor")
+                or factor.get("termino")
+                or ""
             )
             peso = factor.get("valor") or factor.get("lr") or factor.get("peso")
         else:
@@ -1073,7 +1313,9 @@ def bayes(condicion: dict, indice: Indice, informe: Informe) -> Bloque:
         if detalle.get("nota"):
             salida.comentario(f"nota: {_plano(detalle['nota'])}", sangria=2)
         if detalle.get("ref"):
-            salida.comentario(cita(str(detalle["ref"]), indice, informe, nombre), sangria=2)
+            salida.comentario(
+                cita(str(detalle["ref"]), indice, informe, nombre), sangria=2
+            )
         informe.pendiente(
             "factores_riesgo",
             f"«{nombre}» viene del índice sin multiplicador, así que no entra en "
@@ -1121,8 +1363,7 @@ def cuerpo(condicion: dict, codigos: list[str], indice: Indice, informe: Informe
     partes: list[str] = [f"# PROTOCOLO DE {termino.upper()}", ""]
 
     partes += [
-        "ROL: <!-- especialidad y postura: «cardiólogo experto, basado en "
-        "evidencia» -->",
+        "ROL: <!-- especialidad y postura: «cardiólogo experto, basado en evidencia» -->",
         "",
         "## Contexto fisiopatológico",
         "",
@@ -1180,7 +1421,10 @@ def cuerpo(condicion: dict, codigos: list[str], indice: Indice, informe: Informe
         for escala in escalas:
             partes.append(f"### {_plano(escala.get('nombre') or '')}")
             if escala.get("componentes_declarados"):
-                partes += ["", f"Componentes: {_plano(escala['componentes_declarados'])}."]
+                partes += [
+                    "",
+                    f"Componentes: {_plano(escala['componentes_declarados'])}.",
+                ]
             partes.append("")
             for tramo in escala.get("tramos") or []:
                 cocientes = []
@@ -1251,7 +1495,9 @@ def vocabulario_local() -> tuple[set[str], Path]:
     if not RUTA_SEMILLA.exists():
         return set(), RUTA_SEMILLA
     datos = json.loads(RUTA_SEMILLA.read_text(encoding="utf-8"))
-    return {str(c["codigo"]) for c in datos.get("conceptos", []) if c.get("codigo")}, RUTA_SEMILLA
+    return {
+        str(c["codigo"]) for c in datos.get("conceptos", []) if c.get("codigo")
+    }, RUTA_SEMILLA
 
 
 def fragmento_vocabulario(
@@ -1344,9 +1590,7 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
 
     cabecera.crudo("condicion:")
     cabecera.campo("nombre", termino, sangria=2)
-    codigos_condicion = {
-        k: v for k, v in (condicion.get("codigos") or {}).items() if v
-    }
+    codigos_condicion = {k: v for k, v in (condicion.get("codigos") or {}).items() if v}
     codigos_condicion.setdefault("holonmed", identificador)
     cabecera.crudo("  codigos:")
     for sistema, valor in codigos_condicion.items():
@@ -1386,8 +1630,16 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
     # El núcleo va ANTES del balance y ambos antes de los signos: se lee en el
     # mismo orden en que se aplica —primero si el criterio procede, luego cómo
     # se cuenta, después qué se cuenta—.
-    piezas = [cabecera, bloque_ambito, bloque_nucleo, bloque_bayes, bloque_signos,
-              bloque_lab, bloque_clas, procedencia]
+    piezas = [
+        cabecera,
+        bloque_ambito,
+        bloque_nucleo,
+        bloque_bayes,
+        bloque_signos,
+        bloque_lab,
+        bloque_clas,
+        procedencia,
+    ]
     frontmatter = "\n\n".join(p.texto() for p in piezas if p is not None)
 
     referidos = list(
@@ -1398,7 +1650,9 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
         )
     )
     return Borrador(
-        texto=frontmatter + "\n---\n\n" + cuerpo(condicion, codigos_usados, indice, informe),
+        texto=frontmatter
+        + "\n---\n\n"
+        + cuerpo(condicion, codigos_usados, indice, informe),
         codigos=[c for c in referidos if c and c != "None"],
     )
 
@@ -1407,8 +1661,10 @@ def convertir(condicion: dict, indice: Indice, informe: Informe) -> Borrador:
 
 
 def listar(indice: Indice) -> int:
-    print(f"\nÍndice: {indice.ruta}  ({indice.commit}"
-          f"{'' if indice.limpio else ', con cambios sin confirmar'})")
+    print(
+        f"\nÍndice: {indice.ruta}  ({indice.commit}"
+        f"{'' if indice.limpio else ', con cambios sin confirmar'})"
+    )
     print(f"{len(indice.condiciones)} condiciones\n")
     for identificador, condicion in sorted(indice.condiciones.items()):
         aristas = condicion.get("signos") or []
@@ -1427,7 +1683,9 @@ def resolver(clave: str, indice: Indice) -> tuple[str, dict]:
     if normalizada in indice.condiciones:
         return normalizada, indice.condiciones[normalizada]
 
-    con_dos_puntos = re.sub(r"^(HM)[:\-]?(\d{4})$", r"\1:\2", normalizada, flags=re.I).upper()
+    con_dos_puntos = re.sub(
+        r"^(HM)[:\-]?(\d{4})$", r"\1:\2", normalizada, flags=re.I
+    ).upper()
     if con_dos_puntos in indice.condiciones:
         return con_dos_puntos, indice.condiciones[con_dos_puntos]
 
@@ -1446,6 +1704,31 @@ def nombre_por_defecto(identificador: str, indice: Indice) -> str:
     return re.sub(r"^HM\d+-", "", stem).replace("-", "_")
 
 
+def condiciones_con_protocolo() -> set[str]:
+    """Códigos «sistema:valor» de las condiciones que ya tienen protocolo,
+    vivo o en borrador.
+
+    Se lee del frontmatter y no del nombre del archivo: un protocolo escrito a
+    mano (`acute_pancreatitis.md`) no se llama como lo llamaría el conversor, y
+    ni siquiera declara el código `holonmed`, sólo SNOMED. Compararlo por
+    nombre, o sólo por el código del índice, lo duplicaría.
+    """
+    cubiertas: set[str] = set()
+    for directorio in (DIRECTORIO_SKILLS, DIRECTORIO_BORRADORES):
+        for ruta in directorio.glob("*.md"):
+            partes = ruta.read_text(encoding="utf-8").split("---", 2)
+            if len(partes) < 3:
+                continue
+            try:
+                meta = yaml.safe_load(partes[1]) or {}
+            except yaml.YAMLError:
+                continue
+            codigos = (meta.get("condicion") or {}).get("codigos") or {}
+            if isinstance(codigos, dict):
+                cubiertas |= {f"{k}:{v}" for k, v in codigos.items() if v}
+    return cubiertas
+
+
 def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
     """Convierte de una sola pasada toda condición del índice que todavía no
     tenga protocolo en `backend/skills/`.
@@ -1461,17 +1744,27 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
     nuevas: list[str] = []
     cubiertas: list[str] = []
+    con_protocolo = condiciones_con_protocolo()
     for identificador in sorted(indice.condiciones):
         nombre = nombre_por_defecto(identificador, indice)
-        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
-        (nuevas if (forzar or not destino.exists()) else cubiertas).append(identificador)
+        destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
+        codigos = {f"holonmed:{identificador}"} | {
+            f"{k}:{v}"
+            for k, v in (indice.condiciones[identificador].get("codigos") or {}).items()
+            if v
+        }
+        existe = bool(codigos & con_protocolo) or destino.exists()
+        (nuevas if (forzar or not existe) else cubiertas).append(identificador)
 
     print(
         f"\nÍndice: {indice.ruta}  ({indice.commit}"
         f"{'' if indice.limpio else ', con cambios sin confirmar'})",
         file=sys.stderr,
     )
-    print(f"{len(cubiertas)} condición(es) ya con protocolo, {len(nuevas)} nueva(s)\n", file=sys.stderr)
+    print(
+        f"{len(cubiertas)} condición(es) ya con protocolo, {len(nuevas)} nueva(s)\n",
+        file=sys.stderr,
+    )
     if not nuevas:
         print("Nada que convertir.", file=sys.stderr)
         return 0
@@ -1501,11 +1794,14 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         conocidos = conocidos | {e["codigo"] for e in faltan}
 
         nombre = nombre_por_defecto(identificador, indice)
-        destino = DIRECTORIO_SKILLS / f"{nombre}.md"
+        destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
 
-        print(f"=== {identificador} · {condicion.get('termino')} -> {destino.name} ===", file=sys.stderr)
+        print(
+            f"=== {identificador} · {condicion.get('termino')} -> {destino.name} ===",
+            file=sys.stderr,
+        )
         informe.imprimir()
         print(file=sys.stderr)
 
@@ -1513,7 +1809,8 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         destino_vocab = ruta_vocab or Path("vocabulario_nuevo.json")
         destino_vocab.parent.mkdir(parents=True, exist_ok=True)
         destino_vocab.write_text(
-            json.dumps({"conceptos": vocab_acumulado}, ensure_ascii=False, indent=2) + "\n",
+            json.dumps({"conceptos": vocab_acumulado}, ensure_ascii=False, indent=2)
+            + "\n",
             encoding="utf-8",
             newline="\n",
         )
@@ -1526,11 +1823,12 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         )
 
     print(
-        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_SKILLS}. Ninguno se "
+        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
         f"auto-completa: cada uno necesita prosa (rol, contexto fisiopatológico, "
         f"banderas rojas), fijar `probabilidad_base` y `factores_riesgo` si aplica, "
         f"pasar `holonmed skills --validar` y subirse como pull request — uno por "
-        f"uno o juntos, pero siempre revisados por un humano antes de fusionar.",
+        f"uno o juntos, pero siempre revisados por un humano antes de fusionar. Quedan "
+        f"en `borradores/`, que el cargador no lee: súbelos un nivel para activarlos.",
         file=sys.stderr,
     )
     return 0
@@ -1542,20 +1840,39 @@ def main() -> int:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("condicion", nargs="?", help="HM:6007, HM6007 o el nombre del archivo")
-    parser.add_argument("--indice", type=Path, default=INDICE_POR_DEFECTO,
-                        help=f"Clon local de medsemiotics-db (por defecto {INDICE_POR_DEFECTO})")
-    parser.add_argument("--salida", type=Path, metavar="ARCHIVO",
-                        help="Dónde escribir. Sin esto, sale por pantalla")
-    parser.add_argument("--skills", action="store_true",
-                        help=f"Escribe en {DIRECTORIO_SKILLS} con el nombre derivado")
-    parser.add_argument("--forzar", action="store_true",
-                        help="Sobrescribe un protocolo existente")
-    parser.add_argument("--vocabulario", type=Path, metavar="ARCHIVO",
-                        help="Escribe los conceptos que faltan en el vocabulario semilla")
+    parser.add_argument(
+        "condicion", nargs="?", help="HM:6007, HM6007 o el nombre del archivo"
+    )
+    parser.add_argument(
+        "--indice",
+        type=Path,
+        default=INDICE_POR_DEFECTO,
+        help=f"Clon local de medsemiotics-db (por defecto {INDICE_POR_DEFECTO})",
+    )
+    parser.add_argument(
+        "--salida",
+        type=Path,
+        metavar="ARCHIVO",
+        help="Dónde escribir. Sin esto, sale por pantalla",
+    )
+    parser.add_argument(
+        "--skills",
+        action="store_true",
+        help=f"Escribe en {DIRECTORIO_SKILLS} con el nombre derivado",
+    )
+    parser.add_argument(
+        "--forzar", action="store_true", help="Sobrescribe un protocolo existente"
+    )
+    parser.add_argument(
+        "--vocabulario",
+        type=Path,
+        metavar="ARCHIVO",
+        help="Escribe los conceptos que faltan en el vocabulario semilla",
+    )
     parser.add_argument("--listar", action="store_true", help="Qué hay en el índice")
     parser.add_argument(
-        "--sync-all", action="store_true",
+        "--sync-all",
+        action="store_true",
         help="Convierte toda condición del índice que no tenga ya protocolo en backend/skills/",
     )
     args = parser.parse_args()

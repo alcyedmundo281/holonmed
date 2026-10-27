@@ -150,9 +150,7 @@ class RegistroCrudo(BaseModel):
     paciente_id: str
     rol: str = Field(description="enfermeria, farmacia… según los protocolos")
     texto: str = Field(min_length=1)
-    termino: str | None = Field(
-        default=None, description="Qué se ejecutó, si ya se sabe"
-    )
+    termino: str | None = Field(default=None, description="Qué se ejecutó, si ya se sabe")
     actor: str | None = None
     referencias: dict[str, str] = Field(default_factory=dict)
 
@@ -248,9 +246,11 @@ async def exportar_cuenta(
         raise HTTPException(400, f"Formato no soportado. Usa uno de: {list(FORMATOS)}")
 
     cuenta = ctx.conciliador.cuenta(paciente_id)
-    contenido = exportar(
-        cuenta, formato, emisor=emisor, incluir_propuestos=incluir_propuestos
-    ) if formato == "xml" else exportar(cuenta, formato)
+    contenido = (
+        exportar(cuenta, formato, emisor=emisor, incluir_propuestos=incluir_propuestos)
+        if formato == "xml"
+        else exportar(cuenta, formato)
+    )
 
     tipos = {"xml": "application/xml", "json": "application/json", "csv": "text/csv"}
     return PlainTextResponse(contenido, media_type=tipos[formato])

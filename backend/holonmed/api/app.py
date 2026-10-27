@@ -9,7 +9,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from .. import __version__
 from ..config import Settings, get_settings
 from .deps import AppContext
-from .routes import chat, clinical, documents, facturacion, graph, patients
+from .routes import (
+    chat,
+    clinical,
+    documents,
+    episodios,
+    facturacion,
+    graph,
+    patients,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +72,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(clinical.router)
+    app.include_router(episodios.router)
     app.include_router(chat.router)
     app.include_router(patients.router)
     app.include_router(documents.router)
@@ -83,7 +92,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         faltantes = sorted(m for m in requeridos if m.split(":")[0] not in instalados)
 
         estado["llm"] = {
-            "host": settings.ollama_host,
+            "host": settings.llm_host,
             "disponible": await ctx.llm.disponible(),
             "modelos": modelos,
             "faltantes": faltantes,

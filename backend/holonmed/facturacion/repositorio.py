@@ -45,8 +45,9 @@ class OrdenRepo:
                 cursor = cx.execute(
                     """INSERT INTO orden (paciente_id, tic_id, timestamp, termino,
                                           codigo, sistema, concepto_id, texto_origen,
-                                          prescriptor, detalle, estado, referencias)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                          prescriptor, solicitante, motivo,
+                                          detalle, estado, referencias)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         orden.paciente_id,
                         int(orden.tic_id) if orden.tic_id else None,
@@ -57,6 +58,8 @@ class OrdenRepo:
                         orden.concepto_id,
                         orden.texto_origen,
                         orden.prescriptor,
+                        orden.solicitante.value,
+                        orden.motivo,
                         _json(orden.detalle),
                         orden.estado.value,
                         _json(orden.referencias),
@@ -68,9 +71,7 @@ class OrdenRepo:
             logger.error("Error creando la orden: %s", exc)
             return None
 
-    def listar(
-        self, paciente_id: str, estado: EstadoOrden | None = None
-    ) -> list[Orden]:
+    def listar(self, paciente_id: str, estado: EstadoOrden | None = None) -> list[Orden]:
         sql = "SELECT * FROM orden WHERE paciente_id = ?"
         binds: list[Any] = [paciente_id]
         if estado:

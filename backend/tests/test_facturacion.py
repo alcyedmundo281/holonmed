@@ -34,7 +34,11 @@ VOCABULARIO = {
     "conceptos": [
         {"codigo": "P:0", "termino": "Procedimiento"},
         {"codigo": "P:1", "termino": "Preparación de citostáticos", "padre": "P:0"},
-        {"codigo": "P:2", "termino": "Preparación de nutrición parenteral", "padre": "P:0"},
+        {
+            "codigo": "P:2",
+            "termino": "Preparación de nutrición parenteral",
+            "padre": "P:0",
+        },
         {"codigo": "P:3", "termino": "Administración intravenosa", "padre": "P:0"},
     ]
 }
@@ -274,9 +278,9 @@ def test_un_tarifario_es_otro_vocabulario(entorno):
     db, _, _, _, _, _ = entorno
     repo = TarifarioRepo(db)
     assert repo.sistemas() == {"prueba": 2}
-    concepto = db.conexion().execute(
-        "SELECT id FROM concepto WHERE codigo = 'P:1'"
-    ).fetchone()
+    concepto = (
+        db.conexion().execute("SELECT id FROM concepto WHERE codigo = 'P:1'").fetchone()
+    )
     assert repo.codigo_para(concepto["id"], "prueba") == "T-001"
 
 

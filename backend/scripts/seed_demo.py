@@ -46,7 +46,9 @@ def main() -> int:
         print(f"  creado:    {paciente['nombre']} ({paciente['id']})")
 
     print("\nDatos ficticios listos. Prueba:")
-    print('  holonmed tic "Dolor epigástrico en cinturón, amilasa 1200, calcio 6.8" --paciente demo')
+    print(
+        '  holonmed tic "Dolor epigástrico en cinturón, amilasa 1200, calcio 6.8" --paciente demo'
+    )
     return 0
 
 

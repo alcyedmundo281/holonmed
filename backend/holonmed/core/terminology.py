@@ -85,14 +85,16 @@ class TerminologyIndex:
         )
         if not fila:
             return None
-        return Candidato(fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0)
+        return Candidato(
+            fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0
+        )
 
     def buscar_codigo(self, codigo: str, sistema: str | None = None) -> Candidato | None:
         """Localiza un concepto por su código. Se usa para validar skills."""
         if sistema:
             sql = """SELECT id, codigo, sistema, termino FROM concepto
                      WHERE codigo = ? AND sistema = ? LIMIT 1"""
-            args = (codigo, sistema)
+            args: tuple[str, ...] = (codigo, sistema)
         else:
             sql = "SELECT id, codigo, sistema, termino FROM concepto WHERE codigo = ? LIMIT 1"
             args = (codigo,)
@@ -102,7 +104,9 @@ class TerminologyIndex:
             return None
         if not fila:
             return None
-        return Candidato(fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0)
+        return Candidato(
+            fila["id"], fila["codigo"], fila["sistema"], fila["termino"], 100.0
+        )
 
     def buscar_candidatos(self, texto: str, limite: int = 15) -> list[Candidato]:
         """Recuperación amplia: FTS5 primero, puntuado difuso después."""
@@ -329,7 +333,9 @@ class VocabularyLoader:
                 pendientes_termino.append((cid, texto))
 
                 if len(pendientes_termino) >= lote:
-                    self._volcar(cx, sistema, pendientes_concepto, pendientes_termino, totales)
+                    self._volcar(
+                        cx, sistema, pendientes_concepto, pendientes_termino, totales
+                    )
                     pendientes_concepto, pendientes_termino = [], []
 
             self._volcar(cx, sistema, pendientes_concepto, pendientes_termino, totales)
@@ -343,7 +349,9 @@ class VocabularyLoader:
                 for fila in lector:
                     if fila.get("active") != "1" or fila.get("typeId") != "116680003":
                         continue
-                    pendientes.append((sistema, fila["sourceId"], sistema, fila["destinationId"]))
+                    pendientes.append(
+                        (sistema, fila["sourceId"], sistema, fila["destinationId"])
+                    )
                     if len(pendientes) >= lote:
                         totales["relaciones"] += self._volcar_relaciones(cx, pendientes)
                         pendientes = []
@@ -354,16 +362,16 @@ class VocabularyLoader:
         if mapa and mapa.exists():
             with mapa.open(encoding="utf-8", newline="") as fh, self._db._escritura:
                 lector = csv.DictReader(fh, delimiter="\t")
-                pendientes = []
+                mapeos = []
                 for fila in lector:
                     destino = fila.get("mapTarget")
                     if fila.get("active") != "1" or not destino:
                         continue
-                    pendientes.append((sistema, fila["referencedComponentId"], destino))
-                    if len(pendientes) >= lote:
-                        totales["mapeos"] += self._volcar_mapeos(cx, pendientes)
-                        pendientes = []
-                totales["mapeos"] += self._volcar_mapeos(cx, pendientes)
+                    mapeos.append((sistema, fila["referencedComponentId"], destino))
+                    if len(mapeos) >= lote:
+                        totales["mapeos"] += self._volcar_mapeos(cx, mapeos)
+                        mapeos = []
+                totales["mapeos"] += self._volcar_mapeos(cx, mapeos)
                 cx.commit()
 
         cx.execute("INSERT INTO termino_fts(termino_fts) VALUES ('optimize')")

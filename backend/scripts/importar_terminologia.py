@@ -152,7 +152,9 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--estado", action="store_true", help="Qué hay cargado")
-    parser.add_argument("--semilla", action="store_true", help="Carga el vocabulario base")
+    parser.add_argument(
+        "--semilla", action="store_true", help="Carga el vocabulario base"
+    )
     parser.add_argument("--rf2", type=Path, metavar="DIR", help="Importa una release RF2")
     args = parser.parse_args()
 

@@ -33,7 +33,32 @@ export type OrigenTic =
   | 'farmacia'
   | 'enfermeria'
   | 'imagen'
+  /** El paciente. Los otros cinco son todos del centro sanitario. */
+  | 'paciente'
+  /** El propio sistema, autor de notas clínicas. Autor no es firmante. */
+  | 'holonmed'
   | 'otro';
+
+/**
+ * Qué clase de documento es un tic, que es un eje distinto de quién lo
+ * produjo. Son las tres primeras fases de Weed en el orden en que ocurren:
+ * la base definida, la nota de evolución, y la nota clínica —que no es un
+ * documento aparte del holón, sino su corte con fecha y firma—, más la
+ * epicrisis, que cierra el episodio en vez de cortarlo.
+ *
+ * La primera nota clínica y las intermedias son el mismo tipo: su
+ * diferencia es de posición, y la posición se lee del orden.
+ */
+export type TipoNota = 'base' | 'evolucion' | 'clinica' | 'epicrisis';
+
+/**
+ * Qué hizo el humano con lo que el sistema propuso. `rechazado` no borra: lo
+ * rechazado dice algo sobre el sistema, y esconderlo lo haría inauditable.
+ */
+export type Acto = 'aceptado' | 'corregido' | 'rechazado';
+
+/** Quién asevera un infón. Weed: primero lo sintomático, luego lo objetivo. */
+export type Procedencia = 'subjetivo' | 'objetivo' | 'derivado';
 
 export interface Infon {
   timestamp: string;
@@ -41,6 +66,30 @@ export interface Infon {
   termino_propuesto: string;
   termino: string;
   polaridad: Polaridad;
+  /**
+   * Quién asevera este infón. Lo que clasifica es quién asevera, no el
+   * instrumento: una glucemia que el paciente refiere es subjetiva, porque
+   * nadie vio el aparato ni la lectura.
+   */
+  procedencia: Procedencia;
+  /**
+   * Potencia y acto. `acto: null` es el estado inicial correcto —el sistema
+   * lo propuso y nadie lo ha ratificado—, no un hueco que rellenar. `estado`
+   * es otra cosa: el veredicto del validador, que es juicio de la máquina.
+   */
+  acto: Acto | null;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+  /** Qué cambió al corregirlo: `{ campo: [antes, después] }`. */
+  correccion: Record<string, unknown>;
+  /**
+   * Serendipia: llegó sin orden que lo pidiera. Entra en la historia y en la
+   * lista de problemas, pero **no cuenta como evidencia** de la hipótesis
+   * activa: nadie lo eligió para ponerla a prueba.
+   */
+  abre_problema: boolean;
+  /** La orden a la que responde, si responde a alguna. */
+  responde_a: string | null;
   codigo: string | null;
   sistema: string | null;
   concepto_id: number | null;
@@ -292,6 +341,16 @@ export interface ResultadoTic {
   paciente_id: string;
   texto_original: string;
   origen: OrigenTic;
+  tipo: TipoNota;
+  /**
+   * El episodio al que pertenece. `null` en los tics anteriores a que
+   * existieran los episodios, y ahí se lee como «sin episodio declarado»:
+   * no se les inventa uno, porque agruparlos afirmaría que pertenecieron al
+   * mismo ingreso y nadie lo sabe.
+   */
+  episodio_id: string | null;
+  /** El «2» de clínica-2. Sólo lo llevan las notas clínicas. */
+  ordinal_clinica: number | null;
   actor: string | null;
   skill_activa: string;
   /**

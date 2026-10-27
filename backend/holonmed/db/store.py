@@ -21,7 +21,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad
+from ..core.actualizacion import Acto, Actualizacion, medir
+from ..core.episodio import EstadoEpisodio, admite
+from ..core.holon import Documento, componer, conciliar
+from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad, TipoNota
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +67,7 @@ def _json(valor: Any) -> str | None:
     if valor is None:
         return None
     if isinstance(valor, list):
-        return json.dumps(
-            [v.model_dump(mode="json") for v in valor], ensure_ascii=False
-        )
+        return json.dumps([v.model_dump(mode="json") for v in valor], ensure_ascii=False)
     return json.dumps(valor.model_dump(mode="json"), ensure_ascii=False)
 
 
@@ -108,6 +109,9 @@ class Database:
     # añadirlas explícitamente o una base creada antes se queda coja.
     MIGRACIONES: tuple[tuple[str, str, str], ...] = (
         ("tic", "origen", "TEXT NOT NULL DEFAULT 'consulta'"),
+        ("tic", "tipo", "TEXT NOT NULL DEFAULT 'evolucion'"),
+        ("tic", "episodio_id", "INTEGER"),
+        ("tic", "ordinal_clinica", "INTEGER"),
         ("tic", "actor", "TEXT"),
         ("tic", "skill_version", "TEXT"),
         ("tic", "acoplamiento", "TEXT"),
@@ -119,9 +123,18 @@ class Database:
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
+        ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'objetivo'"),
+        ("infon", "acto", "TEXT"),
+        ("infon", "actualizado_por", "TEXT"),
+        ("infon", "actualizado_en", "TEXT"),
+        ("infon", "correccion", "TEXT"),
+        ("infon", "abre_problema", "INTEGER NOT NULL DEFAULT 0"),
+        ("infon", "responde_a", "TEXT"),
         ("infon", "derivado_de", "TEXT"),
         ("infon", "criterio", "TEXT"),
         ("orden", "referencias", "TEXT"),
+        ("orden", "solicitante", "TEXT NOT NULL DEFAULT 'medico'"),
+        ("orden", "motivo", "TEXT NOT NULL DEFAULT ''"),
         ("ejecucion", "referencias", "TEXT"),
         ("ejecucion", "campos_faltantes", "TEXT"),
     )
@@ -134,9 +147,7 @@ class Database:
         quede a medio migrar.
         """
         for tabla, columna, definicion in self.MIGRACIONES:
-            existentes = {
-                fila[1] for fila in cx.execute(f"PRAGMA table_info({tabla})")
-            }
+            existentes = {fila[1] for fila in cx.execute(f"PRAGMA table_info({tabla})")}
             if not existentes:  # la tabla aún no existe
                 continue
             if columna not in existentes:
@@ -442,6 +453,231 @@ class PacienteRepo:
             return False
 
 
+class EpisodioRepo:
+    """Episodios: el contenedor con principio y fin de la secuencia de Weed.
+
+    Las reglas de qué documento admite cada episodio viven en
+    `core.episodio`, que es puro y se prueba solo. Aquí sólo se lee el
+    estado y se escribe el resultado: el almacén no reimplementa la lógica.
+    """
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    def abrir(
+        self, paciente_id: str, motivo: str = "", alcance_base: str = "comprehensiva"
+    ) -> str | None:
+        try:
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cx.execute(
+                    """INSERT OR IGNORE INTO paciente (id, nombre, antecedentes, creado)
+                       VALUES (?, ?, '', ?)""",
+                    (paciente_id, paciente_id, _ahora()),
+                )
+                cursor = cx.execute(
+                    """INSERT INTO episodio (paciente_id, abierto, motivo, alcance_base)
+                       VALUES (?,?,?,?)""",
+                    (paciente_id, _ahora(), motivo, alcance_base),
+                )
+                cx.commit()
+                return str(cursor.lastrowid)
+        except sqlite3.Error as exc:
+            logger.error("Error abriendo el episodio: %s", exc)
+            return None
+
+    def estado(self, episodio_id: str) -> EstadoEpisodio | None:
+        """Lo que `core.episodio` necesita para decidir. `None` si no existe.
+
+        Se distingue «no existe» de «vacío» a propósito: un episodio
+        inexistente no es un episodio sin historia, y tratarlos igual dejaría
+        escribir contra un identificador inventado.
+        """
+        try:
+            fila = (
+                self._db.conexion()
+                .execute(
+                    """SELECT e.cerrado,
+                          SUM(CASE WHEN t.tipo = 'base' THEN 1 ELSE 0 END) AS historias,
+                          SUM(CASE WHEN t.tipo = 'clinica' THEN 1 ELSE 0 END) AS clinicas
+                     FROM episodio e
+                     LEFT JOIN tic t ON t.episodio_id = e.id
+                    WHERE e.id = ?
+                    GROUP BY e.id""",
+                    (episodio_id,),
+                )
+                .fetchone()
+            )
+        except sqlite3.Error as exc:
+            logger.error("Error leyendo el episodio: %s", exc)
+            return None
+
+        if fila is None:
+            return None
+        return EstadoEpisodio(
+            cerrado=bool(fila["cerrado"]),
+            tiene_historia=bool(fila["historias"]),
+            notas_clinicas=int(fila["clinicas"] or 0),
+        )
+
+    def holones(self, episodio_id: str) -> dict[str, Any]:
+        """La escalera de holones de un episodio, y si conserva sus infones.
+
+        La composición se DERIVA de la secuencia y no se almacena: la
+        secuencia es inmutable —se añade, no se reescribe— y una tabla de
+        enlace sería una segunda fuente de verdad que un día diverge. El
+        compromiso del sistema es que el estado en el tic n sea recomputable
+        desde 1..n, y esto lo cumple por construcción.
+
+        Se devuelve la conciliación junto a la escalera y no aparte porque
+        quien lee los holones es quien necesita saber si están completos. Un
+        consumidor que tuviera que acordarse de preguntarlo acabaría no
+        preguntándolo.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT t.id, t.tipo, t.ordinal_clinica,
+                          (SELECT group_concat(i.id) FROM infon i
+                            WHERE i.tic_id = t.id) AS infones
+                     FROM tic t
+                    WHERE t.episodio_id = ?
+                    ORDER BY t.timestamp, t.id""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error as exc:
+            logger.error("Error leyendo los holones: %s", exc)
+            return {"holones": [], "conservacion": None}
+
+        documentos = [
+            Documento(
+                tic_id=str(fila["id"]),
+                tipo=TipoNota(fila["tipo"]),
+                infones=tuple((fila["infones"] or "").split(","))
+                if fila["infones"]
+                else (),
+                ordinal=fila["ordinal_clinica"],
+            )
+            for fila in filas
+        ]
+
+        escalera = componer(documentos)
+        conservacion = conciliar(documentos, escalera)
+        return {
+            "holones": [
+                {
+                    "tic_id": h.tic_id,
+                    "nivel": h.nivel.value,
+                    "etiqueta": h.etiqueta,
+                    "compone": list(h.compone),
+                    "infones_propios": list(h.infones_propios),
+                }
+                for h in escalera
+            ],
+            "conservacion": {
+                "coincide": conservacion.coincide,
+                "razon": conservacion.razon,
+                # Los huérfanos NO son una pérdida: son lo que espera al
+                # próximo holon, que es el estado normal entre dos notas.
+                "huerfanos": list(conservacion.huerfanos),
+                "perdidos": list(conservacion.perdidos),
+            },
+        }
+
+    def cerrar(self, episodio_id: str) -> bool:
+        """Lo llama la epicrisis. Un episodio no se cierra por dejar de escribir."""
+        try:
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cx.execute(
+                    "UPDATE episodio SET cerrado = ? WHERE id = ? AND cerrado IS NULL",
+                    (_ahora(), episodio_id),
+                )
+                cx.commit()
+                return True
+        except sqlite3.Error as exc:
+            logger.error("Error cerrando el episodio: %s", exc)
+            return False
+
+    def listar_uno(self, episodio_id: str) -> dict[str, Any] | None:
+        try:
+            fila = (
+                self._db.conexion()
+                .execute("SELECT * FROM episodio WHERE id = ?", (episodio_id,))
+                .fetchone()
+            )
+        except sqlite3.Error:
+            return None
+        return dict(fila) if fila else None
+
+    def infones_del_episodio(self, episodio_id: str) -> list[Infon]:
+        """Los infones de este episodio, para sintetizar el fondo.
+
+        Se filtra por episodio y no por paciente: el fondo de un ingreso no
+        puede arrastrar los hallazgos de otro, que es justo lo que el
+        episodio existe para separar.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT i.* FROM infon i JOIN tic t ON t.id = i.tic_id
+                        WHERE t.episodio_id = ? AND i.estado = 'VALIDADO'
+                        ORDER BY i.timestamp""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [_fila_a_infon(fila) for fila in filas]
+
+    def paciente_de(self, episodio_id: str) -> str | None:
+        episodio = self.listar_uno(episodio_id)
+        return episodio["paciente_id"] if episodio else None
+
+    def terminos_del_episodio(self, episodio_id: str) -> list[str]:
+        """Los terminos ya averiguados en este episodio.
+
+        Es lo que se compara contra la base definida. Se devuelven terminos
+        y no codigos porque un item de la base puede no tener concepto —«con
+        quien vive» no esta en ningun vocabulario clinico— y dejar fuera lo
+        que no se codifica reduciria la base a lo que el indice sabe nombrar.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT DISTINCT i.termino
+                         FROM infon i JOIN tic t ON t.id = i.tic_id
+                        WHERE t.episodio_id = ?""",
+                    (episodio_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [fila["termino"] for fila in filas]
+
+    def listar(self, paciente_id: str) -> list[dict[str, Any]]:
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    """SELECT * FROM episodio WHERE paciente_id = ?
+                   ORDER BY abierto DESC""",
+                    (paciente_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return []
+        return [dict(f) for f in filas]
+
+
 class TicRepo:
     def __init__(self, db: Database, grafo: GraphRepo):
         self._db = db
@@ -449,6 +685,28 @@ class TicRepo:
 
     def guardar(self, resultado) -> str | None:
         cx = self._db.conexion()
+
+        # Las reglas del episodio gobiernan la escritura, y sólo cuando hay
+        # episodio: un tic sin él es el caso anterior al ciclo 17 y sigue
+        # valiendo. Rechazar aquí y no en la ruta es deliberado —el almacén
+        # es el único punto por el que se puede pasar—, y el ordinal de una
+        # nota clínica se asigna en el mismo sitio que autoriza escribirla:
+        # si dos sitios lo calcularan, un día diferirían.
+        if resultado.episodio_id:
+            episodios = EpisodioRepo(self._db)
+            estado = episodios.estado(resultado.episodio_id)
+            if estado is None:
+                logger.error(
+                    "El episodio %s no existe: el tic no se escribe.",
+                    resultado.episodio_id,
+                )
+                return None
+            veredicto = admite(estado, resultado.tipo)
+            if not veredicto.admitido:
+                logger.warning("Tic rechazado: %s", veredicto.motivo)
+                return None
+            resultado.ordinal_clinica = veredicto.ordinal
+
         try:
             with self._db._escritura:
                 # El paciente puede ser efímero (nunca dado de alta); se crea
@@ -459,18 +717,23 @@ class TicRepo:
                     (resultado.paciente_id, resultado.paciente_id, _ahora()),
                 )
                 cursor = cx.execute(
-                    """INSERT INTO tic (paciente_id, timestamp, origen, actor,
+                    """INSERT INTO tic (paciente_id, timestamp, origen, tipo,
+                                        episodio_id, ordinal_clinica,
+                                        actor,
                                         skill, skill_version, texto_original,
                                         resumen, inferencia, acoplamiento,
                                         veredicto, competencia,
                                         ganadora_abductiva, triaje_coincide,
                                         triaje_en_candidatas,
                                         aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
                         resultado.origen.value,
+                        resultado.tipo.value,
+                        int(resultado.episodio_id) if resultado.episodio_id else None,
+                        resultado.ordinal_clinica,
                         resultado.actor,
                         resultado.skill_activa,
                         resultado.skill_version,
@@ -499,11 +762,14 @@ class TicRepo:
                     cx.execute(
                         """INSERT INTO infon (
                                tic_id, paciente_id, concepto_id, timestamp, texto_origen,
-                               termino_propuesto, termino, polaridad, derivado_de,
+                               termino_propuesto, termino, polaridad, procedencia,
+                               acto, actualizado_por, actualizado_en, correccion,
+                               abre_problema, responde_a,
+                               derivado_de,
                                criterio, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -513,6 +779,15 @@ class TicRepo:
                             infon.termino_propuesto,
                             infon.termino,
                             infon.polaridad.value,
+                            infon.procedencia,
+                            infon.acto,
+                            infon.actualizado_por,
+                            infon.actualizado_en,
+                            json.dumps(infon.correccion, ensure_ascii=False)
+                            if infon.correccion
+                            else None,
+                            int(infon.abre_problema),
+                            infon.responde_a,
                             json.dumps(infon.derivado_de, ensure_ascii=False)
                             if infon.derivado_de
                             else None,
@@ -558,7 +833,7 @@ class TicRepo:
         Filtrar por origen es lo que permite responder «enséñame sólo lo
         que vino del laboratorio» sin recorrer toda la historia.
         """
-        sql = """SELECT t.id, t.timestamp AS fecha, t.origen, t.actor, t.skill,
+        sql = """SELECT t.id, t.timestamp AS fecha, t.origen, t.tipo, t.actor, t.skill,
                         t.resumen, t.inferencia,
                         COUNT(i.id) AS total_infones,
                         SUM(CASE WHEN i.estado = 'VALIDADO' THEN 1 ELSE 0 END) AS validados,
@@ -709,6 +984,83 @@ class TicRepo:
             previo.setdefault(acoplamiento.hipotesis, acoplamiento.phi_legible)
         return previo
 
+    def infones_por_tic(self, paciente_id: str) -> dict[str, list[Infon]]:
+        """Los infones agrupados por su tic, para cerrar los dos libros.
+
+        Se agrupa aquí y no en el núcleo porque el agrupamiento es una
+        consulta; lo que hace el núcleo con los grupos —distinguir pendiente
+        de pasado por alto— es la regla, y ésa vive en `core.partida_doble`.
+        """
+        try:
+            filas = (
+                self._db.conexion()
+                .execute(
+                    "SELECT * FROM infon WHERE paciente_id = ? ORDER BY tic_id",
+                    (paciente_id,),
+                )
+                .fetchall()
+            )
+        except sqlite3.Error:
+            return {}
+
+        salida: dict[str, list[Infon]] = {}
+        for fila in filas:
+            salida.setdefault(str(fila["tic_id"]), []).append(_fila_a_infon(fila))
+        return salida
+
+    def tasa_de_correccion(self, paciente_id: str | None = None) -> dict[str, Any]:
+        """Cuánto no aceptó el humano tal cual, y en qué campos falla el sistema.
+
+        Es la cifra que el eje de actualización existe para producir. Sin
+        ella, «el sistema propone y la persona firma» es una política sin
+        medida, y nunca se sabría si lo que propone vale algo.
+
+        LOS INFONES SIN ACTUAR SE CUENTAN APARTE, NO COMO ACIERTO.
+        Uno que nadie miró no dice nada sobre el sistema; meterlo en el
+        denominador inventaría una tasa. Es la misma decisión que
+        `acuerdo_del_triaje()` toma con los tics sin competencia, y por la
+        misma razón.
+        """
+        sql = """SELECT acto, correccion FROM infon"""
+        binds: list[Any] = []
+        if paciente_id:
+            sql += " WHERE paciente_id = ?"
+            binds.append(paciente_id)
+
+        try:
+            filas = self._db.conexion().execute(sql, binds).fetchall()
+        except sqlite3.Error as exc:
+            logger.error("Error midiendo la tasa de corrección: %s", exc)
+            return {"actuados": 0, "tasa": None, "por_campo": {}}
+
+        actualizaciones: list[Actualizacion | None] = []
+        for fila in filas:
+            acto = fila["acto"]
+            if not acto:
+                actualizaciones.append(None)
+                continue
+            crudos = json.loads(fila["correccion"]) if fila["correccion"] else {}
+            cambios = {k: (str(v[0]), str(v[1])) for k, v in crudos.items()}
+            actualizaciones.append(
+                # `por` y `cuando` no se leen aquí: la medida sólo necesita el
+                # acto y los campos. Se rellenan para no relajar la validación
+                # del dataclass, que es la que impide una corrección vacía.
+                Actualizacion(acto=Acto(acto), por="—", cuando="", cambios=cambios)
+            )
+
+        medida = medir(actualizaciones)
+        return {
+            "aceptados": medida.aceptados,
+            "corregidos": medida.corregidos,
+            "rechazados": medida.rechazados,
+            "sin_actuar": medida.sin_actuar,
+            "actuados": medida.actuados,
+            # `None` y no 0: cero diría que el sistema no se equivocó, y lo
+            # que pasa es que nadie ha mirado todavía.
+            "tasa": medida.tasa,
+            "por_campo": medida.por_campo,
+        }
+
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
         """Lista de problemas: conceptos validados, agrupados y fechados.
 
@@ -761,7 +1113,9 @@ class DocumentoRepo:
                         paciente_id,
                         tipo,
                         archivo,
-                        json.dumps(datos, ensure_ascii=False) if datos is not None else None,
+                        json.dumps(datos, ensure_ascii=False)
+                        if datos is not None
+                        else None,
                         _ahora(),
                     ),
                 )
@@ -853,6 +1207,8 @@ def _fila_a_infon(fila: sqlite3.Row) -> Infon:
         polaridad=Polaridad(fila["polaridad"] or "presente")
         if "polaridad" in fila.keys()
         else Polaridad.PRESENTE,
+        procedencia=(fila["procedencia"] if "procedencia" in fila.keys() else "objetivo")
+        or "objetivo",
         derivado_de=json.loads(derivado) if derivado else [],
         criterio=fila["criterio"] if "criterio" in fila.keys() else None,
         codigo=fila["codigo"],
