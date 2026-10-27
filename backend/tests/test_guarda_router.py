@@ -13,9 +13,11 @@ dejarían de coincidir.
 # los tests que la piden vuelven a ligar el nombre, y de ahí los F811. Es el
 # precio de reutilizar la fixture en vez de duplicarla.
 from test_pipeline import (  # noqa: F401
+    TERMINO_SIN_HINT,
     IndexFalso,
     LLMFalso,
     entorno,
+    extraccion_de,
 )
 
 from holonmed.models import HolonPaciente, ResultadoTic, SinCandidatas
@@ -128,10 +130,16 @@ async def test_un_tic_que_no_valida_nada_lo_dice(entorno, tmp_path):  # noqa: F8
     (tmp_path / "general_triage.md").write_text(
         SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
     )
-    # Score por debajo del umbral de alerta: nada llega a VALIDADO.
-    pipeline = entorno(LLMFalso(), IndexFalso(score=10.0, exacto=False))
+    # Un término sin hint ni regla de laboratorio, con un score por debajo del
+    # umbral de alerta: nada llega a VALIDADO. «Temperatura 38.5» no sirve
+    # para esto, porque la regla de laboratorio del protocolo lo valida sin
+    # pasar por el LLM ni por el índice.
+    pipeline = entorno(
+        LLMFalso(extraccion_de(TERMINO_SIN_HINT, "orina oscura")),
+        IndexFalso(score=10.0, exacto=False),
+    )
     resultado = await pipeline.ejecutar(
-        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+        "Orina oscura desde ayer", HolonPaciente(paciente_id="t")
     )
 
     assert not resultado.infones_validados
