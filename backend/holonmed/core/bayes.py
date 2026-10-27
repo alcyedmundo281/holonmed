@@ -17,6 +17,7 @@ juntos para que otro sistema decida. Aquí los fragmentos son infones.
 """
 
 import logging
+import re
 from collections.abc import Sequence
 from typing import Any, NamedTuple
 
@@ -30,7 +31,12 @@ LR_MAXIMO = 100.0
 PROBABILIDAD_MAXIMA = 0.99
 
 
-_NEGACIONES = ("sin ", "no ", "niega ", "ausencia de ", "descarta ")
+# Marcas de negación como PALABRAS completas. Como subcadena, «no » casaba con
+# el final de «masculino» y «femenino», y «masculino con alcoholismo» salía
+# como un antecedente negado. `(?<!\w)` exige que la marca empiece en una
+# frontera de palabra; se busca sobre el texto entero y no sobre la ventana
+# recortada, para que una ventana que empiece a media palabra tampoco engañe.
+_NEGACION = re.compile(r"(?<!\w)(?:sin|no|niega|ausencia\s+de|descarta)\s")
 _VENTANA_NEGACION = 24
 
 
@@ -106,8 +112,7 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
             )
             continue
 
-        contexto = antecedentes[max(0, inicio - _VENTANA_NEGACION) : inicio]
-        if any(n in contexto for n in _NEGACIONES):
+        if _NEGACION.search(antecedentes, max(0, inicio - _VENTANA_NEGACION), inicio):
             ocupados.append((inicio, fin))
             salida.append(
                 _FactorAplicado(
