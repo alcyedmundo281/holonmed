@@ -8,7 +8,7 @@ import pytest
 
 from holonmed.core.terminology import TerminologyIndex, VocabularyLoader
 from holonmed.db import Database, GraphRepo, PacienteRepo, TicRepo, normalizar
-from holonmed.models import EstadoInfon, Infon, ResultadoTic
+from holonmed.models import EstadoInfon, Infon, ResultadoTic, SinCandidatas
 
 VOCABULARIO = {
     "conceptos": [
@@ -195,6 +195,39 @@ def test_un_tic_se_guarda_con_todos_sus_infones(entorno):
     # Los descartados también se guardan: sin ellos no se puede auditar
     # si el validador está rechazando de más.
     assert len(completo["infones"]) == 2
+
+
+def test_las_causas_de_no_haber_candidatas_sobreviven_al_guardado(entorno):
+    """La explicación existía sólo en la respuesta del tic: leerlo después
+    la perdía. Ahora la causa, los conceptos sin cubrir y lo que eligió el
+    triaje vuelven por `tic_completo`."""
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    resultado = ResultadoTic(
+        paciente_id="p1", texto_original="…", skill_activa="ganadora"
+    )
+    resultado.sin_candidatas = SinCandidatas.CATALOGO_NO_CUBRE
+    resultado.conceptos_no_cubiertos = ["Hemiparesia", "Afasia"]
+    resultado.skill_triaje = "elegida_por_el_triaje"
+    completo = tics.tic_completo(tics.guardar(resultado))
+
+    assert completo["sin_candidatas"] == "catalogo_no_cubre"
+    assert completo["conceptos_no_cubiertos"] == ["Hemiparesia", "Afasia"]
+    assert completo["skill_triaje"] == "elegida_por_el_triaje"
+
+
+def test_un_tic_con_candidatas_no_inventa_causa(entorno):
+    """Sin causa se guarda NULL, no una lista vacía ni un texto: la columna
+    vacía dice «el grafo sí propuso», que es distinto de las tres causas."""
+    db, grafo, _ = entorno
+    tics = TicRepo(db, grafo)
+
+    resultado = ResultadoTic(paciente_id="p1", texto_original="…", skill_activa="prueba")
+    completo = tics.tic_completo(tics.guardar(resultado))
+
+    assert completo["sin_candidatas"] is None
+    assert completo["conceptos_no_cubiertos"] is None
 
 
 def test_la_linea_de_tiempo_solo_trae_validados(entorno):

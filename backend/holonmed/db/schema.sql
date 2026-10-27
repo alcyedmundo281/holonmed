@@ -201,6 +201,17 @@ CREATE TABLE IF NOT EXISTS tic (
     -- grafo prefirió otra de las que propuso; esto dice que no propuso
     -- ésta siquiera, que es peor y hasta ahora se contaba igual.
     triaje_en_candidatas INTEGER,
+    -- Qué protocolo eligió el triaje, que no siempre es el activo.
+    skill_triaje       TEXT,
+    -- Por qué el grafo no propuso ninguna candidata, cuando no propuso
+    -- ninguna: nada_validado | sin_codificar | catalogo_no_cubre. NULL es
+    -- «sí propuso» (o «no se calculó»), que es distinto de las tres. Se
+    -- guarda porque la explicación existía sólo en la respuesta del tic, y
+    -- leerlo después la perdía.
+    sin_candidatas     TEXT,
+    -- Los conceptos validados que ningún protocolo cubre (JSON, lista), la
+    -- señal de qué protocolo falta por escribir.
+    conceptos_no_cubiertos TEXT,
     aviso_competencia  TEXT,
 
     -- Lo que la duda abre cuando Φ dice que la creencia dejó de ser

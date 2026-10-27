@@ -293,6 +293,7 @@ class CrystallizationPipeline:
             texto_original=texto,
             skill_activa=triaje.nombre,
             skill_version=triaje.version,
+            skill_triaje=triaje.nombre,
         )
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------

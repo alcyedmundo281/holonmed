@@ -820,6 +820,11 @@ class ResultadoTic(BaseModel):
             "encargo concreto en vez de en un aviso."
         ),
     )
+    # Lo que eligió el prompt de triaje, aparte de `skill_activa`: con
+    # `abduccion_decide` la competencia puede sustituir al protocolo activo, y
+    # entonces el mensaje «el triaje eligió fuera del grafo» necesita nombrar
+    # lo que eligió el triaje, no la ganadora.
+    skill_triaje: str | None = None
     triaje_en_candidatas: bool | None = Field(
         default=None,
         description=(

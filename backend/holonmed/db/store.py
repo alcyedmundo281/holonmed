@@ -54,6 +54,7 @@ COLUMNAS_JSON_DEL_TIC = (
     "veredicto",
     "competencia",
     "reapertura",
+    "conceptos_no_cubiertos",
 )
 
 
@@ -120,6 +121,9 @@ class Database:
         ("tic", "ganadora_abductiva", "TEXT"),
         ("tic", "triaje_coincide", "INTEGER"),
         ("tic", "triaje_en_candidatas", "INTEGER"),
+        ("tic", "skill_triaje", "TEXT"),
+        ("tic", "sin_candidatas", "TEXT"),
+        ("tic", "conceptos_no_cubiertos", "TEXT"),
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
@@ -724,9 +728,10 @@ class TicRepo:
                                         resumen, inferencia, acoplamiento,
                                         veredicto, competencia,
                                         ganadora_abductiva, triaje_coincide,
-                                        triaje_en_candidatas,
+                                        triaje_en_candidatas, skill_triaje,
+                                        sin_candidatas, conceptos_no_cubiertos,
                                         aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -752,6 +757,15 @@ class TicRepo:
                         None
                         if resultado.triaje_en_candidatas is None
                         else int(resultado.triaje_en_candidatas),
+                        resultado.skill_triaje,
+                        # Vacío se guarda como NULL, igual que `_json`: la
+                        # columna vacía dice «no aplica», no «cero conceptos».
+                        resultado.sin_candidatas.value
+                        if resultado.sin_candidatas
+                        else None,
+                        json.dumps(resultado.conceptos_no_cubiertos, ensure_ascii=False)
+                        if resultado.conceptos_no_cubiertos
+                        else None,
                         resultado.aviso_competencia,
                         _json(resultado.reapertura),
                     ),
