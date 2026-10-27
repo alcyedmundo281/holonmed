@@ -29,6 +29,7 @@ from ..models import (
     Infon,
     Polaridad,
     ResultadoTic,
+    SinCandidatas,
 )
 from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
@@ -126,6 +127,18 @@ FORMATO JSON:
 {{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
 
 
+def _texto_del_modelo(crudo: dict, clave: str) -> str:
+    """Lee un campo de texto de la salida del LLM, tratando `null` como vacío.
+
+    Un modelo puede emitir la clave con valor nulo, y entonces
+    `crudo.get(clave, "")` devuelve `None` en vez del defecto: la clave
+    EXISTE. `str(None)` da 'None', que mide cuatro y es verdadera, así que
+    pasa cualquier comprobación de «viene vacío».
+    """
+    valor = crudo.get(clave)
+    return "" if valor is None else str(valor).strip()
+
+
 def _normalizar(texto: str) -> str:
     """Minúsculas y sin acentos, para comparar lo que dice el texto."""
     import unicodedata
@@ -178,8 +191,8 @@ def _sin_cortes_inventados(
     """
     conservados, retirados = [], []
     for crudo in crudos:
-        cita = str(crudo.get("texto_origen", ""))
-        termino = str(crudo.get("termino_clinico", "")).strip()
+        cita = _texto_del_modelo(crudo, "texto_origen")
+        termino = _texto_del_modelo(crudo, "termino_clinico")
         plano = _normalizar(termino)
         if (
             any(c.isdigit() for c in cita)
@@ -280,6 +293,7 @@ class CrystallizationPipeline:
             texto_original=texto,
             skill_activa=triaje.nombre,
             skill_version=triaje.version,
+            skill_triaje=triaje.nombre,
         )
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
@@ -572,16 +586,76 @@ class CrystallizationPipeline:
         sus conceptos validados— y no de un prompt. Ésa es la sustitución
         que este paso prepara; hoy sólo la mide.
         """
+        # LAS TRES SALIDAS MUDAS, AHORA DICHAS.
+        #
+        # Salían por dos `return` sin traza y llegaban como el mismo `None`
+        # en `triaje_en_candidatas`. No son la misma situación y no se
+        # arreglan por el mismo sitio: la primera es un fallo de
+        # validación, la segunda del vocabulario, y la tercera no es un
+        # fallo sino un encargo — dice qué protocolo falta por escribir.
         validados = resultado.infones_validados
         if not validados:
+            # La alarma del tic, y más fuerte que Φ=0: Φ=0 sale también con
+            # un protocolo sin cocientes o con uno irrelevante, y esto no
+            # sale por ninguna otra razón. Hasta ahora había que deducirlo
+            # contando infones a ojo mientras el tic seguía a Bayes y a Φ.
+            resultado.sin_candidatas = SinCandidatas.NADA_VALIDADO
+            logger.warning(
+                "La lectura inicial no validó ni un solo hallazgo: la abducción "
+                "no tuvo de qué partir, y el protocolo '%s' lo eligió el "
+                "triaje solo.",
+                resultado.skill_activa,
+            )
             return
 
         codigos = self.validador.index.cobertura_de_grafo(
             i.concepto_id for i in validados if i.concepto_id
         )
-        candidatas = self.skills.para_concepto(codigos) if codigos else []
-        if not candidatas:
+        if not codigos:
+            resultado.sin_candidatas = SinCandidatas.SIN_CODIFICAR
+            sin_codigo = sum(1 for i in validados if not i.concepto_id)
+            logger.warning(
+                "%d hallazgo(s) validado(s) y el grafo sin por dónde empezar "
+                "(%d sin concepto_id). Es el vocabulario, no el catálogo.",
+                len(validados),
+                sin_codigo,
+            )
             return
+
+        candidatas = self.skills.para_concepto(codigos)
+        if not candidatas:
+            # LA ÚTIL DE LAS TRES, y la única que no es un diagnóstico del
+            # sistema. No dice que algo fallara: dice qué protocolo falta.
+            resultado.sin_candidatas = SinCandidatas.CATALOGO_NO_CUBRE
+            resultado.conceptos_no_cubiertos = sorted(
+                {i.termino for i in validados if i.concepto_id}
+            )
+            logger.warning(
+                "El catálogo no cubre nada de lo que este paciente tiene "
+                "validado: %s. No es un fallo: es el protocolo que falta.",
+                ", ".join(resultado.conceptos_no_cubiertos) or "(sin términos)",
+            )
+            return
+
+        # LA GUARDA DEL ROUTER, en su versión que sólo mide.
+        #
+        # Se registra ANTES del veto y del orden a propósito: la pregunta
+        # «¿propuso el grafo lo que eligió el prompt?» tiene respuesta
+        # aunque después se vete todo o no gane nadie, y perderla ahí
+        # convertiría el estado grave en un NULL indistinguible.
+        #
+        # `triaje_coincide` a False dice que el grafo prefirió otra de las
+        # que propuso. Esto dice que no propuso ésta en absoluto, que es
+        # otra cosa: el prompt eligió fuera de lo que el paciente sugiere.
+        propuestas = {c.nombre for c in candidatas}
+        resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
+        if not resultado.triaje_en_candidatas:
+            logger.warning(
+                "El triaje eligió '%s', que el grafo NO propuso. Propuso: %s. "
+                "No se cambia el protocolo: sólo se registra.",
+                resultado.skill_activa,
+                ", ".join(sorted(propuestas)),
+            )
 
         # El mismo conjunto para todas: se compite contra UN paciente, no
         # contra uno por hipótesis.
@@ -740,7 +814,10 @@ class CrystallizationPipeline:
         limpios = [
             item
             for item in crudos
-            if isinstance(item, dict) and str(item.get("termino_clinico", "")).strip()
+            # `str(item.get(clave, ""))` daría 'None' con un `null` del modelo:
+            # el filtro cuyo único trabajo es tirar lo que no trae término
+            # sería derrotado exactamente por el caso que debía cazar.
+            if isinstance(item, dict) and _texto_del_modelo(item, "termino_clinico")
         ]
 
         if generica:
@@ -764,8 +841,21 @@ class CrystallizationPipeline:
         skill: Skill,
         hints: dict[str, str],
     ) -> Infon | None:
-        termino = str(crudo.get("termino_clinico", "")).strip()
-        cita = str(crudo.get("texto_origen", "")).strip()
+        # `crudo.get(clave, "")` NO protege de un `null`: la clave existe, así
+        # que el defecto no se aplica y `str(None)` da la cadena 'None'
+        # —cuatro caracteres, verdadera— que la guarda de abajo deja pasar. El
+        # resultado llega a la pantalla del clínico como
+        #
+        #     [RUIDO    ] None [AUSENTE]
+        #
+        # y, peor, `texto_origen` fabrica una cita: el infón dice haberse
+        # apoyado en un fragmento de la nota que se llama «None».
+        #
+        # Es la misma forma que el `tipo:` sin valor ya corregido en
+        # `skills.py` —una clave presente y nula derrotando a su defecto—,
+        # ahora en el camino por donde entra TODO lo que dice el modelo.
+        termino = _texto_del_modelo(crudo, "termino_clinico")
+        cita = _texto_del_modelo(crudo, "texto_origen")
         if not termino:
             return None
 

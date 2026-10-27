@@ -677,3 +677,64 @@ async def test_el_phi_previo_de_otra_hipotesis_no_contamina(entorno):
     assert resultado.reapertura is not None
     assert resultado.reapertura.trayectoria is None
     assert resultado.reapertura.phi_previo is None
+
+
+# --- Un `null` del modelo no llega a la pantalla ---------------------------
+#
+# `str(crudo.get(clave, ""))` no protege de un `null`: la clave existe, así
+# que el defecto no se aplica y `str(None)` da 'None' —cuatro caracteres,
+# verdadera—. Se vio corriendo contra Ollama real, y la suite no podía verlo
+# porque ningún doble emitía `null`. Éste sí lo emite.
+
+EXTRACCION_CON_NULL = {
+    "resumen": "…",
+    "infones": [{"texto_origen": None, "termino_clinico": None, "presente": True}],
+}
+
+
+async def test_un_termino_nulo_del_modelo_no_produce_ningun_infon(entorno):
+    """La consecuencia, afirmada donde se ve: nada llega a la pantalla.
+
+    Antes salía `[RUIDO] None [AUSENTE]`, con `termino_propuesto='None'` en
+    la traza: el registro decía que el clínico propuso «None».
+    """
+    pipeline = entorno(
+        LLMFalso(extraccion=EXTRACCION_CON_NULL),
+        IndexFalso(score=95.0, exacto=True),
+    )
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
+
+    assert resultado.infones == []
+
+
+async def test_un_termino_nulo_no_gasta_una_llamada_al_auditor(entorno):
+    """Un no-hallazgo no paga una auditoría.
+
+    Antes, el `null` sobrevivía al filtro `limpios` —cuyo único trabajo es
+    descartar lo que no trae término— y recorría la validación ontológica
+    entera gastando una llamada al auditor.
+
+    Hoy lo paran DOS guardas: ese filtro y `_validar_hallazgo`. Son
+    redundantes a propósito y por eso ninguna de las dos se puede pinchar
+    por separado: revertir una sola deja estas pruebas en verde, y hacen
+    falta las dos para tumbarlas. Lo que este test fija es la consecuencia,
+    no cuál de las dos la sostiene.
+    """
+
+    class LLMQueCuenta(LLMFalso):
+        def __init__(self, **kw):
+            super().__init__(**kw)
+            self.auditorias = 0
+
+        async def generar_json(self, prompt, **kwargs):
+            if "Auditor Médico" in prompt:
+                self.auditorias += 1
+            return await super().generar_json(prompt, **kwargs)
+
+    llm = LLMQueCuenta(extraccion=EXTRACCION_CON_NULL)
+    pipeline = entorno(llm, IndexFalso(score=95.0, exacto=True))
+    await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert llm.auditorias == 0

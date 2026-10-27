@@ -268,3 +268,229 @@ def test_una_ausencia_no_validada_no_descarta_nada():
     base = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [])
     con_dudosa = motor.calcular({}, SKILL_CON_LR_NEGATIVO, [dudosa])
     assert con_dudosa.probabilidad_porcentaje == base.probabilidad_porcentaje
+
+
+# --- El a priori: dos defectos en la dirección peligrosa -------------------
+#
+# Encontrados corriendo la UI contra un paciente real con antecedente
+# «Alcoholismo cronico». La traza los confesaba en dos líneas seguidas —el
+# diseño de auditabilidad funcionaba— pero el número no.
+
+import math  # noqa: E402
+
+import pytest  # noqa: E402
+
+from holonmed.core.bayes import _factores_que_aplican  # noqa: E402
+
+FACTORES = {"alcohol": 2.8, "alcoholismo": 2.8, "litiasis biliar": 4.0}
+
+
+def _producto(texto):
+    return math.prod(
+        a.peso for a in _factores_que_aplican(FACTORES, texto) if a.peso is not None
+    )
+
+
+def test_dos_nombres_del_mismo_factor_no_multiplican_dos_veces():
+    """`alcohol` y `alcoholismo` sobre «alcoholismo cronico» son UN factor.
+
+    Antes: 2.8 × 2.8 = 7.84, y una previa del 5% subía al 29.2% en vez del
+    12.8%. Contar de más infla la probabilidad previa, que es hacia donde no
+    se debe errar.
+    """
+    assert _producto("alcoholismo cronico") == 2.8
+
+
+def test_manda_el_nombre_mas_especifico():
+    """Con dos claves sobre el mismo texto se aplica la coincidencia larga."""
+    aplicados = [
+        a
+        for a in _factores_que_aplican(FACTORES, "alcoholismo cronico")
+        if a.peso is not None
+    ]
+    assert [a.linea.split("'")[1] for a in aplicados] == ["alcoholismo"]
+
+
+def test_un_antecedente_negado_no_sube_la_probabilidad():
+    """El defecto de DIRECCIÓN, que es el grave.
+
+    Siendo una subcadena, «sin antecedente de alcoholismo» multiplicaba
+    ×7.84: el sistema subía la probabilidad porque la nota decía que el
+    paciente NO tenía el factor.
+    """
+    assert _producto("sin antecedente de alcoholismo") == 1
+
+
+@pytest.mark.parametrize(
+    "texto", ["no bebe alcohol", "niega alcoholismo", "ausencia de alcoholismo"]
+)
+def test_otras_formas_de_negar_tampoco_suman(texto):
+    assert _producto(texto) == 1
+
+
+def test_un_factor_suprimido_se_dice_en_la_traza():
+    """Un factor suprimido que se anuncia es auditable; uno aplicado en
+    silencio sobre una negación, no."""
+    lineas = [a.linea for a in _factores_que_aplican(FACTORES, "sin alcoholismo")]
+    assert any("NO aplicado" in x and "niega" in x for x in lineas)
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "masculino con alcoholismo",
+        "femenino con alcoholismo",
+        "paciente masculino, alcoholismo cronico",
+        "varon de 50 años con alcoholismo",
+    ],
+)
+def test_una_marca_de_negacion_dentro_de_otra_palabra_no_niega(texto):
+    """«no » es el final de «masculino» y «femenino»: como subcadena, un
+    antecedente afirmado se leía como negado y la previa BAJABA. La marca de
+    negación es una palabra, no un trozo de palabra."""
+    assert _producto(texto) == 2.8
+
+
+def test_la_ventana_que_empieza_a_media_palabra_tampoco_niega():
+    """La ventana de negación mira 24 caracteres atrás. Si el recorte cae justo
+    en el «no » final de «masculino», mirar sólo el recorte vería una palabra
+    «no» que en el texto no existe: se busca sobre el texto entero."""
+    texto = "masculi" + "no " + "x" * 21 + "alcoholismo"
+    assert texto.index("alcoholismo") - 24 == texto.index("no ")  # el caso límite
+    assert _producto(texto) == 2.8
+
+
+def test_la_negacion_de_verdad_sigue_negando_con_otras_palabras_delante():
+    assert _producto("paciente adulto que no bebe alcohol") == 1
+    assert _producto("refiere: sin consumo de alcoholismo") == 1
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Los dos de la revisión: una negación de OTRA cosa, a menos de 24
+        # caracteres, no puede negar un factor que el texto afirma.
+        "sin fiebre. alcoholismo crónico",
+        "sin fiebre, con alcoholismo crónico",
+        "Sin fiebre. Alcoholismo crónico".lower(),
+        "niega dolor; alcoholismo crónico",
+        "sin fiebre\nalcoholismo crónico",
+        "no refiere fiebre pero con alcoholismo",
+        "sin antecedentes, excepto alcoholismo",
+    ],
+)
+def test_la_negacion_no_cruza_la_frase_ni_una_afirmacion(texto):
+    """Una marca de negación sólo llega hasta el fin de su frase o hasta una
+    palabra que vuelve a afirmar. Antes llegaba a cualquier cosa a menos de 24
+    caracteres, y suprimía —avisando falsamente de que «el texto lo niega»— un
+    factor presente, con lo que la previa BAJABA."""
+    assert _producto(texto) == 2.8
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # La negación sigue valiendo dentro de su frase, aunque haya comas,
+        # una lista o un «ni»: equivocarse hacia aquí SUBE la previa.
+        "niega tabaquismo, alcoholismo",
+        "sin fiebre ni alcoholismo",
+        "no tiene alcoholismo",
+        "niega tener alcoholismo",
+        "sin antecedente de alcoholismo",
+        "sin dolor. no bebe alcohol",
+    ],
+)
+def test_la_negacion_sigue_valiendo_dentro_de_su_frase(texto):
+    assert _producto(texto) == 1
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El caso de la revisión: se niega y después se reconoce.
+        "inicialmente niega alcoholismo. luego reconoce alcoholismo crónico.",
+        # Un antecedente registrado que lo niega, concatenado con la nota de
+        # hoy que lo afirma (`metadatos_para_bayes` junta las dos fuentes).
+        "sin antecedente de alcoholismo. paciente con alcoholismo crónico",
+        # Al revés: afirma y luego niega. Basta una mención afirmada.
+        "alcoholismo crónico. hoy niega alcoholismo",
+    ],
+)
+def test_una_mencion_afirmada_basta_aunque_otra_lo_niegue(texto):
+    """`find()` sólo miraba la primera aparición: si esa estaba negada, una
+    afirmación posterior no se veía y el factor se suprimía. Ahora el factor
+    existe si CUALQUIER mención lo afirma, y cuenta una sola vez."""
+    assert _producto(texto) == 2.8
+
+
+def test_si_todas_las_menciones_lo_niegan_se_suprime():
+    assert _producto("niega alcoholismo. sin alcoholismo en la familia") == 1
+
+
+def test_una_contradiccion_se_dice_en_la_traza():
+    lineas = [
+        a.linea
+        for a in _factores_que_aplican(FACTORES, "sin alcoholismo. con alcoholismo")
+        if a.peso is not None
+    ]
+    assert len(lineas) == 1
+    assert "otra mención lo niega y otra lo afirma" in lineas[0]
+
+
+def _factor_de_alcohol(holon, nota):
+    return math.prod(
+        a.peso
+        for a in _factores_que_aplican(
+            FACTORES, holon.metadatos_para_bayes(nota)["antecedentes"]
+        )
+        if a.peso is not None
+    )
+
+
+def test_una_negacion_de_una_fuente_no_pasa_a_la_siguiente():
+    """`metadatos_para_bayes` junta antecedentes, historia y nota de hoy. Unidos
+    con espacios, «Sin fiebre» (ficha) + «Alcoholismo crónico» (nota) se leían
+    «sin fiebre alcoholismo crónico» y el factor afirmado se suprimía."""
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="p", antecedentes="Sin fiebre")
+    assert _factor_de_alcohol(holon, "Alcoholismo crónico") == 2.8
+
+
+def test_un_termino_historico_negado_no_pasa_a_la_nota_de_hoy():
+    from holonmed.models import EstadoInfon, HolonPaciente, Infon
+
+    historico = Infon(
+        texto_origen="…",
+        termino_propuesto="Ausencia de dolor",
+        termino="Ausencia de dolor",
+        estado=EstadoInfon.VALIDADO,
+    )
+    holon = HolonPaciente(paciente_id="p", linea_tiempo=[historico])
+    assert _factor_de_alcohol(holon, "Alcoholismo crónico") == 2.8
+
+
+def test_la_negacion_dentro_de_una_misma_fuente_sigue_valiendo():
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="p", antecedentes="Alergia a penicilina")
+    assert _factor_de_alcohol(holon, "Niega alcoholismo") == 1
+
+
+def test_las_fuentes_vacias_no_dejan_separadores_sueltos():
+    from holonmed.models import HolonPaciente
+
+    meta = HolonPaciente(paciente_id="p").metadatos_para_bayes("  Litiasis biliar ")
+    assert meta["antecedentes"] == "litiasis biliar"
+
+
+def test_gana_la_negacion_mas_cercana():
+    """«sin fiebre. no bebe alcohol»: la que manda sobre el factor es la
+    segunda, aunque la primera quede dentro de la ventana."""
+    assert _producto("sin fiebre. no bebe alcohol") == 1
+    assert _producto("no bebe. sin fiebre. alcoholismo") == 2.8
+
+
+def test_dos_factores_DISTINTOS_si_multiplican():
+    """El arreglo no puede tragarse los factores que sí son dos."""
+    assert _producto("litiasis biliar y alcoholismo") == pytest.approx(4.0 * 2.8)

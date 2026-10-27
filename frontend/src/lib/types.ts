@@ -376,6 +376,40 @@ export interface ResultadoTic {
   /** `null` —y no `false`— si no hubo competencia con la que comparar. */
   triaje_coincide: boolean | null;
   /**
+   * Por qué el grafo no propuso ninguna hipótesis. `null` significa que SÍ
+   * propuso: la ausencia de causa es la presencia de candidatas.
+   *
+   * Las tres salían por el mismo `return` y llegaban como el mismo `null`:
+   *
+   *  - `nada_validado`     no se validó ni un hallazgo. La alarma del tic,
+   *                        y más fuerte que Φ=0, que también sale con un
+   *                        protocolo sin cocientes o con uno irrelevante.
+   *  - `sin_codificar`     hay hallazgos y el grafo no tiene por dónde
+   *                        empezar. Es el vocabulario.
+   *  - `catalogo_no_cubre` hay conceptos y ningún protocolo los cubre. No
+   *                        es un fallo: es el protocolo que falta por
+   *                        escribir, y `conceptos_no_cubiertos` dice cuál.
+   */
+  sin_candidatas: 'nada_validado' | 'sin_codificar' | 'catalogo_no_cubre' | null;
+  /** Sólo con `catalogo_no_cubre`: qué hallazgos del paciente nadie cubre. */
+  conceptos_no_cubiertos: string[];
+  /**
+   * Tercer estado del mismo eje, y el grave. `triaje_coincide === false`
+   * dice que el grafo prefirió OTRA de las que propuso; esto dice que no
+   * propuso siquiera la que el triaje eligió, es decir que el prompt
+   * eligió fuera de lo que el paciente sugiere. `null` cuando el grafo no
+   * propuso ninguna candidata.
+   *
+   * Sólo mide: el protocolo que se usa no cambia.
+   */
+  triaje_en_candidatas: boolean | null;
+  /**
+   * Lo que eligió el prompt de triaje, aparte de `skill_activa`: con
+   * `abduccion_decide` la competencia puede sustituir al protocolo activo, y
+   * `triaje_en_candidatas` se refiere a ESTE, no al activo.
+   */
+  skill_triaje: string | null;
+  /**
    * Se dice en voz alta cuando la de mayor coseno quedó fuera por α:
    * «encaja mejor y no puedo usarla porque su protocolo no cita». Si la
    * compuerta actúa callada, el sistema trata otra cosa sin explicar por

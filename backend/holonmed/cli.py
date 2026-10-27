@@ -245,12 +245,62 @@ def _lineas_reapertura(reapertura) -> list[str]:
     return lineas
 
 
+# Las tres causas, dichas donde se leen. La primera es la alarma del tic y
+# por eso no espera a la sección de competencia: si no se validó nada, eso
+# es lo primero que hay que saber, por delante de la probabilidad que el
+# sistema haya producido de todos modos.
+_SIN_CANDIDATAS = {
+    "nada_validado": (
+        "NO SE VALIDÓ NI UN HALLAZGO. La abducción no tuvo de qué partir; "
+        "el protocolo lo eligió el triaje solo."
+    ),
+    "sin_codificar": (
+        "Hay hallazgos validados y el grafo no tiene por dónde empezar: "
+        "les falta código. Es el vocabulario, no el catálogo."
+    ),
+    "catalogo_no_cubre": (
+        "Ningún protocolo del catálogo cubre lo que este paciente tiene "
+        "validado. No es un fallo: es el protocolo que falta por escribir."
+    ),
+}
+
+
+def _lineas_sin_candidatas(resultado) -> list[str]:
+    """Por qué el grafo no propuso nada, cuando no propuso nada."""
+    causa = getattr(resultado.sin_candidatas, "value", resultado.sin_candidatas)
+    if not causa:
+        return []
+
+    texto = _SIN_CANDIDATAS[causa]
+    # La causa se fija al competir, sobre la LECTURA INICIAL. Con
+    # `abduccion_decide` esa lectura es genérica y la segunda pasada, con el
+    # protocolo del triaje, puede validar lo que la primera rechazó: decir
+    # entonces «no se validó ni un hallazgo» sería falso sobre el tic entero,
+    # que sí tiene evidencia validada entrando a Bayes.
+    n = len(resultado.infones_validados)
+    if causa == "nada_validado" and n:
+        texto = (
+            "LA LECTURA INICIAL NO VALIDÓ NI UN HALLAZGO. La abducción no tuvo "
+            "de qué partir y el protocolo lo eligió el triaje solo; la segunda "
+            f"pasada con ese protocolo sí validó {n} hallazgo(s), y son los que "
+            "entran al cálculo."
+        )
+    lineas = ["", texto]
+    if resultado.conceptos_no_cubiertos:
+        lineas.append("  sin cubrir: " + ", ".join(resultado.conceptos_no_cubiertos))
+    return lineas
+
+
 def _lineas_competencia(resultado) -> list[str]:
     """Contra qué compitió, con las perdedoras y su motivo."""
     if not resultado.competencia:
         return []
 
     lineas = ["", f"Competencia abductiva ({len(resultado.competencia)} candidatas):"]
+    # Lo que eligió el triaje, no el protocolo activo: con `abduccion_decide`
+    # el activo puede ser ya la ganadora del grafo, y atribuirle al triaje la
+    # elección de la ganadora le quitaría el error que se está midiendo.
+    elegida = resultado.skill_triaje or resultado.skill_activa
     if resultado.triaje_coincide is None:
         lineas.append("  No hubo candidata admitida con la que comparar el triaje.")
     elif resultado.triaje_coincide:
@@ -259,8 +309,17 @@ def _lineas_competencia(resultado) -> list[str]:
         )
     else:
         lineas.append(
-            f"  DISCREPAN: el triaje usó {resultado.skill_activa} y el grafo "
+            f"  DISCREPAN: el triaje usó {elegida} y el grafo "
             f"habría elegido {resultado.ganadora_abductiva}."
+        )
+
+    # El tercer estado se dice aparte y sólo cuando ocurre: discrepar sobre
+    # dos hipótesis que el paciente sugiere es una cosa, y elegir una que no
+    # sugiere es otra. Fundidos en una línea se leen igual.
+    if resultado.triaje_en_candidatas is False:
+        lineas.append(
+            f"  FUERA DEL GRAFO: {elegida} no estaba entre las "
+            f"candidatas que el paciente sugiere. Sólo se registra."
         )
     if resultado.aviso_competencia:
         lineas.append(f"  AVISO: {resultado.aviso_competencia}")
@@ -335,6 +394,14 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
         print(f"  {resultado.todas_vetadas}")
         print()
         return 0
+
+    # La causa va ANTES de la probabilidad, y ése es el sitio con contenido.
+    # «No se validó ni un hallazgo» cambia cómo se lee todo lo que viene
+    # detrás: un posterior calculado sin evidencia validada es la
+    # prevalencia con otro nombre, y leerlo después del número es leerlo
+    # tarde.
+    for linea in _lineas_sin_candidatas(resultado):
+        print(linea)
 
     for linea in _lineas_veredicto(resultado.veredicto_declarado):
         print(linea)
