@@ -404,6 +404,12 @@ export interface ResultadoTic {
    */
   triaje_en_candidatas: boolean | null;
   /**
+   * Lo que eligió el prompt de triaje, aparte de `skill_activa`: con
+   * `abduccion_decide` la competencia puede sustituir al protocolo activo, y
+   * `triaje_en_candidatas` se refiere a ESTE, no al activo.
+   */
+  skill_triaje: string | null;
+  /**
    * Se dice en voz alta cuando la de mayor coseno quedó fuera por α:
    * «encaja mejor y no puedo usarla porque su protocolo no cita». Si la
    * compuerta actúa callada, el sistema trata otra cosa sin explicar por

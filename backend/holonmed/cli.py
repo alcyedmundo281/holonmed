@@ -283,6 +283,10 @@ def _lineas_competencia(resultado) -> list[str]:
         return []
 
     lineas = ["", f"Competencia abductiva ({len(resultado.competencia)} candidatas):"]
+    # Lo que eligió el triaje, no el protocolo activo: con `abduccion_decide`
+    # el activo puede ser ya la ganadora del grafo, y atribuirle al triaje la
+    # elección de la ganadora le quitaría el error que se está midiendo.
+    elegida = resultado.skill_triaje or resultado.skill_activa
     if resultado.triaje_coincide is None:
         lineas.append("  No hubo candidata admitida con la que comparar el triaje.")
     elif resultado.triaje_coincide:
@@ -291,7 +295,7 @@ def _lineas_competencia(resultado) -> list[str]:
         )
     else:
         lineas.append(
-            f"  DISCREPAN: el triaje usó {resultado.skill_activa} y el grafo "
+            f"  DISCREPAN: el triaje usó {elegida} y el grafo "
             f"habría elegido {resultado.ganadora_abductiva}."
         )
 
@@ -300,7 +304,7 @@ def _lineas_competencia(resultado) -> list[str]:
     # sugiere es otra. Fundidos en una línea se leen igual.
     if resultado.triaje_en_candidatas is False:
         lineas.append(
-            f"  FUERA DEL GRAFO: {resultado.skill_activa} no estaba entre las "
+            f"  FUERA DEL GRAFO: {elegida} no estaba entre las "
             f"candidatas que el paciente sugiere. Sólo se registra."
         )
     if resultado.aviso_competencia:

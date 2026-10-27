@@ -335,6 +335,36 @@ def test_un_factor_suprimido_se_dice_en_la_traza():
     assert any("NO aplicado" in x and "niega" in x for x in lineas)
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "masculino con alcoholismo",
+        "femenino con alcoholismo",
+        "paciente masculino, alcoholismo cronico",
+        "varon de 50 años con alcoholismo",
+    ],
+)
+def test_una_marca_de_negacion_dentro_de_otra_palabra_no_niega(texto):
+    """«no » es el final de «masculino» y «femenino»: como subcadena, un
+    antecedente afirmado se leía como negado y la previa BAJABA. La marca de
+    negación es una palabra, no un trozo de palabra."""
+    assert _producto(texto) == 2.8
+
+
+def test_la_ventana_que_empieza_a_media_palabra_tampoco_niega():
+    """La ventana de negación mira 24 caracteres atrás. Si el recorte cae justo
+    en el «no » final de «masculino», mirar sólo el recorte vería una palabra
+    «no» que en el texto no existe: se busca sobre el texto entero."""
+    texto = "masculi" + "no " + "x" * 21 + "alcoholismo"
+    assert texto.index("alcoholismo") - 24 == texto.index("no ")  # el caso límite
+    assert _producto(texto) == 2.8
+
+
+def test_la_negacion_de_verdad_sigue_negando_con_otras_palabras_delante():
+    assert _producto("paciente adulto que no bebe alcohol") == 1
+    assert _producto("refiere: sin consumo de alcoholismo") == 1
+
+
 def test_dos_factores_DISTINTOS_si_multiplican():
     """El arreglo no puede tragarse los factores que sí son dos."""
     assert _producto("litiasis biliar y alcoholismo") == pytest.approx(4.0 * 2.8)

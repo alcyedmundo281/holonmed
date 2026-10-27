@@ -119,6 +119,30 @@ def test_el_tercer_estado_es_distinto_de_discrepar():
 # vocabulario, y la tercera no es un fallo sino un encargo.
 
 
+def test_el_aviso_nombra_lo_que_eligio_el_triaje_y_no_la_ganadora():
+    """Con `abduccion_decide` el protocolo activo ya es la ganadora del grafo.
+    Decir «FUERA DEL GRAFO: <la ganadora>» desacreditaba justo a la hipótesis
+    que el grafo sí sostiene, y escondía cuál fue la elección del triaje."""
+    from holonmed.cli import _lineas_competencia
+    from holonmed.models import CandidataAbductiva
+
+    r = ResultadoTic(
+        paciente_id="t",
+        texto_original="…",
+        skill_activa="ganadora_del_grafo",
+        skill_triaje="elegida_por_el_triaje",
+        triaje_en_candidatas=False,
+        triaje_coincide=False,
+        ganadora_abductiva="ganadora_del_grafo",
+        competencia=[CandidataAbductiva(skill="ganadora_del_grafo")],
+    )
+    texto = "\n".join(_lineas_competencia(r))
+
+    assert "FUERA DEL GRAFO: elegida_por_el_triaje" in texto
+    assert "el triaje usó elegida_por_el_triaje" in texto
+    assert "FUERA DEL GRAFO: ganadora_del_grafo" not in texto
+
+
 async def test_un_tic_que_no_valida_nada_lo_dice(entorno, tmp_path):  # noqa: F811
     """La alarma del tic, y la más fuerte de las tres.
 
