@@ -243,9 +243,19 @@ class OllamaClient:
             logger.warning("Clasificación degradada a '%s': %s", defecto, exc)
             return defecto
 
-        for opcion in opciones_validas:
-            if opcion.lower() in raw:
-                return opcion
+        nombradas = [o for o in opciones_validas if o.lower() in raw]
+        # Una opción contenida en otra nombrada no cuenta aparte: «ab» nombra
+        # a «ab», no a «a».
+        nombradas = [
+            o
+            for o in nombradas
+            if not any(o != p and o.lower() in p.lower() for p in nombradas)
+        ]
+        if len(nombradas) == 1:
+            return nombradas[0]
 
-        logger.info("Respuesta '%s' fuera del conjunto; usando '%s'", raw[:60], defecto)
+        # Un modelo pequeño que duda suele recitar la lista de opciones. Tomar
+        # la primera sería elegir una al azar; mejor no decidir.
+        motivo = "nombra varias opciones" if nombradas else "fuera del conjunto"
+        logger.info("Respuesta '%s' %s; usando '%s'", raw[:60], motivo, defecto)
         return defecto

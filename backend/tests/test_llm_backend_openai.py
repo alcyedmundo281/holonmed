@@ -92,6 +92,44 @@ async def test_elegir_opcion_degrada_al_defecto_si_el_servidor_cae():
     assert elegida == "b"
 
 
+def _responde(texto: str):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": texto}}]})
+
+    return handler
+
+
+@pytest.mark.parametrize(
+    ("respuesta", "esperada"),
+    [
+        ("tromboembolia_pulmonar", "tromboembolia_pulmonar"),
+        ("  Protocolo: Tromboembolia_Pulmonar.\n", "tromboembolia_pulmonar"),
+        # Recita la lista: no se elige ninguna, ni la primera.
+        ("- acute_pancreatitis\n- tromboembolia_pulmonar", "general_triage"),
+        ("tromboembolia_pulmonar o sindrome_coronario_agudo", "general_triage"),
+        # Fuera del conjunto.
+        ("no sé", "general_triage"),
+        ("", "general_triage"),
+    ],
+)
+async def test_elegir_opcion_no_elige_si_la_respuesta_es_ambigua(respuesta, esperada):
+    opciones = ["acute_pancreatitis", "general_triage", "tromboembolia_pulmonar"]
+    opciones.append("sindrome_coronario_agudo")
+    async with _cliente(_responde(respuesta)) as llm:
+        elegida = await llm.elegir_opcion(
+            "x", opciones_validas=opciones, defecto="general_triage"
+        )
+    assert elegida == esperada
+
+
+async def test_elegir_opcion_una_opcion_contenida_en_otra_no_es_ambigua():
+    async with _cliente(_responde("apnea_del_sueno")) as llm:
+        elegida = await llm.elegir_opcion(
+            "x", opciones_validas=["apnea", "apnea_del_sueno"], defecto="apnea"
+        )
+    assert elegida == "apnea_del_sueno"
+
+
 async def test_modelos_se_listan_desde_v1_models():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v1/models"
