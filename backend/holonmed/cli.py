@@ -243,6 +243,40 @@ def _lineas_reapertura(reapertura) -> list[str]:
     return lineas
 
 
+# Las tres causas, dichas donde se leen. La primera es la alarma del tic y
+# por eso no espera a la sección de competencia: si no se validó nada, eso
+# es lo primero que hay que saber, por delante de la probabilidad que el
+# sistema haya producido de todos modos.
+_SIN_CANDIDATAS = {
+    "nada_validado": (
+        "NO SE VALIDÓ NI UN HALLAZGO. La abducción no tuvo de qué partir; "
+        "el protocolo lo eligió el triaje solo."
+    ),
+    "sin_codificar": (
+        "Hay hallazgos validados y el grafo no tiene por dónde empezar: "
+        "les falta código. Es el vocabulario, no el catálogo."
+    ),
+    "catalogo_no_cubre": (
+        "Ningún protocolo del catálogo cubre lo que este paciente tiene "
+        "validado. No es un fallo: es el protocolo que falta por escribir."
+    ),
+}
+
+
+def _lineas_sin_candidatas(resultado) -> list[str]:
+    """Por qué el grafo no propuso nada, cuando no propuso nada."""
+    causa = getattr(resultado.sin_candidatas, "value", resultado.sin_candidatas)
+    if not causa:
+        return []
+
+    lineas = ["", _SIN_CANDIDATAS[causa]]
+    if resultado.conceptos_no_cubiertos:
+        lineas.append(
+            "  sin cubrir: " + ", ".join(resultado.conceptos_no_cubiertos)
+        )
+    return lineas
+
+
 def _lineas_competencia(resultado) -> list[str]:
     """Contra qué compitió, con las perdedoras y su motivo."""
     if not resultado.competencia:
@@ -340,6 +374,14 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
         print(f"  {resultado.todas_vetadas}")
         print()
         return 0
+
+    # La causa va ANTES de la probabilidad, y ése es el sitio con contenido.
+    # «No se validó ni un hallazgo» cambia cómo se lee todo lo que viene
+    # detrás: un posterior calculado sin evidencia validada es la
+    # prevalencia con otro nombre, y leerlo después del número es leerlo
+    # tarde.
+    for linea in _lineas_sin_candidatas(resultado):
+        print(linea)
 
     for linea in _lineas_veredicto(resultado.veredicto_declarado):
         print(linea)

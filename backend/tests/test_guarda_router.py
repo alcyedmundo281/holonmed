@@ -18,7 +18,7 @@ from test_pipeline import (  # noqa: F401
     entorno,
 )
 
-from holonmed.models import HolonPaciente, ResultadoTic
+from holonmed.models import HolonPaciente, ResultadoTic, SinCandidatas
 
 # --- La guarda del router: el tercer estado del eje del triaje -------------
 #
@@ -106,3 +106,81 @@ def test_el_tercer_estado_es_distinto_de_discrepar():
     """
     r = ResultadoTic(paciente_id="t", texto_original="x", skill_activa="a")
     assert r.triaje_en_candidatas is None
+
+
+# --- Las tres salidas mudas, cada una con su nombre ------------------------
+#
+# Salían por dos `return` y llegaban como el mismo `None`. No son la misma
+# situación: la primera es un fallo de validación, la segunda del
+# vocabulario, y la tercera no es un fallo sino un encargo.
+
+
+async def test_un_tic_que_no_valida_nada_lo_dice(entorno, tmp_path):  # noqa: F811
+    """La alarma del tic, y la más fuerte de las tres.
+
+    Φ=0 sale también con un protocolo sin cocientes o con uno irrelevante;
+    «no se validó ni un hallazgo» no sale por ninguna otra razón. Hasta
+    ahora había que deducirlo contando infones a ojo mientras el tic seguía
+    a Bayes y a Φ como si tuviera de qué partir.
+    """
+    (tmp_path / "general_triage.md").write_text(
+        SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
+    )
+    # Score por debajo del umbral de alerta: nada llega a VALIDADO.
+    pipeline = entorno(LLMFalso(), IndexFalso(score=10.0, exacto=False))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert not resultado.infones_validados
+    assert resultado.sin_candidatas is SinCandidatas.NADA_VALIDADO
+
+
+async def test_validado_sin_codigo_culpa_al_vocabulario(entorno, tmp_path):  # noqa: F811
+    """Hay hallazgos y el grafo no tiene por dónde empezar.
+
+    No es que el catálogo se quede corto: es que lo validado no está
+    codificado. Se arregla por el vocabulario, y colapsado con la tercera
+    mandaría a escribir un protocolo que no falta.
+    """
+    (tmp_path / "general_triage.md").write_text(
+        SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
+    )
+
+    class SinCobertura(IndexFalso):
+        def cobertura_de_grafo(self, concepto_ids):
+            return set()
+
+    pipeline = entorno(LLMFalso(), SinCobertura(score=95.0, exacto=True))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert resultado.infones_validados
+    assert resultado.sin_candidatas is SinCandidatas.SIN_CODIFICAR
+
+
+async def test_lo_que_el_catalogo_no_cubre_es_un_encargo(entorno, tmp_path):  # noqa: F811
+    """La útil de las tres, y la única que no es un diagnóstico del sistema.
+
+    Es la que el ACV habría dado si la validación hubiera funcionado: este
+    paciente tiene hallazgos que tu catálogo no cubre, y aquí están. No
+    basta con nombrar la causa —hay que nombrar los conceptos—, porque sin
+    ellos la señal dice que falta un protocolo y no cuál.
+    """
+    (tmp_path / "general_triage.md").write_text(
+        SKILL_CON_AMBITO.format(ambito="999999"), encoding="utf-8"
+    )
+    pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert resultado.infones_validados
+    assert resultado.sin_candidatas is SinCandidatas.CATALOGO_NO_CUBRE
+    assert resultado.conceptos_no_cubiertos == ["Fiebre"]
+
+
+async def test_con_candidatas_no_hay_causa_que_dar(entorno, tmp_path):  # noqa: F811
+    """`None` es «sí propuso», no un cuarto estado mudo."""
+    (tmp_path / "general_triage.md").write_text(
+        SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
+    )
+    pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
+    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+
+    assert resultado.sin_candidatas is None

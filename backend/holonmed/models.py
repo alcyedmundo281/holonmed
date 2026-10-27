@@ -416,6 +416,49 @@ class CausaDeLaDuda(str, Enum):
     EXPLICACION = "explicacion"  # no explica al paciente: volver a la abducción
 
 
+class SinCandidatas(str, Enum):
+    """Por qué el grafo no propuso ninguna hipótesis.
+
+    Las tres salían por el mismo `return` y llegaban como el mismo `None`,
+    y no son la misma situación ni se arreglan por el mismo sitio. Es la
+    quinta vez que este repositorio encuentra la misma forma —`SIN_MEDIR`,
+    `sin_ubicar`, `triaje_coincide`, `umbral_cumplido`— un None con dos
+    sentidos dentro y el grave escondido en él.
+
+    La tercera es la única que no es un diagnóstico del sistema sino un
+    encargo: dice que este paciente tiene hallazgos que el catálogo no
+    cubre, y nombra cuáles. Colapsada con las otras, la señal que manda a
+    escribir un protocolo nuevo se lee igual que la que dice que el
+    vocabulario se quedó corto.
+    """
+
+    NADA_VALIDADO = "nada_validado"
+    """No se validó ni un hallazgo. La abducción no tuvo de qué partir.
+
+    Es más fuerte que Φ=0, porque Φ=0 sale también con un protocolo sin
+    cocientes o con uno irrelevante, y esto no sale por ninguna otra
+    razón. Un tic que no valida nada y aun así produce algo con forma de
+    diagnóstico es la alarma del tic.
+    """
+
+    SIN_CODIFICAR = "sin_codificar"
+    """Hay hallazgos validados, pero el grafo no tiene por dónde empezar.
+
+    O ninguno llegó con `concepto_id`, o los que llegaron no tienen
+    cobertura en el grafo. Es un fallo del vocabulario, no del catálogo:
+    el paciente sí dijo cosas y el sistema no supo codificarlas.
+    """
+
+    CATALOGO_NO_CUBRE = "catalogo_no_cubre"
+    """Hay conceptos y ningún protocolo los cubre. **Es un encargo.**
+
+    No dice que el sistema fallara: dice qué protocolo falta por escribir,
+    y `conceptos_no_cubiertos` nombra cuáles. Es la señal de producto de
+    las tres, y la que el ACV habría dado si la validación hubiera
+    funcionado.
+    """
+
+
 class TrayectoriaDeLaCreencia(str, Enum):
     """Si la creencia se rompió o si nunca llegó a arraigar.
 
@@ -617,6 +660,18 @@ class ResultadoTic(BaseModel):
     # el triaje eligió—, y hasta ahora los dos se contaban igual.
     #
     # Sólo MIDE. No cambia qué protocolo se usa.
+    # Por qué el grafo no propuso nada, cuando no propuso nada. `None`
+    # significa que SÍ propuso: la ausencia de causa es la presencia de
+    # candidatas, y no un cuarto estado mudo.
+    sin_candidatas: SinCandidatas | None = None
+    conceptos_no_cubiertos: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Sólo con CATALOGO_NO_CUBRE: los conceptos validados que ningún "
+            "protocolo del catálogo cubre. Es lo que convierte la causa en un "
+            "encargo concreto en vez de en un aviso."
+        ),
+    )
     triaje_en_candidatas: bool | None = Field(
         default=None,
         description=(

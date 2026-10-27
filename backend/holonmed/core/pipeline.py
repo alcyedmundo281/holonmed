@@ -29,6 +29,7 @@ from ..models import (
     Infon,
     Polaridad,
     ResultadoTic,
+    SinCandidatas,
 )
 from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
@@ -590,15 +591,54 @@ class CrystallizationPipeline:
         sus conceptos validados— y no de un prompt. Ésa es la sustitución
         que este paso prepara; hoy sólo la mide.
         """
+        # LAS TRES SALIDAS MUDAS, AHORA DICHAS.
+        #
+        # Salían por dos `return` sin traza y llegaban como el mismo `None`
+        # en `triaje_en_candidatas`. No son la misma situación y no se
+        # arreglan por el mismo sitio: la primera es un fallo de
+        # validación, la segunda del vocabulario, y la tercera no es un
+        # fallo sino un encargo — dice qué protocolo falta por escribir.
         validados = resultado.infones_validados
         if not validados:
+            # La alarma del tic, y más fuerte que Φ=0: Φ=0 sale también con
+            # un protocolo sin cocientes o con uno irrelevante, y esto no
+            # sale por ninguna otra razón. Hasta ahora había que deducirlo
+            # contando infones a ojo mientras el tic seguía a Bayes y a Φ.
+            resultado.sin_candidatas = SinCandidatas.NADA_VALIDADO
+            logger.warning(
+                "Tic sin un solo hallazgo validado: la abducción no tuvo de "
+                "qué partir, y el protocolo '%s' lo eligió el triaje solo.",
+                resultado.skill_activa,
+            )
             return
 
         codigos = self.validador.index.cobertura_de_grafo(
             i.concepto_id for i in validados if i.concepto_id
         )
-        candidatas = self.skills.para_concepto(codigos) if codigos else []
+        if not codigos:
+            resultado.sin_candidatas = SinCandidatas.SIN_CODIFICAR
+            sin_codigo = sum(1 for i in validados if not i.concepto_id)
+            logger.warning(
+                "%d hallazgo(s) validado(s) y el grafo sin por dónde empezar "
+                "(%d sin concepto_id). Es el vocabulario, no el catálogo.",
+                len(validados),
+                sin_codigo,
+            )
+            return
+
+        candidatas = self.skills.para_concepto(codigos)
         if not candidatas:
+            # LA ÚTIL DE LAS TRES, y la única que no es un diagnóstico del
+            # sistema. No dice que algo fallara: dice qué protocolo falta.
+            resultado.sin_candidatas = SinCandidatas.CATALOGO_NO_CUBRE
+            resultado.conceptos_no_cubiertos = sorted(
+                {i.termino for i in validados if i.concepto_id}
+            )
+            logger.warning(
+                "El catálogo no cubre nada de lo que este paciente tiene "
+                "validado: %s. No es un fallo: es el protocolo que falta.",
+                ", ".join(resultado.conceptos_no_cubiertos) or "(sin términos)",
+            )
             return
 
         # LA GUARDA DEL ROUTER, en su versión que sólo mide.
