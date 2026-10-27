@@ -404,6 +404,39 @@ def test_la_negacion_sigue_valiendo_dentro_de_su_frase(texto):
     assert _producto(texto) == 1
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El caso de la revisión: se niega y después se reconoce.
+        "inicialmente niega alcoholismo. luego reconoce alcoholismo crónico.",
+        # Un antecedente registrado que lo niega, concatenado con la nota de
+        # hoy que lo afirma (`metadatos_para_bayes` junta las dos fuentes).
+        "sin antecedente de alcoholismo. paciente con alcoholismo crónico",
+        # Al revés: afirma y luego niega. Basta una mención afirmada.
+        "alcoholismo crónico. hoy niega alcoholismo",
+    ],
+)
+def test_una_mencion_afirmada_basta_aunque_otra_lo_niegue(texto):
+    """`find()` sólo miraba la primera aparición: si esa estaba negada, una
+    afirmación posterior no se veía y el factor se suprimía. Ahora el factor
+    existe si CUALQUIER mención lo afirma, y cuenta una sola vez."""
+    assert _producto(texto) == 2.8
+
+
+def test_si_todas_las_menciones_lo_niegan_se_suprime():
+    assert _producto("niega alcoholismo. sin alcoholismo en la familia") == 1
+
+
+def test_una_contradiccion_se_dice_en_la_traza():
+    lineas = [
+        a.linea
+        for a in _factores_que_aplican(FACTORES, "sin alcoholismo. con alcoholismo")
+        if a.peso is not None
+    ]
+    assert len(lineas) == 1
+    assert "otra mención lo niega y otra lo afirma" in lineas[0]
+
+
 def test_gana_la_negacion_mas_cercana():
     """«sin fiebre. no bebe alcohol»: la que manda sobre el factor es la
     segunda, aunque la primera quede dentro de la ventana."""

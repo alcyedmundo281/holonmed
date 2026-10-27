@@ -117,10 +117,22 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
         if peso <= 0:
             continue
         aguja = str(factor).lower()
-        inicio = antecedentes.find(aguja)
-        if inicio < 0:
+        apariciones = [m.start() for m in re.finditer(re.escape(aguja), antecedentes)]
+        if not apariciones:
             continue
-        candidatos.append((inicio, inicio + len(aguja), str(factor), peso))
+        # Una nota puede mencionar el mismo factor varias veces y contradecirse
+        # («niega alcoholismo. Luego reconoce alcoholismo crónico»), y los
+        # antecedentes registrados se concatenan con la nota de hoy. Basta UNA
+        # mención no negada para que el factor exista; sólo se suprime si TODAS
+        # lo niegan. Sigue contando una sola vez: la que se elige es la primera
+        # afirmada.
+        afirmadas = [i for i in apariciones if not _esta_negado(antecedentes, i)]
+        inicio = (afirmadas or apariciones)[0]
+        negado = not afirmadas
+        contradicho = bool(afirmadas) and len(afirmadas) < len(apariciones)
+        candidatos.append(
+            (inicio, inicio + len(aguja), str(factor), peso, negado, contradicho)
+        )
 
     # El nombre más específico primero: con «alcoholismo» y «alcohol» en el
     # mismo sitio, manda el largo.
@@ -128,7 +140,7 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
 
     salida: list[_FactorAplicado] = []
     ocupados: list[tuple[int, int]] = []
-    for inicio, fin, factor, peso in candidatos:
+    for inicio, fin, factor, peso, negado, contradicho in candidatos:
         if any(inicio < f and i < fin for (i, f) in ocupados):
             salida.append(
                 _FactorAplicado(
@@ -139,7 +151,7 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
             )
             continue
 
-        if _esta_negado(antecedentes, inicio):
+        if negado:
             ocupados.append((inicio, fin))
             salida.append(
                 _FactorAplicado(
@@ -150,7 +162,10 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
             continue
 
         ocupados.append((inicio, fin))
-        salida.append(_FactorAplicado(peso, f"Factor de riesgo '{factor}' (×{peso})"))
+        nota = " — otra mención lo niega y otra lo afirma" if contradicho else ""
+        salida.append(
+            _FactorAplicado(peso, f"Factor de riesgo '{factor}' (×{peso}){nota}")
+        )
     return salida
 
 
