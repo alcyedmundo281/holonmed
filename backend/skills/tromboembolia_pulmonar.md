@@ -4,9 +4,10 @@ titulo: Protocolo de tromboembolia pulmonar
 # paciente trae, no por el diagnóstico: el triaje sólo ha leído el texto de
 # hoy.
 descripcion: >-
-  TODO. Tromboembolia pulmonar (embolia pulmonar, TEP, tromboembolismo
-  pulmonar).
-version: 0.1.0-borrador
+  Disnea súbita o dolor torácico pleurítico con taquicardia o hipoxemia,
+  en un paciente con factores trombóticos (cirugía, ingreso, cáncer,
+  anticonceptivos hormonales) o con una dilatación del ventrículo derecho.
+version: "1.0.0"
 
 condicion:
   nombre: Tromboembolia pulmonar
@@ -18,16 +19,24 @@ condicion:
 # Ramas del grafo sobre las que actúa este protocolo: los padres de
 # los conceptos enlazados. Poda las que sean demasiado generales.
 ambito_grafo:
-  - HM:0100   # Signo vital alterado
   - HM:0206   # Dolor torácico
   - HM:0400   # Síntoma respiratorio
   - HM:0710   # Alteración hematológica
   - HM:0900   # Hallazgo de imagen
 
 modelo_bayesiano:
-  # El índice no publica prevalencia para esta condición. Sin probabilidad
-  # base el motor no arranca: pon la de tu población.
-  probabilidad_base: 0.0
+  # Prevalencia entre pacientes con SOSPECHA de TEP en urgencias, no en la
+  # población general. 0.09 es el valor central del rendimiento de la angio-TC:
+  #   · 9% (IC95% 6-12) sin regla de decisión y 12% (IC95% 11-14) con Wells,
+  #     revisión sistemática de 4 estudios. Ann Emerg Med 2016. PMID 26747217.
+  #     doi:10.1016/j.annemergmed.2015.11.005.
+  #   · 3.4-5.9%, 9-10% y 6-8% en tres sistemas de urgencias de EE. UU.
+  #     Vasc Med 2025. PMID 40521851. doi:10.1177/1358863X251337456.
+  # Es el rendimiento sobre quienes llegaron a la tomografía, no sobre todos
+  # los sospechosos, y no hay dato de Ecuador: sustitúyelo por el de tu
+  # servicio en cuanto lo midas. Una serie de ecografía (39.9%, Falster,
+  # Thorax 2021, PMID 34497138) sale de pacientes más seleccionados y no se usa.
+  probabilidad_base: 0.09
 
   # OJO: el emparejamiento es por SUBCADENA LITERAL. Hay que declarar las
   # variantes que un clínico escribe de verdad — «bebedor de riesgo» no
@@ -69,6 +78,26 @@ modelo_bayesiano:
   # Metaanálisis de 33 ensayos con 44 639 posmenopáusicas
   # Gu Y et al. BMC Womens Health 2024;24:60. PMID 38263123.
   # doi:10.1186/s12905-023-02788-0.
+  #
+  # NINGUNO DE ESTOS ODDS RATIO ENTRA AL CÁLCULO, y es una decisión, no un
+  # olvido. Los de arriba (cirugía 21.7, ingreso 8.0, neoplasia 4.1 sin
+  # quimioterapia / 6.5 con ella, anticonceptivos 5.0) proceden de casos y
+  # controles contra población general. La probabilidad base de arriba ya es
+  # la de pacientes con SOSPECHA de TEP, entre los cuales la cirugía reciente
+  # es muy frecuente y es una de las razones de la sospecha: multiplicarla
+  # otra vez cuenta dos veces lo mismo. Con ellos activos, «cirugía de cadera
+  # hace 5 días y disnea» daba 68% (PROBABLE) sin un solo hallazgo con LR.
+  # Para que vuelvan hace falta un cociente medido EN población con sospecha.
+  #
+  # Tampoco serían utilizables tal cual:
+  #   · TVP/ETV previa: la fuente da una tasa absoluta de recurrencia
+  #     (10.3 por 100 personas-año), no un cociente de odds.
+  #   · Terapia hormonal de la menopausia: es un RR de ensayos, no un OR de
+  #     casos y controles; mezclarlos en un producto de odds sería inventar.
+  #
+  # El efecto de quitarlos es que la probabilidad sólo se mueve con
+  # hallazgos que tienen LR medido, y hoy son pocos: el protocolo lo dice en
+  # voz alta en vez de sostener la cifra con un OR ajeno.
   factores_riesgo: {}
 
 # Cada LR conserva la procedencia con la que entró en el índice.
@@ -145,17 +174,15 @@ procedencia:
 
 # PROTOCOLO DE TROMBOEMBOLIA PULMONAR
 
-ROL: <!-- especialidad y postura: «cardiólogo experto, basado en evidencia» -->
+ROL: internista experto en enfermedad tromboembólica, basado en evidencia.
 
 ## Contexto fisiopatológico
 
-<!-- El índice no guarda prosa. Estas tres líneas son las que hacen que
-     el modelo reconozca el cuadro y no sólo sus términos. -->
-
-- **Dónde**: <!-- órgano, territorio, compartimento -->
-- **Cómo**: <!-- mecanismo -->
-- **Por qué**: <!-- causas frecuentes -->
-
+- **Dónde**: arterias pulmonares, ventrículo derecho.
+- **Cómo**: un trombo obstruye el lecho arterial pulmonar; desajuste
+  ventilación-perfusión y aumento de la poscarga del ventrículo derecho.
+- **Por qué**: trombosis venosa profunda, cirugía o ingreso reciente, cáncer
+  activo, anticonceptivos u hormonas, tromboembolia previa.
 ## Instrucciones de extracción
 
 1. Analiza los signos vitales, la exploración y el texto libre.
@@ -165,6 +192,13 @@ ROL: <!-- especialidad y postura: «cardiólogo experto, basado en evidencia» -
    - «Saturación de oxígeno 78.2» → *Hipoxemia*
 3. No infieras lo que no está escrito. Un dato que falta se pide, no
    se supone.
+4. **Un dímero D no medido no es un dímero D normal.** Sólo se registra con
+   un valor delante, y su utilidad para descartar es la de la fuente: en
+   probabilidad clínica baja o intermedia, con corte ajustado por edad.
+5. **No saltes del síntoma al diagnóstico.** «Disnea» y «dolor pleurítico»
+   son hallazgos; «tromboembolia pulmonar» es la hipótesis que este
+   protocolo evalúa, no algo que se extraiga del texto.
+6. Ignora los hallazgos negados: «sin disnea» no genera ningún infón.
 
 ## Lo que la fuente concluye
 
@@ -173,7 +207,11 @@ baja (53%) para la sospecha de TEP; su mayor utilidad reside en guiar el
 manejo inmediato del paciente en shock o con contraindicación para
 tomografía.
 
-## Formato de salida
+## Banderas rojas
 
-<!-- Cópialo del protocolo que más se le parezca de los ya escritos.
-     Un formato distinto por protocolo rompe el pipeline de registro. -->
+Si aparecen, señálalas: sugieren embolia de alto riesgo y cambian la conducta.
+
+- Hipotensión o signos de shock
+- Síncope
+- Hipoxemia marcada
+- Ventrículo derecho dilatado o aplanamiento septal en la ecografía
