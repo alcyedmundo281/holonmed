@@ -67,12 +67,12 @@ from holonmed.core.pipeline import _texto_del_modelo  # noqa: E402
 @pytest.mark.parametrize(
     ("crudo", "esperado"),
     [
-        ({}, ""),                              # la clave falta
-        ({"t": ""}, ""),                       # vacía
-        ({"t": "   "}, ""),                    # sólo espacios
-        ({"t": None}, ""),                     # NULL: el caso que fallaba
-        ({"t": " Fiebre "}, "Fiebre"),         # normal
-        ({"t": 38.5}, "38.5"),                 # un número sigue siendo texto
+        ({}, ""),  # la clave falta
+        ({"t": ""}, ""),  # vacía
+        ({"t": "   "}, ""),  # sólo espacios
+        ({"t": None}, ""),  # NULL: el caso que fallaba
+        ({"t": " Fiebre "}, "Fiebre"),  # normal
+        ({"t": 38.5}, "38.5"),  # un número sigue siendo texto
     ],
 )
 def test_un_campo_nulo_del_modelo_se_lee_como_vacio(crudo, esperado):

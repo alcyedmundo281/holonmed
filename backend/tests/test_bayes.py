@@ -303,8 +303,11 @@ def test_dos_nombres_del_mismo_factor_no_multiplican_dos_veces():
 
 def test_manda_el_nombre_mas_especifico():
     """Con dos claves sobre el mismo texto se aplica la coincidencia larga."""
-    aplicados = [a for a in _factores_que_aplican(FACTORES, "alcoholismo cronico")
-                 if a.peso is not None]
+    aplicados = [
+        a
+        for a in _factores_que_aplican(FACTORES, "alcoholismo cronico")
+        if a.peso is not None
+    ]
     assert [a.linea.split("'")[1] for a in aplicados] == ["alcoholismo"]
 
 

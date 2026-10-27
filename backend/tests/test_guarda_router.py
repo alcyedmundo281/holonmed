@@ -81,8 +81,8 @@ async def test_el_triaje_eligiendo_fuera_del_grafo_queda_registrado(entorno, tmp
         skill_forzada="otro_protocolo",
     )
 
-    assert resultado.skill_activa == "otro_protocolo"   # no se cambia nada
-    assert resultado.triaje_en_candidatas is False       # y se registra
+    assert resultado.skill_activa == "otro_protocolo"  # no se cambia nada
+    assert resultado.triaje_en_candidatas is False  # y se registra
 
 
 async def test_un_triaje_que_el_grafo_si_propuso_no_dispara_la_guarda(entorno, tmp_path):  # noqa: F811
@@ -91,7 +91,9 @@ async def test_un_triaje_que_el_grafo_si_propuso_no_dispara_la_guarda(entorno, t
         SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
     )
     pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.triaje_en_candidatas is True
 
@@ -128,7 +130,9 @@ async def test_un_tic_que_no_valida_nada_lo_dice(entorno, tmp_path):  # noqa: F8
     )
     # Score por debajo del umbral de alerta: nada llega a VALIDADO.
     pipeline = entorno(LLMFalso(), IndexFalso(score=10.0, exacto=False))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert not resultado.infones_validados
     assert resultado.sin_candidatas is SinCandidatas.NADA_VALIDADO
@@ -150,7 +154,9 @@ async def test_validado_sin_codigo_culpa_al_vocabulario(entorno, tmp_path):  # n
             return set()
 
     pipeline = entorno(LLMFalso(), SinCobertura(score=95.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.infones_validados
     assert resultado.sin_candidatas is SinCandidatas.SIN_CODIFICAR
@@ -168,7 +174,9 @@ async def test_lo_que_el_catalogo_no_cubre_es_un_encargo(entorno, tmp_path):  # 
         SKILL_CON_AMBITO.format(ambito="999999"), encoding="utf-8"
     )
     pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.infones_validados
     assert resultado.sin_candidatas is SinCandidatas.CATALOGO_NO_CUBRE
@@ -181,6 +189,8 @@ async def test_con_candidatas_no_hay_causa_que_dar(entorno, tmp_path):  # noqa: 
         SKILL_CON_AMBITO.format(ambito="386661006"), encoding="utf-8"
     )
     pipeline = entorno(LLMFalso(), IndexFalso(score=95.0, exacto=True))
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.sin_candidatas is None

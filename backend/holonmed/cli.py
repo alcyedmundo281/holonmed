@@ -273,9 +273,7 @@ def _lineas_sin_candidatas(resultado) -> list[str]:
 
     lineas = ["", _SIN_CANDIDATAS[causa]]
     if resultado.conceptos_no_cubiertos:
-        lineas.append(
-            "  sin cubrir: " + ", ".join(resultado.conceptos_no_cubiertos)
-        )
+        lineas.append("  sin cubrir: " + ", ".join(resultado.conceptos_no_cubiertos))
     return lineas
 
 

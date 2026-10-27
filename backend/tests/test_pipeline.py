@@ -702,7 +702,9 @@ async def test_un_termino_nulo_del_modelo_no_produce_ningun_infon(entorno):
         LLMFalso(extraccion=EXTRACCION_CON_NULL),
         IndexFalso(score=95.0, exacto=True),
     )
-    resultado = await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
+    resultado = await pipeline.ejecutar(
+        "Temperatura 38.5", HolonPaciente(paciente_id="t")
+    )
 
     assert resultado.infones == []
 
@@ -736,4 +738,3 @@ async def test_un_termino_nulo_no_gasta_una_llamada_al_auditor(entorno):
     await pipeline.ejecutar("Temperatura 38.5", HolonPaciente(paciente_id="t"))
 
     assert llm.auditorias == 0
-

@@ -97,20 +97,24 @@ def _factores_que_aplican(factores: dict, antecedentes: str) -> list[_FactorApli
     ocupados: list[tuple[int, int]] = []
     for inicio, fin, factor, peso in candidatos:
         if any(inicio < f and i < fin for (i, f) in ocupados):
-            salida.append(_FactorAplicado(
-                None,
-                f"Factor de riesgo '{factor}': se solapa con otro ya contado "
-                f"sobre el mismo texto — se cuenta UNA vez",
-            ))
+            salida.append(
+                _FactorAplicado(
+                    None,
+                    f"Factor de riesgo '{factor}': se solapa con otro ya contado "
+                    f"sobre el mismo texto — se cuenta UNA vez",
+                )
+            )
             continue
 
-        contexto = antecedentes[max(0, inicio - _VENTANA_NEGACION):inicio]
+        contexto = antecedentes[max(0, inicio - _VENTANA_NEGACION) : inicio]
         if any(n in contexto for n in _NEGACIONES):
             ocupados.append((inicio, fin))
-            salida.append(_FactorAplicado(
-                None,
-                f"Factor de riesgo '{factor}' NO aplicado: el texto lo niega",
-            ))
+            salida.append(
+                _FactorAplicado(
+                    None,
+                    f"Factor de riesgo '{factor}' NO aplicado: el texto lo niega",
+                )
+            )
             continue
 
         ocupados.append((inicio, fin))
