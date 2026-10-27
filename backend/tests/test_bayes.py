@@ -437,6 +437,53 @@ def test_una_contradiccion_se_dice_en_la_traza():
     assert "otra mención lo niega y otra lo afirma" in lineas[0]
 
 
+def _factor_de_alcohol(holon, nota):
+    return math.prod(
+        a.peso
+        for a in _factores_que_aplican(
+            FACTORES, holon.metadatos_para_bayes(nota)["antecedentes"]
+        )
+        if a.peso is not None
+    )
+
+
+def test_una_negacion_de_una_fuente_no_pasa_a_la_siguiente():
+    """`metadatos_para_bayes` junta antecedentes, historia y nota de hoy. Unidos
+    con espacios, «Sin fiebre» (ficha) + «Alcoholismo crónico» (nota) se leían
+    «sin fiebre alcoholismo crónico» y el factor afirmado se suprimía."""
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="p", antecedentes="Sin fiebre")
+    assert _factor_de_alcohol(holon, "Alcoholismo crónico") == 2.8
+
+
+def test_un_termino_historico_negado_no_pasa_a_la_nota_de_hoy():
+    from holonmed.models import EstadoInfon, HolonPaciente, Infon
+
+    historico = Infon(
+        texto_origen="…",
+        termino_propuesto="Ausencia de dolor",
+        termino="Ausencia de dolor",
+        estado=EstadoInfon.VALIDADO,
+    )
+    holon = HolonPaciente(paciente_id="p", linea_tiempo=[historico])
+    assert _factor_de_alcohol(holon, "Alcoholismo crónico") == 2.8
+
+
+def test_la_negacion_dentro_de_una_misma_fuente_sigue_valiendo():
+    from holonmed.models import HolonPaciente
+
+    holon = HolonPaciente(paciente_id="p", antecedentes="Alergia a penicilina")
+    assert _factor_de_alcohol(holon, "Niega alcoholismo") == 1
+
+
+def test_las_fuentes_vacias_no_dejan_separadores_sueltos():
+    from holonmed.models import HolonPaciente
+
+    meta = HolonPaciente(paciente_id="p").metadatos_para_bayes("  Litiasis biliar ")
+    assert meta["antecedentes"] == "litiasis biliar"
+
+
 def test_gana_la_negacion_mas_cercana():
     """«sin fiebre. no bebe alcohol»: la que manda sobre el factor es la
     segunda, aunque la primera quede dentro de la ventana."""

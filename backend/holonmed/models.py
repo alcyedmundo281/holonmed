@@ -903,17 +903,28 @@ class HolonPaciente(BaseModel):
         prevalencia de la población general.
 
         Limitación conocida: el emparejamiento de factores es por
-        subcadena, así que no entiende negaciones. Una nota que diga «no
-        consume alcohol» activaría igualmente un factor «alcohol». Es el
-        precio de no meter otra llamada al modelo en el camino, y por eso
-        la traza muestra siempre qué factor se aplicó y con qué peso.
+        subcadena, y la negación se resuelve por ventana de texto (ver
+        `core/bayes.py`), no por análisis. Es el precio de no meter otra
+        llamada al modelo en el camino, y por eso la traza muestra siempre
+        qué factor se aplicó o se suprimió, y con qué peso.
+
+        LAS FUENTES SE SEPARAN CON UN SALTO DE LÍNEA, que corta el alcance de
+        una negación. Unidas con espacios, un antecedente registrado que
+        termina en «Sin fiebre» y una nota de hoy que empieza por
+        «Alcoholismo crónico» se leían como «sin fiebre alcoholismo crónico»,
+        y la negación de una fuente suprimía el factor afirmado en otra. Cada
+        término histórico es también una fuente aparte, por la misma razón.
         """
-        historicos = " ".join(i.termino for i in self.linea_tiempo)
-        contexto = f"{self.antecedentes} {historicos} {texto_actual}"
+        fuentes = [
+            self.antecedentes,
+            *(i.termino for i in self.linea_tiempo),
+            texto_actual,
+        ]
+        contexto = "\n".join(f.strip() for f in fuentes if f and f.strip())
         return {
             "edad": self.edad,
             "sexo": self.sexo,
-            "antecedentes": contexto.lower().strip(),
+            "antecedentes": contexto.lower(),
         }
 
 
