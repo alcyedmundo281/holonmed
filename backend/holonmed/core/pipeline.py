@@ -601,8 +601,9 @@ class CrystallizationPipeline:
             # contando infones a ojo mientras el tic seguía a Bayes y a Φ.
             resultado.sin_candidatas = SinCandidatas.NADA_VALIDADO
             logger.warning(
-                "Tic sin un solo hallazgo validado: la abducción no tuvo de "
-                "qué partir, y el protocolo '%s' lo eligió el triaje solo.",
+                "La lectura inicial no validó ni un solo hallazgo: la abducción "
+                "no tuvo de qué partir, y el protocolo '%s' lo eligió el "
+                "triaje solo.",
                 resultado.skill_activa,
             )
             return

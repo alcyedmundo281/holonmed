@@ -271,7 +271,21 @@ def _lineas_sin_candidatas(resultado) -> list[str]:
     if not causa:
         return []
 
-    lineas = ["", _SIN_CANDIDATAS[causa]]
+    texto = _SIN_CANDIDATAS[causa]
+    # La causa se fija al competir, sobre la LECTURA INICIAL. Con
+    # `abduccion_decide` esa lectura es genérica y la segunda pasada, con el
+    # protocolo del triaje, puede validar lo que la primera rechazó: decir
+    # entonces «no se validó ni un hallazgo» sería falso sobre el tic entero,
+    # que sí tiene evidencia validada entrando a Bayes.
+    n = len(resultado.infones_validados)
+    if causa == "nada_validado" and n:
+        texto = (
+            "LA LECTURA INICIAL NO VALIDÓ NI UN HALLAZGO. La abducción no tuvo "
+            "de qué partir y el protocolo lo eligió el triaje solo; la segunda "
+            f"pasada con ese protocolo sí validó {n} hallazgo(s), y son los que "
+            "entran al cálculo."
+        )
+    lineas = ["", texto]
     if resultado.conceptos_no_cubiertos:
         lineas.append("  sin cubrir: " + ", ".join(resultado.conceptos_no_cubiertos))
     return lineas

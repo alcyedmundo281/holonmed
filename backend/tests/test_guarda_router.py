@@ -143,6 +143,44 @@ def test_el_aviso_nombra_lo_que_eligio_el_triaje_y_no_la_ganadora():
     assert "FUERA DEL GRAFO: ganadora_del_grafo" not in texto
 
 
+def test_nada_validado_dice_que_fue_la_lectura_inicial_si_luego_se_valido():
+    """La causa se fija al competir, sobre la lectura inicial. Con
+    `abduccion_decide` la segunda pasada puede validar lo que la primera
+    rechazó; entonces «no se validó ni un hallazgo» sería falso sobre el tic
+    entero, que sí tiene evidencia validada entrando a Bayes."""
+    from holonmed.cli import _lineas_sin_candidatas
+    from holonmed.models import EstadoInfon, Infon
+
+    sin_nada = ResultadoTic(
+        paciente_id="t",
+        texto_original="…",
+        skill_activa="x",
+        sin_candidatas=SinCandidatas.NADA_VALIDADO,
+    )
+    assert "NO SE VALIDÓ NI UN HALLAZGO" in "\n".join(_lineas_sin_candidatas(sin_nada))
+
+    con_segunda_pasada = ResultadoTic(
+        paciente_id="t",
+        texto_original="…",
+        skill_activa="x",
+        sin_candidatas=SinCandidatas.NADA_VALIDADO,
+        infones=[
+            Infon(
+                texto_origen="…",
+                termino_propuesto="Fiebre",
+                termino="Fiebre",
+                estado=EstadoInfon.VALIDADO,
+            )
+        ],
+    )
+    texto = "\n".join(_lineas_sin_candidatas(con_segunda_pasada))
+
+    assert "LA LECTURA INICIAL NO VALIDÓ" in texto
+    assert "la segunda pasada" in texto
+    assert "sí validó 1 hallazgo(s)" in texto
+    assert "NO SE VALIDÓ NI UN HALLAZGO" not in texto
+
+
 async def test_un_tic_que_no_valida_nada_lo_dice(entorno, tmp_path):  # noqa: F811
     """La alarma del tic, y la más fuerte de las tres.
 
