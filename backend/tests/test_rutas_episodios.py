@@ -186,3 +186,66 @@ def test_el_fondo_trae_su_decision_de_imprimir(cliente):
 
 def test_un_episodio_inventado_no_tiene_fondo(cliente):
     assert cliente.get("/api/episodios/9999/fondo").status_code == 404
+
+
+def test_imprimir_nota_clinica_exige_firma_y_evento_y_actualiza_resumen_vivo(tmp_path):
+    """Nada se imprime sin firma, `resumen_vivo` queda al día tras cada tic,
+    y una vez impresa `clínica-1` no se puede volver a imprimir sin un nuevo
+    cambio o umbral de volumen."""
+    from holonmed.models import EstadoInfon, Infon
+
+    class _PipelineConHallazgo:
+        async def ejecutar(self, texto, holon):
+            return ResultadoTic(
+                paciente_id=holon.paciente_id,
+                texto_original=texto,
+                skill_activa="general_triage",
+                infones=[
+                    Infon(
+                        texto_origen=texto,
+                        termino_propuesto="fiebre",
+                        termino="Fiebre",
+                        procedencia="objetivo",
+                        codigo="HM:0001",
+                        sistema="holonmed",
+                        estado=EstadoInfon.VALIDADO,
+                        confianza=95.0,
+                        score_ontologico=100.0,
+                        score_logico=90.0,
+                    )
+                ],
+            )
+
+    ajustes = Settings(db_path=tmp_path / "imp.db", autocargar_semilla=False)
+    contexto = AppContext(ajustes)
+    contexto.pipeline = _PipelineConHallazgo()
+    app = crear_app(ajustes)
+    app.dependency_overrides[get_context] = lambda: contexto
+
+    with TestClient(app) as c:
+        episodio = _abrir(c)
+        assert _escribir(c, episodio, "base", "temperatura 38.5").status_code == 201
+
+        paciente = contexto.pacientes.obtener("p1")
+        assert paciente is not None
+        assert "Problema: Fiebre" in paciente.resumen_vivo
+        assert "Objetivo: temperatura 38.5" in paciente.resumen_vivo
+
+        sin_firma = c.post(f"/api/episodios/{episodio}/imprimir?firmante=%20")
+        assert sin_firma.status_code == 422
+
+        impresa = c.post(f"/api/episodios/{episodio}/imprimir?firmante=Dra.%20Ruiz")
+        assert impresa.status_code == 201
+        datos = impresa.json()
+        assert datos["etiqueta"] == "clínica-1"
+        assert datos["ordinal_clinica"] == 1
+        assert datos["origen"] == "holonmed"
+        assert datos["firmado_por"] == "Dra. Ruiz"
+        assert datos["la_pidio_el_paciente"] is True
+        assert "Firmado por: Dra. Ruiz" in datos["texto"]
+
+        repetida = c.post(f"/api/episodios/{episodio}/imprimir?firmante=Dra.%20Ruiz")
+        assert repetida.status_code == 409
+        assert "sigue al día" in repetida.json()["detail"]
+
+    contexto.database.cerrar()

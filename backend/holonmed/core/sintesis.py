@@ -260,3 +260,101 @@ def _lista(nombres: Sequence[str]) -> str:
     if len(nombres) == 1:
         return f"«{nombres[0]}»"
     return ", ".join(f"«{n}»" for n in nombres[:-1]) + f" y «{nombres[-1]}»"
+
+
+def formatear_fondo(fondo: HolonDeFondo) -> str:
+    """Convierte el `HolonDeFondo` en texto mantenido para `resumen_vivo`.
+
+    No lleva fecha ni firma: afirma el estado del paciente *ahora*, por
+    problema y en el orden de Weed (subjetivo, objetivo, derivado, siguiente),
+    sin descartar los hallazgos que no cayeron bajo ningún problema.
+    """
+    if not fondo.bloques and not fondo.sin_sintetizar:
+        return "Paciente nuevo sin antecedentes registrados."
+
+    secciones: list[str] = []
+    for bloque in fondo.bloques:
+        lineas = [f"Problema: {bloque.problema}"]
+        if bloque.subjetivo:
+            lineas.append("  Subjetivo: " + "; ".join(bloque.subjetivo))
+        if bloque.objetivo:
+            lineas.append("  Objetivo: " + "; ".join(bloque.objetivo))
+        if bloque.derivado:
+            lineas.append("  Derivado: " + "; ".join(bloque.derivado))
+        if bloque.siguiente:
+            lineas.append(f"  Siguiente: {bloque.siguiente}")
+        secciones.append("\n".join(lineas))
+
+    if fondo.sin_sintetizar:
+        secciones.append(
+            "Sin sintetizar bajo un problema: " + ", ".join(fondo.sin_sintetizar)
+        )
+
+    return "\n\n".join(secciones)
+
+
+@dataclass(frozen=True)
+class NotaImpresa:
+    """El `HolonDeFondo` impreso en el presente real como documento firmado.
+
+    A diferencia del fondo —que vive sin fecha ni firma—, la nota impresa es
+    un documento `clínica-N` redactado por HolonMed y firmado por un humano
+    nombrado, con la razón explícita de qué disparó su impresión (cambio en
+    la lista de problemas o volumen).
+    """
+
+    etiqueta: str
+    texto: str
+    firmante: str
+    motivos: tuple[Motivo, ...]
+    razon: str
+    la_pidio_el_paciente: bool
+    bloques: tuple[Bloque, ...] = ()
+    sin_sintetizar: tuple[str, ...] = ()
+
+
+def imprimir(
+    fondo: HolonDeFondo,
+    decision: Impresion,
+    firmante: str,
+    ordinal: int | None = None,
+) -> NotaImpresa:
+    """Imprime el `HolonDeFondo` en una nota clínica firmada (`clínica-N`).
+
+    Falla cerrado en dos casos:
+    1. Si `firmante` viene vacío: nada se imprime sin firma humana nombrada.
+    2. Si `decision.imprime` es `False`: una nota cuyo sello de tiempo no
+       corresponde a ningún evento ni al umbral de volumen es la ficción que
+       Weed denuncia.
+    """
+    firma = (firmante or "").strip()
+    if not firma:
+        raise ValueError(
+            "Nada se imprime sin firma: la nota clínica exige una persona "
+            "nombrada que la autorice."
+        )
+    if not decision.imprime:
+        raise ValueError(
+            "No corresponde imprimir una nota clínica: "
+            + (decision.razon or "la lista de problemas no cambió.")
+        )
+
+    etiqueta = f"clínica-{ordinal}" if ordinal else "clínica"
+    cuerpo = formatear_fondo(fondo)
+    partes = [
+        f"# {etiqueta}",
+        f"Motivo de impresión: {decision.razon}",
+        cuerpo,
+        f"Firmado por: {firma}",
+    ]
+
+    return NotaImpresa(
+        etiqueta=etiqueta,
+        texto="\n\n".join(partes),
+        firmante=firma,
+        motivos=decision.motivos,
+        razon=decision.razon,
+        la_pidio_el_paciente=decision.la_pidio_el_paciente,
+        bloques=fondo.bloques,
+        sin_sintetizar=fondo.sin_sintetizar,
+    )
