@@ -54,6 +54,7 @@ COLUMNAS_JSON_DEL_TIC = (
     "veredicto",
     "competencia",
     "reapertura",
+    "promocion",
     "conceptos_no_cubiertos",
 )
 
@@ -126,6 +127,7 @@ class Database:
         ("tic", "conceptos_no_cubiertos", "TEXT"),
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "reapertura", "TEXT"),
+        ("tic", "promocion", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
         ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'objetivo'"),
         ("infon", "acto", "TEXT"),
@@ -730,8 +732,8 @@ class TicRepo:
                                         ganadora_abductiva, triaje_coincide,
                                         triaje_en_candidatas, skill_triaje,
                                         sin_candidatas, conceptos_no_cubiertos,
-                                        aviso_competencia, reapertura)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                        aviso_competencia, reapertura, promocion)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -768,6 +770,7 @@ class TicRepo:
                         else None,
                         resultado.aviso_competencia,
                         _json(resultado.reapertura),
+                        _json(resultado.promocion),
                     ),
                 )
                 tic_id = cursor.lastrowid

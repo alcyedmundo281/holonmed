@@ -48,6 +48,8 @@ MODELOS = {
     "CandidataAbductiva": m.CandidataAbductiva,
     "Veto": m.Veto,
     "VeredictoDeclarado": m.VeredictoDeclarado,
+    "PropuestaPromocion": m.PropuestaPromocion,
+    "Promocion": m.Promocion,
     "ReaperturaDeIndagacion": m.ReaperturaDeIndagacion,
     "ResultadoTic": m.ResultadoTic,
 }

@@ -219,7 +219,12 @@ CREATE TABLE IF NOT EXISTS tic (
     -- prefiere la abducción. Se guarda porque es la salida accionable del
     -- tic, y un tic que terminó en duda sin dejar rastro se lee mañana
     -- como un tic que concluyó.
-    reapertura         TEXT
+    reapertura         TEXT,
+
+    -- La tupla sensible/específica como control de flujo: si promueve, si
+    -- una prueba sensible negativa devuelve a la abducción, o qué pruebas
+    -- específicas propone pedir cuando la sensible ya dio positiva.
+    promocion          TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tic_paciente ON tic(paciente_id, timestamp DESC);
