@@ -24,6 +24,7 @@ from typing import Any
 from ..core.actualizacion import Acto, Actualizacion, medir
 from ..core.episodio import EstadoEpisodio, admite
 from ..core.holon import Documento, componer, conciliar
+from ..core.sintesis import formatear_fondo, sintetizar
 from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad, TipoNota
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,11 @@ class Database:
         ("infon", "valor", "REAL"),
         ("infon", "unidad", "TEXT"),
         ("infon", "poblacion", "TEXT"),
+        (
+            "paciente",
+            "resumen_vivo",
+            "TEXT NOT NULL DEFAULT 'Paciente nuevo sin antecedentes registrados.'",
+        ),
     )
 
     def _migrar(self, cx: sqlite3.Connection) -> None:
@@ -389,6 +395,11 @@ class PacienteRepo:
             sexo=fila["sexo"],
             telefono=fila["telefono"],
             antecedentes=fila["antecedentes"],
+            resumen_vivo=(
+                fila["resumen_vivo"]
+                if "resumen_vivo" in fila.keys() and fila["resumen_vivo"]
+                else "Paciente nuevo sin antecedentes registrados."
+            ),
         )
 
     def obtener_o_efimero(self, paciente_id: str) -> HolonPaciente:
@@ -648,6 +659,78 @@ class EpisodioRepo:
         episodio = self.listar_uno(episodio_id)
         return episodio["paciente_id"] if episodio else None
 
+    def contexto_impresion(
+        self, episodio_id: str, paciente_id: str
+    ) -> tuple[list[str], list[str], list[str], int]:
+        """Qué problemas ya quedaron cubiertos en la última `clínica-N` de este
+        episodio, qué hipótesis se promovieron o entraron en duda desde entonces,
+        y cuántos infones validados se acumularon después de ella.
+
+        Si el episodio aún no tiene ninguna `clínica-N` impresa, `problemas_antes`
+        es vacío y se consideran todos los tics e infones validados del episodio.
+        """
+        cx = self._db.conexion()
+        try:
+            ultima = cx.execute(
+                """SELECT id FROM tic
+                    WHERE episodio_id = ? AND tipo = 'clinica'
+                    ORDER BY id DESC LIMIT 1""",
+                (episodio_id,),
+            ).fetchone()
+            ultimo_id = int(ultima["id"]) if ultima is not None else 0
+
+            problemas_antes: list[str] = []
+            if ultimo_id > 0:
+                filas_ant = cx.execute(
+                    """SELECT termino
+                         FROM infon
+                        WHERE paciente_id = ? AND estado = 'VALIDADO' AND tic_id <= ?
+                        GROUP BY COALESCE(codigo, termino)""",
+                    (paciente_id, ultimo_id),
+                ).fetchall()
+                problemas_antes = [f["termino"] for f in filas_ant]
+
+            fila_cnt = cx.execute(
+                """SELECT COUNT(*) AS n
+                     FROM infon i JOIN tic t ON t.id = i.tic_id
+                    WHERE t.episodio_id = ? AND i.estado = 'VALIDADO' AND t.id > ?""",
+                (episodio_id, ultimo_id),
+            ).fetchone()
+            infones_sin_imprimir = int(fila_cnt["n"] or 0) if fila_cnt else 0
+
+            filas_tics = cx.execute(
+                """SELECT promocion, reapertura
+                     FROM tic
+                    WHERE episodio_id = ? AND id > ?
+                    ORDER BY id""",
+                (episodio_id, ultimo_id),
+            ).fetchall()
+            promovidos: list[str] = []
+            dudas: list[str] = []
+            for ft in filas_tics:
+                if ft["promocion"]:
+                    try:
+                        prom = json.loads(ft["promocion"])
+                        if (
+                            isinstance(prom, dict)
+                            and prom.get("promovido")
+                            and prom.get("hipotesis")
+                        ):
+                            promovidos.append(str(prom["hipotesis"]))
+                    except json.JSONDecodeError:
+                        pass
+                if ft["reapertura"]:
+                    try:
+                        reap = json.loads(ft["reapertura"])
+                        if isinstance(reap, dict) and reap.get("hipotesis"):
+                            dudas.append(str(reap["hipotesis"]))
+                    except json.JSONDecodeError:
+                        pass
+
+            return problemas_antes, promovidos, dudas, infones_sin_imprimir
+        except sqlite3.Error:
+            return [], [], [], 0
+
     def terminos_del_episodio(self, episodio_id: str) -> list[str]:
         """Los terminos ya averiguados en este episodio.
 
@@ -843,7 +926,31 @@ class TicRepo:
                 except sqlite3.Error as exc:
                     logger.debug("No se materializó el cierre de %s: %s", cid, exc)
 
+        self._actualizar_resumen_vivo(resultado.paciente_id, str(tic_id))
         return str(tic_id)
+
+    def _actualizar_resumen_vivo(
+        self, paciente_id: str, hasta_tic: str | None = None
+    ) -> None:
+        """Reescribe `paciente.resumen_vivo` a partir del `HolonDeFondo`.
+
+        Garantiza que el background nunca quede obsoleto respecto del último
+        tic: no lleva fecha ni firma, y afirma el estado del paciente *ahora*.
+        """
+        try:
+            infones = self.linea_tiempo(paciente_id)
+            problemas = [p["termino"] for p in self.lista_problemas(paciente_id)]
+            fondo = sintetizar(infones, problemas, hasta_tic=hasta_tic)
+            texto = formatear_fondo(fondo)
+            with self._db._escritura:
+                cx = self._db.conexion()
+                cx.execute(
+                    "UPDATE paciente SET resumen_vivo = ? WHERE id = ?",
+                    (texto, paciente_id),
+                )
+                cx.commit()
+        except sqlite3.Error as exc:
+            logger.debug("No se pudo actualizar resumen_vivo de %s: %s", paciente_id, exc)
 
     def historial(
         self,

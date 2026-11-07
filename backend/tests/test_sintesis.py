@@ -8,6 +8,8 @@ tamaño**. Lo segundo es la mitad del valor de la distinción.
 from holonmed.core.sintesis import (
     Motivo,
     decidir,
+    formatear_fondo,
+    imprimir,
     sintetizar,
 )
 from holonmed.models import EstadoInfon, Infon
@@ -151,3 +153,41 @@ def test_sin_umbral_la_valvula_esta_desactivada():
         infones_sin_imprimir=10_000,
     )
     assert not decision.imprime
+
+
+def test_imprimir_exige_firma_y_motivo_y_deja_constancia_del_disparo():
+    """Nada se imprime sin firma, y una nota impresa dice si la pidió el
+    paciente o el tamaño."""
+    import pytest
+
+    fondo = sintetizar(
+        [
+            _infon("Dolor epigástrico", "subjetivo", "refiere dolor desde ayer"),
+            _infon(
+                "Hiperlipasemia", "objetivo", "lipasa 900", linaje="Dolor epigástrico"
+            ),
+        ],
+        problemas=["Dolor epigástrico"],
+    )
+    texto_fondo = formatear_fondo(fondo)
+    assert "Subjetivo: refiere dolor desde ayer" in texto_fondo
+    assert "Objetivo: lipasa 900" in texto_fondo
+    assert "Firmado por:" not in texto_fondo
+
+    decision_ok = decidir(problemas_antes=[], problemas_ahora=["Dolor epigástrico"])
+    with pytest.raises(ValueError, match="Nada se imprime sin firma"):
+        imprimir(fondo, decision_ok, firmante="   ", ordinal=1)
+
+    decision_no = decidir(
+        problemas_antes=["Dolor epigástrico"], problemas_ahora=["Dolor epigástrico"]
+    )
+    with pytest.raises(ValueError, match="No corresponde imprimir"):
+        imprimir(fondo, decision_no, firmante="Dra. Ruiz", ordinal=1)
+
+    nota = imprimir(fondo, decision_ok, firmante="Dra. Ruiz", ordinal=1)
+    assert nota.etiqueta == "clínica-1"
+    assert nota.firmante == "Dra. Ruiz"
+    assert nota.la_pidio_el_paciente
+    assert "clínica-1" in nota.texto
+    assert "La lista de problemas cambió" in nota.texto
+    assert "Firmado por: Dra. Ruiz" in nota.texto

@@ -32,8 +32,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.base import cargar_todas, evaluar
-from ...core.sintesis import decidir, sintetizar
-from ...models import OrigenTic, TipoNota
+from ...core.sintesis import decidir, imprimir, sintetizar
+from ...models import OrigenTic, ResultadoTic, TipoNota
 from ..deps import AppContext, get_context
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,9 @@ async def estado_de_la_base(
 
 @router.get("/episodios/{episodio_id}/fondo")
 async def holon_de_fondo(
-    episodio_id: str, ctx: AppContext = Depends(get_context)
+    episodio_id: str,
+    umbral_volumen: int = 0,
+    ctx: AppContext = Depends(get_context),
 ) -> dict[str, Any]:
     """El holon de fondo del episodio, y si toca imprimirlo.
 
@@ -143,12 +145,22 @@ async def holon_de_fondo(
     paciente_id = ctx.episodios.paciente_de(episodio_id) or ""
     problemas = [p["termino"] for p in ctx.tics.lista_problemas(paciente_id)]
     infones = ctx.episodios.infones_del_episodio(episodio_id)
+    (
+        problemas_antes,
+        promovidos,
+        dudas,
+        infones_sin_imprimir,
+    ) = ctx.episodios.contexto_impresion(episodio_id, paciente_id)
 
     fondo = sintetizar(infones, problemas)
-    # Sin problemas previos con qué comparar, el primer fondo de un episodio
-    # imprime por cada problema que aparece, que es lo correcto: todos son
-    # nuevos.
-    decision = decidir(problemas_antes=[], problemas_ahora=problemas)
+    decision = decidir(
+        problemas_antes=problemas_antes,
+        problemas_ahora=problemas,
+        promovidos=promovidos,
+        dudas=dudas,
+        infones_sin_imprimir=infones_sin_imprimir,
+        umbral_volumen=umbral_volumen,
+    )
 
     return {
         "bloques": [
@@ -170,6 +182,93 @@ async def holon_de_fondo(
             "razon": decision.razon,
             "la_pidio_el_paciente": decision.la_pidio_el_paciente,
         },
+    }
+
+
+@router.post("/episodios/{episodio_id}/imprimir", status_code=201)
+async def imprimir_fondo(
+    episodio_id: str,
+    firmante: str = "",
+    umbral_volumen: int = 0,
+    ctx: AppContext = Depends(get_context),
+) -> dict[str, Any]:
+    """Imprime el `HolonDeFondo` como nota clínica firmada (`clínica-N`).
+
+    HolonMed es el autor (`origen = holonmed`), y la persona nombrada es el
+    firmante (`actor = firmante`). Nada se imprime sin firma ni sin motivo
+    (cambio en la lista de problemas o volumen declarado).
+    """
+    if not firmante.strip():
+        raise HTTPException(
+            422,
+            "Nada se imprime sin firma: la nota clínica exige una persona "
+            "nombrada que la autorice.",
+        )
+
+    estado = ctx.episodios.estado(episodio_id)
+    if estado is None:
+        raise HTTPException(404, "No existe ese episodio")
+
+    from ...core.episodio import admite
+
+    veredicto = admite(estado, TipoNota.CLINICA)
+    if not veredicto.admitido:
+        raise HTTPException(409, veredicto.motivo)
+
+    paciente_id = ctx.episodios.paciente_de(episodio_id) or ""
+    problemas = [p["termino"] for p in ctx.tics.lista_problemas(paciente_id)]
+    infones = ctx.episodios.infones_del_episodio(episodio_id)
+    (
+        problemas_antes,
+        promovidos,
+        dudas,
+        infones_sin_imprimir,
+    ) = ctx.episodios.contexto_impresion(episodio_id, paciente_id)
+
+    fondo = sintetizar(infones, problemas)
+    decision = decidir(
+        problemas_antes=problemas_antes,
+        problemas_ahora=problemas,
+        promovidos=promovidos,
+        dudas=dudas,
+        infones_sin_imprimir=infones_sin_imprimir,
+        umbral_volumen=umbral_volumen,
+    )
+    if not decision.imprime:
+        raise HTTPException(409, decision.razon)
+
+    nota = imprimir(
+        fondo,
+        decision,
+        firmante=firmante,
+        ordinal=veredicto.ordinal,
+    )
+
+    resultado = ResultadoTic(
+        paciente_id=paciente_id,
+        episodio_id=episodio_id,
+        tipo=TipoNota.CLINICA,
+        origen=OrigenTic.HOLONMED,
+        actor=nota.firmante,
+        texto_original=nota.texto,
+        resumen=nota.razon,
+        skill_activa="sintesis",
+    )
+    tic_id = ctx.tics.guardar(resultado)
+    if not tic_id:
+        raise HTTPException(409, "El episodio no admitió la nota clínica")
+
+    return {
+        "tic_id": tic_id,
+        "tipo": resultado.tipo.value,
+        "etiqueta": nota.etiqueta,
+        "ordinal_clinica": resultado.ordinal_clinica,
+        "origen": resultado.origen.value,
+        "firmado_por": nota.firmante,
+        "motivos": [m.value for m in nota.motivos],
+        "razon": nota.razon,
+        "la_pidio_el_paciente": nota.la_pidio_el_paciente,
+        "texto": nota.texto,
     }
 
 

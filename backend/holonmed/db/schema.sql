@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS paciente (
     sexo         TEXT,
     telefono     TEXT,
     antecedentes TEXT NOT NULL DEFAULT '',
+    resumen_vivo TEXT NOT NULL DEFAULT 'Paciente nuevo sin antecedentes registrados.',
     creado       TEXT NOT NULL
 );
 
