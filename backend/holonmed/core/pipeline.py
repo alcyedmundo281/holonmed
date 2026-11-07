@@ -35,6 +35,7 @@ from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .duda import ReabridorDeIndagacion
+from .promocion import EvaluadorDePromocion
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
 from .veredicto import EvaluadorDeVeredicto
@@ -231,6 +232,7 @@ class CrystallizationPipeline:
         acoplamiento: MedidorDeAcoplamiento | None = None,
         veredicto: EvaluadorDeVeredicto | None = None,
         duda: ReabridorDeIndagacion | None = None,
+        promocion: EvaluadorDePromocion | None = None,
     ):
         self.llm = llm
         self.skills = skills
@@ -241,6 +243,7 @@ class CrystallizationPipeline:
         self.acoplamiento = acoplamiento or MedidorDeAcoplamiento()
         self.veredicto = veredicto or EvaluadorDeVeredicto()
         self.duda = duda or ReabridorDeIndagacion()
+        self.promocion = promocion or EvaluadorDePromocion()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -437,6 +440,21 @@ class CrystallizationPipeline:
             )
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Reabridor de indagación falló; el tic sigue en pie")
+
+        # --- ETAPA 9: PROMOCIÓN Y CONTROL DE FLUJO DE LA TUPLA ---------
+        # La cuarta pregunta: ¿sigue siendo un problema en la lista, o ya
+        # es un diagnóstico? Y cuando no promueve, SnNOut/SpPIn dicen qué
+        # sigue: una sensible negativa cierra esta línea y manda de vuelta
+        # a la abducción; una sensible positiva sin específica propone la
+        # específica con `solicitante = promocion`.
+        try:
+            resultado.promocion = self.promocion.evaluar(
+                skill,
+                list(holon.linea_tiempo) + resultado.infones,
+                resultado.inferencia,
+            )
+        except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
+            logger.exception("Evaluador de promoción falló; el tic sigue en pie")
 
         return resultado
 

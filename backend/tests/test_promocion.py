@@ -275,3 +275,259 @@ P
     )
     assert skill.promocion.umbral_postest is None
     assert any("fuera de (0, 1]" in p for p in skill.problemas())
+
+
+# --- Ciclo 12: La tupla como control de flujo -------------------------------
+
+
+FARINGITIS_CON_CODIGOS = """---
+titulo: Faringitis estreptocócica
+condicion:
+  nombre: Faringitis estreptocócica
+  prevalencia: 0.15
+promocion:
+  exige: {manifestacion: 1, prueba_sensible: 1, prueba_especifica: 1}
+  umbral_postest: 0.90
+  motivo: >-
+    política del servicio: por debajo del 90% se sigue estudiando en vez de
+    tratar, porque el tratamiento no es inocuo y el cuadro no es urgente
+  fuente: "Centor RM et al"
+signos:
+  - nombre: Odinofagia
+    rol: manifestacion
+    lr: 2.0
+    codigos: {snomed: "162397003"}
+  - nombre: Adenopatía cervical anterior dolorosa
+    rol: prueba_sensible
+    lr: 2.5
+    lr_negativo: 0.6
+    fuente: "Ebell MH et al, JAMA 2000"
+    codigos: {snomed: "30746006"}
+  - nombre: Exudado amigdalino
+    rol: prueba_especifica
+    lr: 3.4
+    fuente: "Ebell MH et al, JAMA 2000"
+    codigos: {snomed: "40095002", loinc: "6557-3"}
+---
+
+PROTOCOLO
+"""
+
+
+def test_sensible_negativa_manda_a_la_abduccion_y_no_propone_especifica():
+    """SnNOut como control de flujo: con la prueba sensible negativa se
+    descarta esa línea, no se pide la específica y se vuelve a la abducción."""
+    skill = Skill("faringitis", FARINGITIS_CON_CODIGOS)
+    infones = [
+        infon("Odinofagia"),
+        infon("Adenopatía cervical anterior dolorosa", Polaridad.AUSENTE),
+    ]
+    r = EvaluadorDePromocion().evaluar(skill, infones, inferencia(40))
+
+    assert not r.promueve
+    assert r.vuelve_a_abduccion is True
+    assert r.sensible_negativa == ["Adenopatía cervical anterior dolorosa"]
+    assert r.propuestas == []
+    assert any("vuelve a la abducción" in t for t in r.traza)
+
+
+def test_sensible_negativa_bloquea_aunque_otra_sensible_sea_positiva():
+    """Si un protocolo declara dos pruebas sensibles y exige 1, que una dé
+    positiva no salva la línea si otra prueba sensible documentada dio negativa."""
+    skill = Skill(
+        "tromboembolismo",
+        """---
+titulo: Tromboembolismo pulmonar
+promocion:
+  exige: {manifestacion: 1, prueba_sensible: 1, prueba_especifica: 1}
+signos:
+  - nombre: Disnea súbita
+    rol: manifestacion
+  - nombre: Taquicardia sinusal
+    rol: prueba_sensible
+  - nombre: Dímero D elevado
+    rol: prueba_sensible
+  - nombre: Defecto de repleción en angio-TC pulmonar
+    rol: prueba_especifica
+    codigos: {loinc: "30621-7"}
+---
+
+P
+""",
+    )
+    infones = [
+        infon("Disnea súbita"),
+        infon("Taquicardia sinusal", Polaridad.PRESENTE),
+        infon("Dímero D elevado", Polaridad.AUSENTE),
+        infon("Defecto de repleción en angio-TC pulmonar", Polaridad.PRESENTE),
+    ]
+    r = EvaluadorDePromocion().evaluar(skill, infones)
+
+    assert not r.promueve
+    assert r.vuelve_a_abduccion is True
+    assert r.sensible_negativa == ["Dímero D elevado"]
+    assert r.propuestas == []
+
+
+def test_sensible_positiva_sin_especifica_propone_la_especifica_por_la_compuerta():
+    """Con la sensible positiva y sin específica medida, se propone como
+    borrador de orden con `solicitante = promocion` y código LOINC preferido."""
+    skill = Skill("faringitis", FARINGITIS_CON_CODIGOS)
+    infones = [
+        infon("Odinofagia"),
+        infon("Adenopatía cervical anterior dolorosa", Polaridad.PRESENTE),
+    ]
+    r = EvaluadorDePromocion().evaluar(skill, infones, inferencia(60))
+
+    assert not r.promueve
+    assert r.vuelve_a_abduccion is False
+    assert len(r.propuestas) == 1
+
+    propuesta = r.propuestas[0]
+    assert propuesta.termino == "Exudado amigdalino"
+    assert propuesta.sistema == "snomed"
+    assert propuesta.codigo == "40095002"
+    assert propuesta.rol == "prueba_especifica"
+    assert propuesta.solicitante == "promocion"
+    assert "Adenopatía cervical anterior dolorosa" in propuesta.motivo
+    assert any("se propone pedir" in t for t in r.traza)
+
+
+def test_especifica_ya_medida_en_negativo_no_se_vuelve_a_proponer():
+    """Si la prueba específica ya se midió y salió negativa, falta satisfacerla,
+    pero no se vuelve a proponer pedir una prueba que ya consta en el tic."""
+    skill = Skill("faringitis", FARINGITIS_CON_CODIGOS)
+    infones = [
+        infon("Odinofagia"),
+        infon("Adenopatía cervical anterior dolorosa", Polaridad.PRESENTE),
+        infon("Exudado amigdalino", Polaridad.AUSENTE),
+    ]
+    r = EvaluadorDePromocion().evaluar(skill, infones, inferencia(35))
+
+    assert not r.promueve
+    assert r.faltan == {"prueba_especifica": 1}
+    assert r.propuestas == []
+
+
+def test_hallazgo_serendipico_no_cuenta_en_la_tupla_ni_dispara_propuesta():
+    """Igual que en el Ciclo 10: un hallazgo marcado con `abre_problema=True`
+    abre una línea nueva y no cuenta como evidencia de la hipótesis activa."""
+    skill = Skill("faringitis", FARINGITIS_CON_CODIGOS)
+    serendipico = infon("Adenopatía cervical anterior dolorosa")
+    serendipico.abre_problema = True
+
+    r = EvaluadorDePromocion().evaluar(
+        skill, [infon("Odinofagia"), serendipico], inferencia(60)
+    )
+    assert r.cumplido["prueba_sensible"] == 0
+    assert r.propuestas == []
+
+
+def test_las_propuestas_pasan_por_la_compuerta_proponer_autorizar_y_persisten(tmp_path):
+    """La promoción propone borradores (`OrdenPropuesta` con `Solicitante.PROMOCION`)
+    y jamás crea una `Orden` sin firma humana (`prescriptor`)."""
+    from holonmed.core.promocion import a_propuestas_orden
+    from holonmed.db.store import Database
+    from holonmed.facturacion.modelos import Solicitante
+    from holonmed.facturacion.repositorio import OrdenRepo
+
+    skill = Skill("faringitis", FARINGITIS_CON_CODIGOS)
+    veredicto = EvaluadorDePromocion().evaluar(
+        skill,
+        [
+            infon("Odinofagia"),
+            infon("Adenopatía cervical anterior dolorosa", Polaridad.PRESENTE),
+        ],
+        inferencia(60),
+    )
+
+    db = Database(tmp_path / "ordenes.db")
+    repo = OrdenRepo(db)
+
+    borradores = a_propuestas_orden(veredicto)
+    assert len(borradores) == 1
+    assert borradores[0].solicitante is Solicitante.PROMOCION
+    # Evaluar y proponer NO escribe ninguna orden en la base de datos:
+    assert repo.listar("pac-1") == []
+
+    # Con firma humana nombrada se convierte en Orden y conserva solicitante y motivo:
+    orden = borradores[0].a_orden(paciente_id="pac-1", prescriptor="Dra. Vega")
+    creada = repo.crear(orden)
+    assert creada is not None
+
+    leidas = repo.listar("pac-1")
+    assert len(leidas) == 1
+    assert leidas[0].solicitante is Solicitante.PROMOCION
+    assert leidas[0].prescriptor == "Dra. Vega"
+    assert "Adenopatía cervical anterior dolorosa" in leidas[0].motivo
+
+
+@pytest.mark.asyncio
+async def test_pipeline_y_tic_repo_persisten_la_promocion_extremo_a_extremo(tmp_path):
+    """El pipeline evalúa la tupla en la etapa 9, la vuelca en `ResultadoTic.promocion`
+    y `TicRepo` la persiste y la reconstruye desde SQLite."""
+    from test_pipeline import IndexFalso, LLMFalso
+
+    from holonmed.config import Settings
+    from holonmed.core.pipeline import CrystallizationPipeline
+    from holonmed.core.skills import SkillManager
+    from holonmed.core.validator import OntologyValidator
+    from holonmed.core.verifier import ClinicalVerifier
+    from holonmed.db.store import Database, GraphRepo, TicRepo
+    from holonmed.models import HolonPaciente
+
+    (tmp_path / "faringitis.md").write_text(FARINGITIS_CON_CODIGOS, encoding="utf-8")
+    settings = Settings(skills_dir=tmp_path, docs_dir=tmp_path / "docs")
+
+    llm = LLMFalso(
+        extraccion={
+            "resumen": "Odinofagia y adenopatía cervical dolorosa.",
+            "infones": [
+                {
+                    "texto_origen": "dolor al tragar",
+                    "termino_clinico": "Odinofagia",
+                },
+                {
+                    "texto_origen": "ganglios cervicales dolorosos",
+                    "termino_clinico": "Adenopatía cervical anterior dolorosa",
+                },
+            ],
+        }
+    )
+    index = IndexFalso(score=95.0, termino="Odinofagia", codigo="162397003", exacto=False)
+    pipeline = CrystallizationPipeline(
+        llm=llm,
+        skills=SkillManager(settings),
+        validador=OntologyValidator(index, llm, settings),
+        verificador=ClinicalVerifier(llm, settings),
+        settings=settings,
+    )
+
+    paciente = HolonPaciente(paciente_id="pac-sintetico-1", nombre="Paciente Sintético")
+    resultado = await pipeline.ejecutar(
+        "Paciente con dolor al tragar y ganglios cervicales dolorosos.",
+        paciente,
+        skill_forzada="faringitis",
+    )
+
+    assert resultado.promocion is not None
+    assert resultado.promocion.promueve is False
+    assert resultado.promocion.vuelve_a_abduccion is False
+    assert resultado.promocion.terminos["prueba_sensible"] == [
+        "Adenopatía cervical anterior dolorosa"
+    ]
+    assert len(resultado.promocion.propuestas) == 1
+    assert resultado.promocion.propuestas[0].termino == "Exudado amigdalino"
+    assert resultado.promocion.propuestas[0].solicitante == "promocion"
+
+    db = Database(tmp_path / "holonmed.db")
+    tics = TicRepo(db, GraphRepo(db))
+    tic_id = tics.guardar(resultado)
+    assert tic_id is not None
+
+    guardado = tics.tic_completo(tic_id)
+    assert guardado is not None
+    assert guardado["promocion"] is not None
+    assert guardado["promocion"]["promueve"] is False
+    assert guardado["promocion"]["propuestas"][0]["termino"] == "Exudado amigdalino"
+    assert guardado["promocion"]["propuestas"][0]["solicitante"] == "promocion"

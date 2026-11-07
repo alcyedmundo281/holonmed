@@ -472,7 +472,7 @@ El orden no es una fila india sino un grafo de dependencias, y conviene decirlo
 con precisión para no serializar de más:
 
 ```
-HECHOS      8 · 9 · 17 · 18 · 19 · 20
+HECHOS      8 · 9 · 10 · 12 · 13 · 15 · 16 · 17 · 18 · 19 · 20
 
 8  ──► 9 ──► 10 ──► 11 ──► 12
 9 + 17 ──► 15   la interfaz: sin base no hay qué pedir, y sin episodio la

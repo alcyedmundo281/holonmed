@@ -695,6 +695,24 @@ class CandidataAbductiva(BaseModel):
     )
 
 
+class PropuestaPromocion(BaseModel):
+    """Una prueba que la tupla propone pedir, con `solicitante = promocion`.
+
+    No es una orden: es un borrador que entra por el mismo portón
+    proponer/autorizar que el resto de las órdenes, y ninguna propuesta se
+    convierte en orden sin la firma de una persona. Nace cuando la prueba
+    sensible consta a favor y falta la específica — SnNOut ya no descartó,
+    así que el paso siguiente es SpPIn.
+    """
+
+    termino: str
+    codigo: str | None = None
+    sistema: str | None = None
+    rol: str = "prueba_especifica"
+    solicitante: str = "promocion"
+    motivo: str = ""
+
+
 class Promocion(BaseModel):
     """¿Sigue siendo un problema, o ya es un diagnóstico?
 
@@ -702,6 +720,19 @@ class Promocion(BaseModel):
     a ellas y por separado: una probabilidad alta con la tupla incompleta es
     información clínica —dice que falta una prueba, no que falte evidencia— y
     fundirlas la destruiría.
+
+    LA TUPLA COMO CONTROL DE FLUJO
+    ------------------------------
+    SnNOut y SpPIn no son sólo una compuerta de promoción: dicen qué hacer a
+    continuación.
+
+    * **Sensible negativa** — descarta ESA hipótesis. No se pide la
+      específica: sería pedir una prueba confirmatoria para una línea que la
+      prueba de descarte ya cerró. El paciente sigue con su problema, así que
+      vuelve a la abducción (`vuelve_a_abduccion = True`).
+    * **Sensible positiva** — no confirma. Si falta la específica, la propone
+      con `solicitante = promocion` y su motivo, para que pase por el portón
+      proponer/autorizar.
     """
 
     hipotesis: str
@@ -716,6 +747,31 @@ class Promocion(BaseModel):
     )
     faltan: dict[str, int] = Field(
         default_factory=dict, description="Lo que impide promover, por rol"
+    )
+
+    # Control de flujo (Ciclo 12): qué cerró la sensible negativa y qué
+    # abre la sensible positiva cuando falta la específica.
+    sensible_negativa: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Pruebas sensibles que constan en contra. Cierran esta línea y "
+            "mandan de vuelta a la abducción sin pedir la específica."
+        ),
+    )
+    vuelve_a_abduccion: bool = Field(
+        default=False,
+        description=(
+            "True cuando una prueba sensible documentada negativa descarta "
+            "esta línea: no cierra la indagación, cierra esta hipótesis y "
+            "abre otra."
+        ),
+    )
+    propuestas: list[PropuestaPromocion] = Field(
+        default_factory=list,
+        description=(
+            "Pruebas específicas propuestas cuando la sensible es positiva y "
+            "falta confirmar. No son órdenes hasta que alguien las firma."
+        ),
     )
 
     umbral_postest: float | None = None
@@ -790,6 +846,10 @@ class ResultadoTic(BaseModel):
     # El criterio publicado, contado. Se lee junto a `inferencia` y
     # `acoplamiento`, nunca fundido con ellos.
     veredicto_declarado: VeredictoDeclarado | None = None
+    # Cuarta pregunta: si pasa de problema a diagnóstico, y qué pide a
+    # continuación cuando la sensible es positiva o qué cierra cuando es
+    # negativa.
+    promocion: Promocion | None = None
 
     # La competencia abductiva, que hoy sólo MIDE. El protocolo que se usa
     # sigue siendo `skill_activa`, elegido por el prompt de triaje; esto
