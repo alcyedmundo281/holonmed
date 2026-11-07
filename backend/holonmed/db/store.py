@@ -141,6 +141,9 @@ class Database:
         ("orden", "motivo", "TEXT NOT NULL DEFAULT ''"),
         ("ejecucion", "referencias", "TEXT"),
         ("ejecucion", "campos_faltantes", "TEXT"),
+        ("infon", "valor", "REAL"),
+        ("infon", "unidad", "TEXT"),
+        ("infon", "poblacion", "TEXT"),
     )
 
     def _migrar(self, cx: sqlite3.Connection) -> None:
@@ -780,10 +783,10 @@ class TicRepo:
                                acto, actualizado_por, actualizado_en, correccion,
                                abre_problema, responde_a,
                                derivado_de,
-                               criterio, codigo, sistema, cie10, linaje,
+                               criterio, valor, unidad, poblacion, codigo, sistema, cie10, linaje,
                                estado, confianza, score_ontologico, score_logico,
                                razon_auditoria, origen_skill)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             tic_id,
                             resultado.paciente_id,
@@ -806,6 +809,9 @@ class TicRepo:
                             if infon.derivado_de
                             else None,
                             infon.criterio,
+                            infon.valor,
+                            infon.unidad,
+                            infon.poblacion,
                             infon.codigo,
                             infon.sistema,
                             infon.cie10_code,
@@ -1225,6 +1231,9 @@ def _fila_a_infon(fila: sqlite3.Row) -> Infon:
         or "objetivo",
         derivado_de=json.loads(derivado) if derivado else [],
         criterio=fila["criterio"] if "criterio" in fila.keys() else None,
+        valor=fila["valor"] if "valor" in fila.keys() else None,
+        unidad=fila["unidad"] if "unidad" in fila.keys() else None,
+        poblacion=fila["poblacion"] if "poblacion" in fila.keys() else None,
         codigo=fila["codigo"],
         sistema=fila["sistema"],
         cie10_code=fila["cie10"],

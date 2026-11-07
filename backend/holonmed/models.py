@@ -231,6 +231,20 @@ class Infon(BaseModel):
         default=None, description="La orden a la que responde, si responde a alguna."
     )
 
+    # --- Magnitud cuantitativa (Ciclo 11) ----------------------------
+    valor: float | None = Field(
+        default=None,
+        description="Valor numérico medido cuando el hallazgo es cuantitativo.",
+    )
+    unidad: str | None = Field(
+        default=None,
+        description="Unidad en la que se expresó el valor medido.",
+    )
+    poblacion: str | None = Field(
+        default=None,
+        description="Estrato clínico o analítico declarado para el hallazgo.",
+    )
+
     @property
     def confirma(self) -> bool:
         """Un hallazgo validado y presente. El que suma en la inferencia.

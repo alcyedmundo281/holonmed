@@ -208,22 +208,29 @@ puerta de atrás la interpretación fuera de hipótesis que
 (analito, hipótesis), y es graduado.**
 
 ```yaml
-- analito: Potasio sérico
-  rol: prueba_especifica
-  bandas:
+- nombre: Potasio sérico
+  snomed: "365760004"
+  rol: especifico
+  graduacion:
+    parametro: potasio sérico
+    unidad: mEq/L
+    lectura: disjunto
+  tramos:
     - { desde: 5.5, hasta: 6.5, lr: 3.2, fuente: ... }
     - { desde: 6.5,             lr: 9.0, fuente: ... }
 ```
 
-El mismo potasio aparece en otro protocolo con bandas por abajo y dirección
+El mismo potasio aparece en otro protocolo con tramos por abajo y dirección
 contraria. Ninguno necesita un «rango normal», y por eso el mismo número puede
 empujar dos hipótesis en sentidos opuestos.
 
-**Precondición.** El formato de los protocolos vive en `medsemiotics-db`. Las
-bandas se acuerdan allí antes de leerlas aquí.
+**Precondición.** El formato de los protocolos vive en `medsemiotics-db`. Los
+tramos y su `graduacion` (`acumulativo` | `disjunto`, ver
+[`docs/PROPUESTA-BANDAS.md`](PROPUESTA-BANDAS.md)) se acordaron allí antes de
+leerlos aquí.
 
-**Condición de hecho.** Un signo sin bandas sigue siendo válido —es una banda
-única—, así que los nueve protocolos actuales no se rompen. Y un valor que
+**Condición de hecho.** Un signo sin tramos sigue siendo válido —es un tramo
+único—, así que los protocolos actuales no se rompen. Y un valor que
 ninguna hipótesis conocida lee **se dice**, no se calla.
 
 ## Ciclo 12 — La tupla como control de flujo
@@ -472,7 +479,7 @@ El orden no es una fila india sino un grafo de dependencias, y conviene decirlo
 con precisión para no serializar de más:
 
 ```
-HECHOS      8 · 9 · 17 · 18 · 19 · 20
+HECHOS      8 · 9 · 11 · 17 · 18 · 19 · 20
 
 8  ──► 9 ──► 10 ──► 11 ──► 12
 9 + 17 ──► 15   la interfaz: sin base no hay qué pedir, y sin episodio la

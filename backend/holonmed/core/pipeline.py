@@ -836,7 +836,7 @@ class CrystallizationPipeline:
 
     async def _validar_hallazgo(
         self,
-        crudo: dict[str, str],
+        crudo: dict,
         texto_original: str,
         skill: Skill,
         hints: dict[str, str],
@@ -911,11 +911,23 @@ class CrystallizationPipeline:
             concepto_id, codigo, sistema = match.concepto_id, match.codigo, match.sistema
             cie10, linaje = match.cie10, match.linaje
 
+        valor_crudo = crudo.get("valor")
+        valor = (
+            float(valor_crudo)
+            if isinstance(valor_crudo, (int, float)) and not isinstance(valor_crudo, bool)
+            else None
+        )
+        unidad = _texto_del_modelo(crudo, "unidad") or None
+        poblacion = _texto_del_modelo(crudo, "poblacion") or None
+
         return Infon(
             texto_origen=cita or texto_original[:120],
             termino_propuesto=termino,
             termino=termino_final,
             polaridad=polaridad,
+            valor=valor,
+            unidad=unidad,
+            poblacion=poblacion,
             codigo=codigo,
             sistema=sistema,
             concepto_id=concepto_id,

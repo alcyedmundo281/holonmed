@@ -16,7 +16,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "scripts"))
 
-from holonmed.core.skills import Skill  # noqa: E402
+from holonmed.core.skills import LECTURAS_GRADUACION, Skill  # noqa: E402
 
 convertir_condicion = pytest.importorskip("convertir_condicion")
 
@@ -61,6 +61,13 @@ def test_todo_cociente_trasladado_cita_su_fuente(identificador, indice):
     for signo in skill.signos:
         if signo.lr is not None and signo.lr != 1.0:
             assert signo.fuente, f"'{signo.nombre}' llega sin procedencia"
+        if signo.graduacion.declarada:
+            assert signo.graduacion.lectura in LECTURAS_GRADUACION
+        for tramo in signo.tramos:
+            if (tramo.lr is not None and tramo.lr != 1.0) or (
+                tramo.lr_negativo is not None and tramo.lr_negativo != 1.0
+            ):
+                assert tramo.fuente, f"tramo de '{signo.nombre}' llega sin procedencia"
 
 
 @pytest.mark.parametrize("identificador", _condiciones())
@@ -83,6 +90,14 @@ def test_ningun_cociente_sale_de_la_nada(identificador, indice):
             valor = bloque.get("valor") if isinstance(bloque, dict) else bloque
             if isinstance(valor, (int, float)) and valor > 0:
                 valores.add(float(valor))
+        for tramo in arista.get("tramos") or []:
+            if not isinstance(tramo, dict):
+                continue
+            for campo in ("lr_positivo", "lr_negativo", "lr"):
+                bloque = tramo.get(campo)
+                valor = bloque.get("valor") if isinstance(bloque, dict) else bloque
+                if isinstance(valor, (int, float)) and valor > 0:
+                    valores.add(float(valor))
         if arista.get("estado_lr") == "sin_efecto":
             # `sin_efecto` es lo único que se traduce a un número que el
             # índice no escribe: 1.0, que deja el hallazgo sin efecto.
@@ -96,6 +111,14 @@ def test_ningun_cociente_sale_de_la_nada(identificador, indice):
             assert cociente in publicados.get(signo.nombre, set()), (
                 f"'{signo.nombre}': el protocolo declara {cociente} y el índice no"
             )
+        for tramo in signo.tramos:
+            for cociente in (tramo.lr, tramo.lr_negativo):
+                if cociente is None:
+                    continue
+                assert cociente in publicados.get(signo.nombre, set()), (
+                    f"'{signo.nombre}' (tramo): el protocolo declara {cociente} "
+                    f"y el índice no"
+                )
 
 
 @pytest.mark.parametrize("identificador", _condiciones())
