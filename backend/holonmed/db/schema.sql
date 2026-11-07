@@ -277,6 +277,9 @@ CREATE TABLE IF NOT EXISTS infon (
     -- abre un problema, pero no cuenta como prueba de la hipótesis activa.
     abre_problema     INTEGER NOT NULL DEFAULT 0,
     responde_a        TEXT,            -- la orden a la que responde
+    valor             REAL,            -- valor numérico medido (Ciclo 11)
+    unidad            TEXT,            -- unidad del valor medido
+    poblacion         TEXT,            -- estrato poblacional o analítico
     derivado_de       TEXT,            -- JSON: términos que lo satisfacen
     criterio          TEXT,            -- criterio de clasificación que lo produjo
     codigo            TEXT,

@@ -98,6 +98,91 @@ TIPOS = ("clinico", "operativo", "documento")
 # ya existían, nombrados aparte porque juntos deciden otra cosa.
 ROLES_DE_LA_TUPLA = ("manifestacion", "prueba_sensible", "prueba_especifica")
 
+# Cómo se leen los tramos numéricos de un signo graduado (Ciclo 11).
+# Nunca se infiere una a partir de la otra: `acumulativo` anida cortes hacia
+# el extremo y aplica el más estricto que el valor satisface; `disjunto`
+# exige intervalos `[desde, hasta)` sin solapamiento.
+LECTURAS_GRADUACION = ("acumulativo", "disjunto")
+
+
+@dataclass
+class Graduacion:
+    """Metadatos del eje numérico sobre el que se gradúan los tramos de un signo."""
+
+    parametro: str = ""
+    unidad: str = ""
+    lectura: str = ""
+
+    @property
+    def declarada(self) -> bool:
+        return bool(self.parametro or self.unidad or self.lectura)
+
+
+@dataclass
+class Tramo:
+    """Una banda de likelihood ratio dentro de un signo graduado o estratificado.
+
+    Intervalo semiabierto `[desde, hasta)`: `desde` entra (`>=`), `hasta` no
+    (`<`). Omitir un extremo lo deja abierto.
+    """
+
+    umbral: str = ""
+    umbral_condicion: str = ""
+    desde: float | None = None
+    hasta: float | None = None
+    lr: float | None = None
+    lr_negativo: float | None = None
+    poblacion: str = ""
+    fuente: str = ""
+
+    @property
+    def lr_positivo(self) -> float | None:
+        return self.lr
+
+    @property
+    def es_numerico(self) -> bool:
+        return self.desde is not None or self.hasta is not None
+
+    def contiene(self, valor: float) -> bool:
+        """¿Cae `valor` en el intervalo semiabierto `[desde, hasta)`?"""
+        if not self.es_numerico:
+            return False
+        if self.desde is not None and valor < self.desde:
+            return False
+        if self.hasta is not None and valor >= self.hasta:
+            return False
+        return True
+
+    def etiqueta(self) -> str:
+        if self.umbral:
+            return self.umbral
+        if self.umbral_condicion:
+            return self.umbral_condicion
+        if self.desde is not None and self.hasta is not None:
+            return f"[{self.desde:g}, {self.hasta:g})"
+        if self.desde is not None:
+            return f"≥ {self.desde:g}"
+        if self.hasta is not None:
+            return f"< {self.hasta:g}"
+        if self.poblacion:
+            return self.poblacion
+        return "tramo"
+
+
+@dataclass
+class EvaluacionTramo:
+    """Resultado de evaluar un valor contra los tramos de un signo.
+
+    Si ningún tramo aplica, `tramo` es `None` y `motivo` explica por qué para
+    que conste en la traza en vez de ignorarse en silencio.
+    """
+
+    tramo: Tramo | None
+    lr: float | None = None
+    lr_negativo: float | None = None
+    fuente: str = ""
+    motivo: str = ""
+
 
 @dataclass
 class Signo:
@@ -115,6 +200,23 @@ class Signo:
     # de existir estas claves: así siguen valiendo sin tocarlos.
     efecto: str = "apoya"
     dispara_si: str = "presente"  # la polaridad que activa el efecto
+
+    # Ciclo 11: un signo sin tramos sigue siendo una banda única; con tramos,
+    # el cociente depende de en qué tramo caiga el valor medido.
+    graduacion: Graduacion = field(default_factory=Graduacion)
+    tramos: list[Tramo] = field(default_factory=list)
+
+    @property
+    def bandas(self) -> list[Tramo]:
+        return self.tramos
+
+    @property
+    def tiene_lr(self) -> bool:
+        return (
+            self.lr is not None
+            or self.lr_negativo is not None
+            or any(t.lr is not None or t.lr_negativo is not None for t in self.tramos)
+        )
 
     @property
     def polaridad_adversa(self) -> str:
@@ -138,6 +240,229 @@ class Signo:
     @property
     def lr_positivo(self) -> float | None:
         return self.lr
+
+    def evaluar_valor(
+        self,
+        valor: float | None,
+        unidad: str | None = None,
+        poblacion: str | None = None,
+    ) -> EvaluacionTramo:
+        """Resuelve qué tramo aplica a `valor`, o explica por qué ninguno.
+
+        Sigue el contrato de `medsemiotics-db`:
+        * Si no hay `tramos`, el signo funciona como una banda única.
+        * Si los tramos declaran `umbral_condicion`, gradúan la definición de
+          la condición y no el valor medido en el paciente: un valor numérico
+          del paciente se rechaza explícitamente.
+        * Bajo `disjunto`, el valor entra en el único intervalo `[desde, hasta)`
+          que lo contiene. Si cae en un hueco o fuera de todos, no se interpola.
+        * Bajo `acumulativo`, se aplica el corte más estricto que el valor
+          satisface (mayor `desde` o menor `hasta`).
+        * Los tramos sin `desde` ni `hasta` no son evaluables sobre un eje
+          numérico de un solo parámetro y se informan en el motivo.
+        """
+        if not self.tramos:
+            return EvaluacionTramo(
+                tramo=None,
+                lr=self.lr,
+                lr_negativo=self.lr_negativo,
+                fuente=self.fuente,
+            )
+
+        if any(t.umbral_condicion for t in self.tramos):
+            if valor is not None:
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': los tramos declaran umbral_condicion "
+                        f"(gradúan la definición de la condición, no el valor del "
+                        f"paciente); no se selecciona tramo para {valor:g}"
+                    ),
+                )
+            if self.lr is not None or self.lr_negativo is not None:
+                return EvaluacionTramo(
+                    tramo=None,
+                    lr=self.lr,
+                    lr_negativo=self.lr_negativo,
+                    fuente=self.fuente,
+                )
+            return EvaluacionTramo(
+                tramo=None,
+                motivo=(
+                    f"'{self.nombre}': los tramos declaran umbral_condicion y no "
+                    f"hay cociente base sin especificar qué umbral de condición se busca"
+                ),
+            )
+
+        pob_norm = (poblacion or "").strip().lower()
+
+        if valor is None:
+            if pob_norm:
+                por_pob = [
+                    t
+                    for t in self.tramos
+                    if not t.es_numerico and t.poblacion.strip().lower() == pob_norm
+                ]
+                if len(por_pob) == 1:
+                    elegido = por_pob[0]
+                    return EvaluacionTramo(
+                        tramo=elegido,
+                        lr=elegido.lr,
+                        lr_negativo=elegido.lr_negativo,
+                        fuente=elegido.fuente,
+                    )
+            if any(t.poblacion for t in self.tramos) and not any(
+                t.es_numerico for t in self.tramos
+            ):
+                estratos = ", ".join(t.poblacion for t in self.tramos if t.poblacion)
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': tramos estratificados por población "
+                        f"({estratos}) y el hallazgo no declara en cuál está el "
+                        f"paciente; no se aplica ningún tramo"
+                    ),
+                )
+            return EvaluacionTramo(
+                tramo=None,
+                motivo=(
+                    f"'{self.nombre}': signo graduado sin valor numérico en el "
+                    f"hallazgo; no se aplica ningún tramo"
+                ),
+            )
+
+        unidad_obs = (unidad or "").strip()
+        unidad_decl = self.graduacion.unidad.strip()
+        if unidad_decl:
+            if not unidad_obs:
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': el hallazgo trae valor {valor:g} sin "
+                        f"unidad declarada (el protocolo exige '{unidad_decl}'); "
+                        f"no se aplica ningún tramo"
+                    ),
+                )
+            if unidad_obs.lower() != unidad_decl.lower():
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': unidad '{unidad_obs}' incompatible con la "
+                        f"graduación declarada ('{unidad_decl}'); no se aplica ningún tramo"
+                    ),
+                )
+
+        if pob_norm:
+            candidatos = [
+                t
+                for t in self.tramos
+                if not t.poblacion or t.poblacion.strip().lower() == pob_norm
+            ]
+        else:
+            candidatos = [t for t in self.tramos if not t.poblacion]
+            if not candidatos and any(t.poblacion for t in self.tramos):
+                estratos = ", ".join(
+                    dict.fromkeys(t.poblacion for t in self.tramos if t.poblacion)
+                )
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': tramos condicionados por población "
+                        f"({estratos}) y el hallazgo no declara en cuál está el "
+                        f"paciente; no se aplica ningún tramo"
+                    ),
+                )
+
+        numericos = [t for t in candidatos if t.es_numerico]
+        no_numericos = [t for t in candidatos if not t.es_numerico]
+        if not numericos:
+            etiquetas_no_num = ", ".join(t.etiqueta() for t in no_numericos)
+            return EvaluacionTramo(
+                tramo=None,
+                motivo=(
+                    f"'{self.nombre}': ningún tramo declara límites numéricos "
+                    f"evaluables para {valor:g}"
+                    + (
+                        f" (tramos en prosa: {etiquetas_no_num})"
+                        if etiquetas_no_num
+                        else ""
+                    )
+                ),
+            )
+
+        lectura = self.graduacion.lectura.strip()
+        if lectura not in LECTURAS_GRADUACION:
+            return EvaluacionTramo(
+                tramo=None,
+                motivo=(
+                    f"'{self.nombre}': graduacion.lectura '{lectura or 'vacía'}' "
+                    f"inválida; el tipo de lectura nunca se infiere"
+                ),
+            )
+
+        encajan = [t for t in numericos if t.contiene(valor)]
+        aviso_no_num = (
+            f"'{self.nombre}': tramo(s) sin límites numéricos no evaluados sobre un "
+            f"solo valor ({', '.join(t.etiqueta() for t in no_numericos)})"
+            if no_numericos
+            else ""
+        )
+
+        if not encajan:
+            sufijo_u = f" {unidad_decl}" if unidad_decl else ""
+            extra = (
+                f" (además hay tramo(s) sin límites numéricos: "
+                f"{', '.join(t.etiqueta() for t in no_numericos)})"
+                if no_numericos
+                else ""
+            )
+            return EvaluacionTramo(
+                tramo=None,
+                motivo=(
+                    f"'{self.nombre}': el valor {valor:g}{sufijo_u} no cae en "
+                    f"ningún tramo declarado{extra}; no se aplica ningún cociente"
+                ),
+            )
+
+        if lectura == "disjunto":
+            if len(encajan) > 1:
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': el valor {valor:g} cae en {len(encajan)} "
+                        f"tramos disjuntos solapados; no se aplica ninguno"
+                    ),
+                )
+            elegido = encajan[0]
+        else:
+            # Lectura acumulativa: cortes anidados de un solo lado; gana el
+            # corte más estricto que el valor satisface.
+            if all(t.desde is not None and t.hasta is None for t in encajan):
+                elegido = max(
+                    encajan,
+                    key=lambda t: t.desde if t.desde is not None else float("-inf"),
+                )
+            elif all(t.hasta is not None and t.desde is None for t in encajan):
+                elegido = min(
+                    encajan,
+                    key=lambda t: t.hasta if t.hasta is not None else float("inf"),
+                )
+            else:
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': tramos acumulativos con cortes de ambos "
+                        f"lados; no se aplica ninguno"
+                    ),
+                )
+
+        return EvaluacionTramo(
+            tramo=elegido,
+            lr=elegido.lr,
+            lr_negativo=elegido.lr_negativo,
+            fuente=elegido.fuente,
+            motivo=aviso_no_num,
+        )
 
     def codigo_preferido(self) -> tuple[str, str] | None:
         for sistema in PRIORIDAD_SISTEMAS:
@@ -519,14 +844,49 @@ class Skill:
     def _parsear_signos(self) -> list[Signo]:
         salida = []
         for s in self.meta.get("signos") or []:
-            if not isinstance(s, dict) or not s.get("nombre"):
+            if not isinstance(s, dict):
+                continue
+            nombre_crudo = s.get("nombre") or s.get("analito")
+            if not nombre_crudo:
                 continue
             rol = str(s.get("rol", "apoyo"))
             efecto = str(s.get("efecto", "apoya"))
             dispara = str(s.get("dispara_si", "presente"))
+            grad_cruda = s.get("graduacion")
+            if isinstance(grad_cruda, dict):
+                graduacion = Graduacion(
+                    parametro=str(grad_cruda.get("parametro") or "").strip(),
+                    unidad=str(grad_cruda.get("unidad") or "").strip(),
+                    lectura=str(grad_cruda.get("lectura") or "").strip(),
+                )
+            else:
+                graduacion = Graduacion(
+                    parametro=str(s.get("parametro") or s.get("analito") or "").strip(),
+                    unidad=str(s.get("unidad") or "").strip(),
+                    lectura=str(s.get("lectura") or "").strip(),
+                )
+
+            tramos_crudos = s.get("tramos") if "tramos" in s else s.get("bandas")
+            tramos: list[Tramo] = []
+            for t in tramos_crudos or []:
+                if not isinstance(t, dict):
+                    continue
+                tramos.append(
+                    Tramo(
+                        umbral=str(t.get("umbral") or "").strip(),
+                        umbral_condicion=str(t.get("umbral_condicion") or "").strip(),
+                        desde=_num(t.get("desde")),
+                        hasta=_num(t.get("hasta")),
+                        lr=_num(t.get("lr") if "lr" in t else t.get("lr_positivo")),
+                        lr_negativo=_num(t.get("lr_negativo")),
+                        poblacion=str(t.get("poblacion") or "").strip(),
+                        fuente=str(t.get("fuente") or "").strip(),
+                    )
+                )
+
             salida.append(
                 Signo(
-                    nombre=str(s["nombre"]),
+                    nombre=str(nombre_crudo),
                     codigos={k: str(v) for k, v in (s.get("codigos") or {}).items()},
                     rol=rol if rol in ROLES else "apoyo",
                     lr=_num(s.get("lr") if "lr" in s else s.get("lr_positivo")),
@@ -534,6 +894,8 @@ class Skill:
                     fuente=str(s.get("fuente", "")),
                     efecto=efecto if efecto in EFECTOS else "apoya",
                     dispara_si=dispara if dispara in POLARIDADES else "presente",
+                    graduacion=graduacion,
+                    tramos=tramos,
                 )
             )
         return salida
@@ -801,6 +1163,20 @@ class Skill:
                 encabezado = "VALORES DE REFERENCIA DE ESTE PROTOCOLO:"
                 partes.append(encabezado + "\n" + "\n".join(lineas))
 
+        graduados = [s for s in self.signos if s.tramos]
+        if graduados:
+            lineas_grad = []
+            for s in graduados:
+                param = s.graduacion.parametro or s.nombre
+                uni = f" en {s.graduacion.unidad}" if s.graduacion.unidad else ""
+                lineas_grad.append(
+                    f"- {param}{uni}: extrae «{s.nombre}» con su valor numérico, "
+                    f"unidad y población (si consta)."
+                )
+            partes.append(
+                "PARÁMETROS GRADUADOS DE ESTE PROTOCOLO:\n" + "\n".join(lineas_grad)
+            )
+
         if self.signos:
             nombres = ", ".join(f"«{s.nombre}»" for s in self.signos)
             partes.append(f"TÉRMINOS QUE RECONOCE ESTE PROTOCOLO: {nombres}.")
@@ -834,7 +1210,15 @@ class Skill:
             partes.append(_envolver("valores_de_referencia", filas))
 
         if self.signos:
-            filas = [f'  <signo nombre="{s.nombre}"/>' for s in self.signos]
+            filas = []
+            for s in self.signos:
+                attrs = [f'nombre="{s.nombre}"']
+                if s.tramos:
+                    if s.graduacion.parametro:
+                        attrs.append(f'parametro="{s.graduacion.parametro}"')
+                    if s.graduacion.unidad:
+                        attrs.append(f'unidad="{s.graduacion.unidad}"')
+                filas.append(f"  <signo {' '.join(attrs)}/>")
             partes.append(_envolver("terminos_reconocidos", filas))
 
         return "\n\n".join(partes)
@@ -852,6 +1236,10 @@ class Skill:
             preferido = signo.codigo_preferido()
             if preferido:
                 salida[signo.nombre.strip().lower()] = preferido[1]
+                if signo.graduacion.parametro:
+                    salida.setdefault(
+                        signo.graduacion.parametro.strip().lower(), preferido[1]
+                    )
 
         for criterio in self.laboratorio:
             codigo = Signo("", criterio.codigos).codigo_preferido()
@@ -887,9 +1275,33 @@ class Skill:
                     "name": s.nombre,
                     "bayes_lr": s.lr,
                     "bayes_lr_negativo": s.lr_negativo,
+                    **(
+                        {
+                            "graduacion": {
+                                "parametro": s.graduacion.parametro,
+                                "unidad": s.graduacion.unidad,
+                                "lectura": s.graduacion.lectura,
+                            },
+                            "tramos": [
+                                {
+                                    "umbral": t.umbral,
+                                    "umbral_condicion": t.umbral_condicion,
+                                    "desde": t.desde,
+                                    "hasta": t.hasta,
+                                    "lr": t.lr,
+                                    "lr_negativo": t.lr_negativo,
+                                    "poblacion": t.poblacion,
+                                    "fuente": t.fuente,
+                                }
+                                for t in s.tramos
+                            ],
+                        }
+                        if s.tramos
+                        else {}
+                    ),
                 }
                 for s in self.signos
-                if s.lr is not None or s.lr_negativo is not None
+                if s.tiene_lr
             ],
         }
 
@@ -938,6 +1350,7 @@ class Skill:
                 fallos.append(f"signo '{signo.nombre}': LR sin fuente citada")
             if not signo.codigo_preferido():
                 fallos.append(f"signo '{signo.nombre}': sin código")
+            fallos.extend(self._problemas_tramos(signo))
 
         for criterio in self.laboratorio:
             if criterio.corte_superior is None and criterio.corte_inferior is None:
@@ -950,9 +1363,7 @@ class Skill:
         # profunda no sirve para otra cosa, y ésa es toda su utilidad. Mirar
         # sólo `lr` —que es el LR+— daba por vacío un modelo que tiene
         # cociente. Es el mismo criterio que ya usa `resumen()` más arriba.
-        if self.bayes.declarado and not any(
-            s.lr is not None or s.lr_negativo is not None for s in self.signos
-        ):
+        if self.bayes.declarado and not any(s.tiene_lr for s in self.signos):
             fallos.append("declara modelo bayesiano pero ningún signo aporta LR")
 
         if index is not None:
@@ -975,6 +1386,118 @@ class Skill:
         # Lo recogido durante el parseo. Va al final para que un balance con una
         # clave desconocida se vea aunque no haya vocabulario cargado.
         fallos.extend(self._problemas)
+
+        return fallos
+
+    @staticmethod
+    def _problemas_tramos(signo: Signo) -> list[str]:
+        """Comprueba las invariantes de `graduacion` y `tramos` en un signo."""
+        fallos: list[str] = []
+        if signo.graduacion.declarada and not signo.tramos:
+            fallos.append(
+                f"signo '{signo.nombre}': declara graduacion pero no declara tramos"
+            )
+            return fallos
+        if not signo.tramos:
+            return fallos
+
+        hay_numericos = any(t.es_numerico for t in signo.tramos)
+        if signo.graduacion.declarada or hay_numericos:
+            if not signo.graduacion.parametro:
+                fallos.append(
+                    f"signo '{signo.nombre}': tramos graduados sin graduacion.parametro"
+                )
+            if signo.graduacion.lectura not in LECTURAS_GRADUACION:
+                fallos.append(
+                    f"signo '{signo.nombre}': graduacion.lectura "
+                    f"'{signo.graduacion.lectura}' inválida; debe ser "
+                    f"'acumulativo' o 'disjunto' (nunca se infiere)"
+                )
+            if hay_numericos and not signo.graduacion.unidad:
+                fallos.append(
+                    f"signo '{signo.nombre}': tramos numéricos sin graduacion.unidad"
+                )
+
+        if any(t.umbral for t in signo.tramos) and any(
+            t.umbral_condicion for t in signo.tramos
+        ):
+            fallos.append(
+                f"signo '{signo.nombre}': mezcla 'umbral' y 'umbral_condicion' "
+                f"en sus tramos"
+            )
+
+        por_poblacion: dict[str, list[Tramo]] = {}
+        for i, t in enumerate(signo.tramos, 1):
+            if t.desde is not None and t.hasta is not None and t.desde >= t.hasta:
+                fallos.append(
+                    f"signo '{signo.nombre}' (tramo {i}): desde ({t.desde}) "
+                    f"debe ser menor que hasta ({t.hasta})"
+                )
+            if t.lr is None and t.lr_negativo is None:
+                fallos.append(f"signo '{signo.nombre}' (tramo {i}): sin LR declarado")
+            if t.lr is not None and t.lr <= 0:
+                fallos.append(f"signo '{signo.nombre}' (tramo {i}): LR inválido ({t.lr})")
+            if t.lr_negativo is not None and t.lr_negativo <= 0:
+                fallos.append(
+                    f"signo '{signo.nombre}' (tramo {i}): LR negativo inválido "
+                    f"({t.lr_negativo})"
+                )
+            requiere_fuente = (t.lr is not None and t.lr != 1.0) or (
+                t.lr_negativo is not None and t.lr_negativo != 1.0
+            )
+            if requiere_fuente and not t.fuente:
+                fallos.append(f"signo '{signo.nombre}' (tramo {i}): LR sin fuente citada")
+            if not t.es_numerico and not (t.umbral or t.umbral_condicion or t.poblacion):
+                fallos.append(
+                    f"signo '{signo.nombre}' (tramo {i}): tramo sin límites "
+                    f"numéricos ni umbral o población en prosa"
+                )
+            if t.es_numerico and (
+                t.desde is None or t.hasta is None or t.desde < t.hasta
+            ):
+                por_poblacion.setdefault(t.poblacion.lower(), []).append(t)
+
+        lectura = signo.graduacion.lectura
+        if lectura == "disjunto":
+            for grupo in por_poblacion.values():
+                solapado = False
+                for idx, t1 in enumerate(grupo):
+                    inf1 = t1.desde if t1.desde is not None else float("-inf")
+                    sup1 = t1.hasta if t1.hasta is not None else float("inf")
+                    for t2 in grupo[idx + 1 :]:
+                        inf2 = t2.desde if t2.desde is not None else float("-inf")
+                        sup2 = t2.hasta if t2.hasta is not None else float("inf")
+                        if max(inf1, inf2) < min(sup1, sup2):
+                            fallos.append(
+                                f"signo '{signo.nombre}': tramos disjuntos se "
+                                f"solapan ({t1.etiqueta()} y {t2.etiqueta()})"
+                            )
+                            solapado = True
+                            break
+                    if solapado:
+                        break
+        elif lectura == "acumulativo":
+            for grupo in por_poblacion.values():
+                if any(t.desde is not None and t.hasta is not None for t in grupo):
+                    fallos.append(
+                        f"signo '{signo.nombre}': bajo lectura 'acumulativo' "
+                        f"cada tramo numérico debe ser un corte de un solo lado"
+                    )
+                else:
+                    con_desde = [t.desde for t in grupo if t.desde is not None]
+                    con_hasta = [t.hasta for t in grupo if t.hasta is not None]
+                    if con_desde and con_hasta:
+                        fallos.append(
+                            f"signo '{signo.nombre}': bajo lectura 'acumulativo' "
+                            f"todos los cortes deben apuntar hacia el mismo extremo"
+                        )
+                    elif len(con_desde) != len(set(con_desde)) or len(con_hasta) != len(
+                        set(con_hasta)
+                    ):
+                        fallos.append(
+                            f"signo '{signo.nombre}': bajo lectura 'acumulativo' "
+                            f"hay cortes repetidos"
+                        )
 
         return fallos
 

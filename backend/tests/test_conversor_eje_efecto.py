@@ -278,6 +278,7 @@ def test_las_taxonomias_del_eje_no_divergen():
     assert convertir_condicion.EFECTOS == modulo_skills.EFECTOS
     assert convertir_condicion.POLARIDADES == modulo_skills.POLARIDADES
     assert convertir_condicion.CAMPOS_NIVEL == modulo_skills._CAMPOS_NIVEL
+    assert convertir_condicion.LECTURAS_GRADUACION == modulo_skills.LECTURAS_GRADUACION
 
 
 def test_cada_clave_conocida_se_emite_o_se_declara_no_emitida():

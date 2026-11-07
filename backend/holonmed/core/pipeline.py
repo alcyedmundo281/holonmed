@@ -60,10 +60,12 @@ Lee la narrativa del paciente y extrae hallazgos médicos ATÓMICOS.
 
 REGLA DE ORO PARA LABORATORIO:
 No extraigas números sueltos: INTERPRÉTALOS con los 'criterios_laboratorio'
-del protocolo de arriba.
+del protocolo de arriba, o incluye su magnitud (`valor`, `unidad`, `poblacion`)
+cuando el protocolo declare ese signo como parámetro graduado.
 - "Calcio 7.5"        -> termino_clinico: "Hipocalcemia"
 - "Leucocitos 18.500" -> termino_clinico: "Leucocitosis"
 - "FC 115"            -> termino_clinico: "Taquicardia"
+- "Potasio 5.8 mEq/L" -> termino_clinico: "Potasio sérico", valor: 5.8, unidad: "mEq/L"
 - Si el texto ya trae la interpretación ("hipocalcemia leve"), úsala.
 
 REGLAS DE PRECISIÓN:
@@ -84,9 +86,13 @@ REGLAS DE PRECISIÓN:
    - El texto NO DICE NADA del hallazgo -> no lo extraigas en absoluto.
      No inventes ausencias. Que no se mencione algo no significa que no
      esté: significa que no se sabe, y eso no es un hallazgo.
+8. MAGNITUD GRADUADA: sólo cuando la cita textual declare explícitamente una
+   cifra para un signo graduado del protocolo, incluye `"valor"` (número),
+   `"unidad"` (tal como consta en el texto) y `"poblacion"` (sólo si el texto
+   declara el estrato). Nunca inventes ni conviertas unidades.
 
 FORMATO JSON:
-{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
+{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true, "valor": null, "unidad": null, "poblacion": null}}]}}"""
 
 
 # La pasada genérica extrae con `general_triage`, que no declara ni un
@@ -209,12 +215,74 @@ def _sin_cortes_inventados(
 def _terminos_autorizados(skill: Skill) -> set[str]:
     """Los conceptos que este protocolo puede derivar de una cifra.
 
-    Salen de sus propios criterios de laboratorio, que son los cortes que
-    alguien declaró con su fuente. Un signo declarado sin corte no
-    autoriza nada: el protocolo dice que le interesa, no en qué cifra
-    empieza.
+    Salen de sus propios criterios de laboratorio y de los signos que
+    declaran tramos graduados con su fuente. Un signo declarado sin corte
+    ni tramos no autoriza nada: el protocolo dice que le interesa, no en
+    qué cifra empieza.
     """
-    return {_normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()}
+    autorizados = {
+        _normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()
+    }
+    for signo in skill.signos:
+        if signo.tramos:
+            autorizados.add(_normalizar(signo.nombre))
+            if signo.graduacion.parametro:
+                autorizados.add(_normalizar(signo.graduacion.parametro))
+    return autorizados
+
+
+def _auditar_magnitud(
+    cita: str,
+    texto_original: str,
+    valor: float | None,
+    unidad: str | None,
+    poblacion: str | None,
+) -> tuple[bool, str]:
+    """Verifica de forma determinista que `valor`, `unidad` y `poblacion`
+    consten literalmente en la evidencia textual antes de dejar que muevan
+    ningún tramo graduado.
+    """
+    import math
+    import re
+
+    fuente = (cita or texto_original).strip()
+    if not fuente or fuente not in texto_original:
+        fuente = texto_original
+    fuente_norm = _normalizar(fuente)
+
+    if valor is not None:
+        if not math.isfinite(valor):
+            return False, f"valor numérico no finito ({valor})"
+        tokens = re.findall(r"[-+]?\d+(?:[.,]\d+)?", fuente)
+        numeros_en_fuente: list[float] = []
+        for tok in tokens:
+            try:
+                numeros_en_fuente.append(float(tok.replace(",", ".")))
+            except ValueError:
+                continue
+        if not any(
+            math.isclose(valor, n, rel_tol=1e-6, abs_tol=1e-9) for n in numeros_en_fuente
+        ):
+            return (
+                False,
+                f"valor numérico propuesto ({valor:g}) no consta en la cita ('{fuente}')",
+            )
+
+    if unidad is not None:
+        if _normalizar(unidad) not in fuente_norm:
+            return (
+                False,
+                f"unidad propuesta ('{unidad}') no consta en la cita ('{fuente}')",
+            )
+
+    if poblacion is not None:
+        if _normalizar(poblacion) not in fuente_norm:
+            return (
+                False,
+                f"población propuesta ('{poblacion}') no consta en la cita ('{fuente}')",
+            )
+
+    return True, ""
 
 
 class CrystallizationPipeline:
@@ -854,7 +922,7 @@ class CrystallizationPipeline:
 
     async def _validar_hallazgo(
         self,
-        crudo: dict[str, str],
+        crudo: dict,
         texto_original: str,
         skill: Skill,
         hints: dict[str, str],
@@ -929,11 +997,35 @@ class CrystallizationPipeline:
             concepto_id, codigo, sistema = match.concepto_id, match.codigo, match.sistema
             cie10, linaje = match.cie10, match.linaje
 
+        valor_crudo = crudo.get("valor")
+        valor = (
+            float(valor_crudo)
+            if isinstance(valor_crudo, (int, float)) and not isinstance(valor_crudo, bool)
+            else None
+        )
+        unidad = _texto_del_modelo(crudo, "unidad") or None
+        poblacion = _texto_del_modelo(crudo, "poblacion") or None
+
+        if valor is not None or unidad is not None or poblacion is not None:
+            mag_ok, mag_razon = _auditar_magnitud(
+                cita, texto_original, valor, unidad, poblacion
+            )
+            if not mag_ok:
+                valor = None
+                unidad = None
+                poblacion = None
+                if estado == EstadoInfon.VALIDADO:
+                    estado = EstadoInfon.ALERTA
+                razon = f"{razon}; magnitud descartada ({mag_razon})"
+
         return Infon(
             texto_origen=cita or texto_original[:120],
             termino_propuesto=termino,
             termino=termino_final,
             polaridad=polaridad,
+            valor=valor,
+            unidad=unidad,
+            poblacion=poblacion,
             codigo=codigo,
             sistema=sistema,
             concepto_id=concepto_id,

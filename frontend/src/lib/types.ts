@@ -90,6 +90,12 @@ export interface Infon {
   abre_problema: boolean;
   /** La orden a la que responde, si responde a alguna. */
   responde_a: string | null;
+  /** Valor numérico medido cuando el hallazgo es cuantitativo. */
+  valor: number | null;
+  /** Unidad en la que se expresó el valor medido. */
+  unidad: string | null;
+  /** Estrato clínico o analítico declarado para el hallazgo. */
+  poblacion: string | null;
   codigo: string | null;
   sistema: string | null;
   concepto_id: number | null;

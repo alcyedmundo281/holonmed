@@ -204,7 +204,7 @@ class AntigenPresentingCell:
         prob_previa = odds / (1 + odds)
 
         # --- A posteriori: qué muestra la evidencia -------------------
-        mapa_lr = self._mapa_likelihood_ratios(skill_json)
+        mapa_signos = self._mapa_signos(skill_json)
         evidencia: list[str] = []
 
         for infon in infones:
@@ -213,14 +213,39 @@ class AntigenPresentingCell:
             if not infon.es_valido:
                 continue
 
-            par, etiqueta = self._buscar_lr(infon.termino, mapa_lr)
-            if par is None:
+            etiqueta = emparejar_termino(infon.termino, mapa_signos)
+            if etiqueta is None:
                 continue
+            signo = mapa_signos[etiqueta]
+
+            if signo.tramos:
+                pob_ctx = infon.poblacion or (
+                    str(holon_metadata["poblacion"])
+                    if holon_metadata.get("poblacion")
+                    else None
+                )
+                evaluacion = signo.evaluar_valor(
+                    infon.valor, unidad=infon.unidad, poblacion=pob_ctx
+                )
+                if evaluacion.motivo:
+                    traza.append(evaluacion.motivo)
+                if (
+                    evaluacion.tramo is None
+                    and evaluacion.lr is None
+                    and evaluacion.lr_negativo is None
+                ):
+                    continue
+                positivo = evaluacion.lr
+                negativo = evaluacion.lr_negativo
+                tramo_activo = evaluacion.tramo
+            else:
+                positivo = signo.lr
+                negativo = signo.lr_negativo
+                tramo_activo = None
 
             # La polaridad decide qué LR se aplica. Una prueba sensible
             # negativa descarta con fuerza, y hasta ahora esa evidencia se
             # perdía: el sistema sólo sabía sumar.
-            positivo, negativo = par
             if infon.descarta:
                 lr = negativo
                 sufijo = " [ausente]"
@@ -229,13 +254,31 @@ class AntigenPresentingCell:
                 sufijo = ""
 
             if lr is None or lr == 1.0:
+                if tramo_activo is not None:
+                    traza.append(
+                        f"'{signo.nombre}' (tramo '{tramo_activo.etiqueta()}'): "
+                        f"sin LR aplicable para polaridad "
+                        f"{'ausente' if infon.descarta else 'presente'}"
+                    )
                 continue
 
             odds *= lr
             direccion = "a favor" if lr > 1 else "en contra"
-            evidencia.append(
-                f"{infon.termino}{sufijo} → LR {lr} ({direccion}, vía '{etiqueta}')"
-            )
+            if tramo_activo is not None:
+                unidad_txt = infon.unidad or signo.graduacion.unidad
+                valor_txt = (
+                    f" ({infon.valor:g}{(' ' + unidad_txt) if unidad_txt else ''})"
+                    if infon.valor is not None
+                    else ""
+                )
+                evidencia.append(
+                    f"{infon.termino}{valor_txt}{sufijo} → LR {lr} "
+                    f"({direccion}, vía '{etiqueta}', tramo '{tramo_activo.etiqueta()}')"
+                )
+            else:
+                evidencia.append(
+                    f"{infon.termino}{sufijo} → LR {lr} ({direccion}, vía '{etiqueta}')"
+                )
 
         prob_final = odds / (1 + odds)
         prob_final = min(prob_final, PROBABILIDAD_MAXIMA)
@@ -250,6 +293,94 @@ class AntigenPresentingCell:
             traza_logica=traza,
             evidencia_utilizada=evidencia,
         )
+
+    @staticmethod
+    def _mapa_signos(skill_json: dict[str, Any]) -> dict[str, Any]:
+        """Término -> Signo (con LR escalar y/o tramos graduados)."""
+        from .skills import Graduacion, Signo, Tramo
+
+        mapa: dict[str, Signo] = {}
+        for item in skill_json.get("signDetected", []) or []:
+            if not isinstance(item, dict):
+                continue
+            nombre = item.get("name") or item.get("nombre") or item.get("analito")
+            if not nombre:
+                continue
+            nombre_str = str(nombre)
+            positivo = _recortar(
+                item.get("bayes_lr") if "bayes_lr" in item else item.get("lr"),
+                nombre_str,
+                "LR+",
+            )
+            negativo = _recortar(
+                item.get("bayes_lr_negativo")
+                if "bayes_lr_negativo" in item
+                else item.get("lr_negativo"),
+                nombre_str,
+                "LR-",
+            )
+
+            grad_raw = item.get("graduacion")
+            if isinstance(grad_raw, dict):
+                graduacion = Graduacion(
+                    parametro=str(grad_raw.get("parametro") or "").strip(),
+                    unidad=str(grad_raw.get("unidad") or "").strip(),
+                    lectura=str(grad_raw.get("lectura") or "").strip(),
+                )
+            else:
+                graduacion = Graduacion(
+                    parametro=str(item.get("parametro") or "").strip(),
+                    unidad=str(item.get("unidad") or "").strip(),
+                    lectura=str(item.get("lectura") or "").strip(),
+                )
+
+            tramos_raw = item.get("tramos") if "tramos" in item else item.get("bandas")
+            tramos: list[Tramo] = []
+            for t in tramos_raw or []:
+                if not isinstance(t, dict):
+                    continue
+                t_lr = _recortar(
+                    t.get("lr") if "lr" in t else t.get("lr_positivo"),
+                    nombre_str,
+                    "LR+",
+                )
+                t_lr_neg = _recortar(t.get("lr_negativo"), nombre_str, "LR-")
+                desde_v = t.get("desde")
+                hasta_v = t.get("hasta")
+                tramos.append(
+                    Tramo(
+                        umbral=str(t.get("umbral") or "").strip(),
+                        umbral_condicion=str(t.get("umbral_condicion") or "").strip(),
+                        desde=(
+                            float(desde_v)
+                            if isinstance(desde_v, (int, float))
+                            and not isinstance(desde_v, bool)
+                            else None
+                        ),
+                        hasta=(
+                            float(hasta_v)
+                            if isinstance(hasta_v, (int, float))
+                            and not isinstance(hasta_v, bool)
+                            else None
+                        ),
+                        lr=t_lr,
+                        lr_negativo=t_lr_neg,
+                        poblacion=str(t.get("poblacion") or "").strip(),
+                        fuente=str(t.get("fuente") or "").strip(),
+                    )
+                )
+
+            if positivo is None and negativo is None and not tramos:
+                continue
+
+            mapa[nombre_str.lower()] = Signo(
+                nombre=nombre_str,
+                lr=positivo,
+                lr_negativo=negativo,
+                graduacion=graduacion,
+                tramos=tramos,
+            )
+        return mapa
 
     @staticmethod
     def _mapa_likelihood_ratios(

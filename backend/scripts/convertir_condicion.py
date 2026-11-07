@@ -112,6 +112,7 @@ ROLES = ("manifestacion", "prueba_sensible", "prueba_especifica", "apoyo", "imag
 # comprueba `test_las_taxonomias_del_eje_no_divergen`.
 EFECTOS = ("apoya", "bandera_roja", "excluye", "evidencia")
 POLARIDADES = ("presente", "ausente")
+LECTURAS_GRADUACION = ("acumulativo", "disjunto")
 
 # Claves de una arista que este conversor sabe traducir. Cada condición nueva
 # del índice ha traído su propio bloque —tramos, sensibilidad_por_gravedad,
@@ -123,6 +124,8 @@ CLAVES_ARISTA = {
     "estado_lr",
     "lr_positivo",
     "lr_negativo",
+    "graduacion",
+    "tramos",
     "motivo",
     "decision",
     "nota",
@@ -705,6 +708,113 @@ def _emitir_umbral(
     )
 
 
+def _emitir_tramos(
+    salida: Bloque,
+    grad: Any,
+    tramos: list[Any],
+    arista: dict,
+    termino: str,
+    indice: Indice,
+    informe: Informe,
+) -> int:
+    """Traslada `graduacion` y `tramos` al signo del protocolo."""
+    if isinstance(grad, dict) and (
+        grad.get("parametro") or grad.get("unidad") or grad.get("lectura")
+    ):
+        lectura = str(grad.get("lectura") or "").strip()
+        if lectura not in LECTURAS_GRADUACION:
+            informe.pendiente(
+                termino,
+                f"graduacion.lectura «{lectura}» desconocida; válidos: "
+                f"{', '.join(LECTURAS_GRADUACION)}",
+            )
+            return 0
+        salida.crudo("    graduacion:")
+        if grad.get("parametro"):
+            salida.campo("parametro", _plano(grad["parametro"]), sangria=6)
+        if grad.get("unidad"):
+            salida.campo("unidad", str(grad["unidad"]), sangria=6)
+        salida.campo("lectura", lectura, sangria=6)
+        if grad.get("nota"):
+            salida.comentario(_plano(grad["nota"]), sangria=6)
+
+    lineas_tramos = Bloque()
+    emitidos_n = 0
+    for t in tramos:
+        if not isinstance(t, dict):
+            continue
+        pos_bloque = _lr(t.get("lr_positivo") if "lr_positivo" in t else t.get("lr"))
+        neg_bloque = _lr(t.get("lr_negativo"))
+        if t.get("ic95") and "ic95" not in pos_bloque:
+            pos_bloque = {**pos_bloque, "ic95": t["ic95"]}
+        if t.get("ic95_negativo") and "ic95" not in neg_bloque:
+            neg_bloque = {**neg_bloque, "ic95": t["ic95_negativo"]}
+
+        val_pos = (
+            _valor_utilizable(pos_bloque, "LR+", termino, informe) if pos_bloque else None
+        )
+        val_neg = (
+            _valor_utilizable(neg_bloque, "LR−", termino, informe) if neg_bloque else None
+        )
+        if val_pos is None and val_neg is None:
+            continue
+
+        ref_tramo = str(
+            t.get("ref")
+            or pos_bloque.get("ref")
+            or neg_bloque.get("ref")
+            or arista.get("ref")
+            or ""
+        )
+        cita_tramo = cita(ref_tramo, indice, informe, termino) if ref_tramo else ""
+        if not cita_tramo:
+            informe.pendiente(termino, "tramo con LR sin fuente citable: no se emite")
+            continue
+
+        partes_fuente = [cita_tramo]
+        if pos_bloque.get("ic95"):
+            ic = pos_bloque["ic95"]
+            partes_fuente.append(f"IC95% [{ic[0]}, {ic[1]}].")
+        if neg_bloque.get("ic95"):
+            ic_n = neg_bloque["ic95"]
+            partes_fuente.append(f"LR− IC95% [{ic_n[0]}, {ic_n[1]}].")
+        if t.get("nota"):
+            nota_t = _plano(t["nota"])
+            partes_fuente.append(f"{nota_t[:1].upper()}{nota_t[1:]}.")
+        texto_fuente = " ".join(partes_fuente)
+
+        campos: list[tuple[str, Any]] = []
+        if t.get("umbral"):
+            campos.append(("umbral", _plano(t["umbral"])))
+        if t.get("umbral_condicion"):
+            campos.append(("umbral_condicion", _plano(t["umbral_condicion"])))
+        if t.get("desde") is not None:
+            campos.append(("desde", t["desde"]))
+        if t.get("hasta") is not None:
+            campos.append(("hasta", t["hasta"]))
+        if val_pos is not None:
+            campos.append(("lr", val_pos))
+        if val_neg is not None:
+            campos.append(("lr_negativo", val_neg))
+        if t.get("poblacion"):
+            campos.append(("poblacion", _plano(t["poblacion"])))
+
+        for idx_c, (clave_c, valor_c) in enumerate(campos):
+            lineas_tramos.campo(
+                clave_c,
+                valor_c,
+                sangria=6 if idx_c == 0 else 8,
+                guion=(idx_c == 0),
+            )
+        lineas_tramos.prosa("fuente", texto_fuente, sangria=8)
+        emitidos_n += 1
+
+    if emitidos_n:
+        salida.crudo("    tramos:")
+        salida.lineas.extend(lineas_tramos.lineas)
+    return emitidos_n
+
+
 def _conceptos_en_conflicto(entradas: list[tuple[dict, str]]) -> set[str]:
     """Conceptos con dos o más aristas que publican un valor para el MISMO
     sentido (LR+ o LR−).
@@ -864,6 +974,8 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         estado = str(arista.get("estado_lr") or "")
         positivo = _lr(arista.get("lr_positivo"))
         negativo = _lr(arista.get("lr_negativo"))
+        graduacion = arista.get("graduacion")
+        tramos = arista.get("tramos")
 
         if estado == "sin_efecto":
             # `sin_efecto` y `no_medido` no son lo mismo, y ésta es la única
@@ -879,6 +991,47 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
                 sangria=4,
             )
             _comentar_contexto(salida, arista, indice, informe, termino)
+        elif isinstance(tramos, list) and tramos:
+            # Si la arista trae además un cociente escalar cuyo eje es
+            # `umbral_condicion` (no `umbral`), ese cociente corresponde a la
+            # definición base de la condición y sigue acompañando a los tramos.
+            con_lr_escalar = False
+            if (positivo or negativo) and not (
+                positivo.get("umbral") or negativo.get("umbral")
+            ):
+                valor_positivo = (
+                    _valor_utilizable(positivo, "LR+", termino, informe)
+                    if positivo
+                    else None
+                )
+                valor_negativo = (
+                    _valor_utilizable(negativo, "LR−", termino, informe)
+                    if negativo
+                    else None
+                )
+                if valor_positivo is not None:
+                    salida.campo("lr", valor_positivo, sangria=4)
+                if valor_negativo is not None:
+                    salida.campo("lr_negativo", valor_negativo, sangria=4)
+                emitidos_esc = [
+                    (etiqueta, lr)
+                    for etiqueta, lr, valor in (
+                        ("LR+", positivo, valor_positivo),
+                        ("LR−", negativo, valor_negativo),
+                    )
+                    if valor is not None
+                ]
+                if emitidos_esc:
+                    texto_esc = _fuente(emitidos_esc, arista, indice, informe, termino)
+                    if texto_esc:
+                        salida.prosa("fuente", texto_esc, sangria=4)
+                    con_lr_escalar = True
+
+            n_tramos = _emitir_tramos(
+                salida, graduacion, tramos, arista, termino, indice, informe
+            )
+            if n_tramos or con_lr_escalar:
+                informe.signos_con_lr += 1
         elif (positivo or negativo) and (
             positivo.get("umbral") or negativo.get("umbral")
         ):

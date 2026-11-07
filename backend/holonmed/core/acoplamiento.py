@@ -230,7 +230,8 @@ class MedidorDeAcoplamiento:
         observaciones = self._observar(dimensiones, infones)
         residuo = self._resto_no_simbolizado(skill, dimensiones, infones)
 
-        componentes = self._componer(dimensiones, observaciones)
+        traza_tramos: list[str] = []
+        componentes = self._componer(dimensiones, observaciones, traza_tramos)
         peso_tipico = self._peso_del_resto(componentes, dimensiones)
         componentes.extend(self._componer_residuo(residuo, peso_tipico))
 
@@ -282,7 +283,14 @@ class MedidorDeAcoplamiento:
             resto_no_simbolizado=[i.termino for i in residuo],
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
-            traza=traza_geom + traza_fact + traza_anc + traza_cat + traza_fact_cat,
+            traza=(
+                traza_tramos
+                + traza_geom
+                + traza_fact
+                + traza_anc
+                + traza_cat
+                + traza_fact_cat
+            ),
         )
 
     # --- El vector categórico -----------------------------------------
@@ -397,6 +405,25 @@ class MedidorDeAcoplamiento:
             if clave is None or clave in contribuciones:
                 continue
             signo = indice[clave]
+            if signo.tramos:
+                evaluacion = signo.evaluar_valor(
+                    infon.valor, unidad=infon.unidad, poblacion=infon.poblacion
+                )
+                if (
+                    evaluacion.tramo is None
+                    and evaluacion.lr is None
+                    and evaluacion.lr_negativo is None
+                ):
+                    continue
+                lr_tramo = (
+                    evaluacion.lr_negativo
+                    if infon.polaridad is Polaridad.AUSENTE
+                    else evaluacion.lr
+                )
+                if lr_tramo is None or lr_tramo == 1.0:
+                    continue
+                contribuciones[clave] = -1 if lr_tramo < 1.0 else 1
+                continue
             observada = "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
             contribuciones[clave] = -1 if observada == signo.polaridad_adversa else 1
 
@@ -477,6 +504,47 @@ class MedidorDeAcoplamiento:
         for signo in skill.signos:
             lr_mas = _positivo(signo.lr)
             lr_menos = _positivo(signo.lr_negativo)
+
+            if signo.tramos:
+                pesos_tramos: list[float] = []
+                for t in signo.tramos:
+                    for val in (_positivo(t.lr), _positivo(t.lr_negativo)):
+                        if val is not None and val != 1.0:
+                            pesos_tramos.append(abs(math.log(val)))
+                if lr_mas is not None and lr_mas != 1.0:
+                    h = math.log(lr_mas)
+                elif lr_menos is not None and lr_menos != 1.0:
+                    h = -math.log(lr_menos)
+                elif pesos_tramos:
+                    h = float(median(pesos_tramos))
+                else:
+                    continue
+
+                tramos_con_lr = [
+                    t
+                    for t in signo.tramos
+                    if (t.lr is not None and t.lr != 1.0)
+                    or (t.lr_negativo is not None and t.lr_negativo != 1.0)
+                ]
+                tiene_fuente = bool((signo.fuente or "").strip()) or (
+                    bool(tramos_con_lr)
+                    and all(bool((t.fuente or "").strip()) for t in tramos_con_lr)
+                )
+                dimensiones.append(
+                    {
+                        "nombre": signo.nombre,
+                        "clave": signo.nombre.lower(),
+                        "rol": signo.rol,
+                        "lr_mas": lr_mas,
+                        "lr_menos": lr_menos,
+                        "fuente": tiene_fuente,
+                        "h": h,
+                        "graduado": True,
+                        "signo": signo,
+                    }
+                )
+                continue
+
             if lr_mas is None and lr_menos is None:
                 continue
 
@@ -496,6 +564,8 @@ class MedidorDeAcoplamiento:
                     "lr_menos": lr_menos,
                     "fuente": bool((signo.fuente or "").strip()),
                     "h": h,
+                    "graduado": False,
+                    "signo": signo,
                 }
             )
         return dimensiones
@@ -624,7 +694,9 @@ class MedidorDeAcoplamiento:
 
     @staticmethod
     def _componer(
-        dimensiones: list[dict[str, Any]], observaciones: dict[str, Infon]
+        dimensiones: list[dict[str, Any]],
+        observaciones: dict[str, Infon],
+        traza_tramos: list[str] | None = None,
     ) -> list[ComponenteAcoplamiento]:
         """Traduce cada dimensión declarada a su par (h, e)."""
         componentes: list[ComponenteAcoplamiento] = []
@@ -650,7 +722,55 @@ class MedidorDeAcoplamiento:
                 )
                 continue
 
-            if infon.polaridad is Polaridad.AUSENTE:
+            if dim.get("graduado"):
+                signo = dim["signo"]
+                evaluacion = signo.evaluar_valor(
+                    infon.valor, unidad=infon.unidad, poblacion=infon.poblacion
+                )
+                if evaluacion.motivo and traza_tramos is not None:
+                    traza_tramos.append(evaluacion.motivo)
+                if (
+                    evaluacion.tramo is None
+                    and evaluacion.lr is None
+                    and evaluacion.lr_negativo is None
+                ):
+                    e = 0.0
+                    detalle = evaluacion.motivo or "valor fuera de los tramos declarados"
+                    estado = EstadoDimension.SIN_MEDIR
+                else:
+                    lr_bruto = (
+                        evaluacion.lr_negativo
+                        if infon.polaridad is Polaridad.AUSENTE
+                        else evaluacion.lr
+                    )
+                    lr = _positivo(lr_bruto)
+                    dim["fuente"] = bool((evaluacion.fuente or "").strip())
+                    sufijo_tramo = (
+                        f" (tramo '{evaluacion.tramo.etiqueta()}')"
+                        if evaluacion.tramo is not None
+                        else ""
+                    )
+                    if lr is None or lr == 1.0:
+                        e = 0.0
+                        detalle = (
+                            f"{'ausencia documentada, sin LR−' if infon.polaridad is Polaridad.AUSENTE else 'presente, sin LR+'}"
+                            f" declarado{sufijo_tramo}"
+                        )
+                        estado = EstadoDimension.SIN_MEDIR
+                    else:
+                        e = math.log(lr)
+                        if evaluacion.tramo is not None:
+                            h = abs(e)
+                        detalle = (
+                            f"{'ausente, LR−' if infon.polaridad is Polaridad.AUSENTE else 'presente, LR+'} "
+                            f"{lr}{sufijo_tramo}"
+                        )
+                        estado = (
+                            EstadoDimension.CONTRADICE
+                            if e * h < 0
+                            else EstadoDimension.CONCUERDA
+                        )
+            elif infon.polaridad is Polaridad.AUSENTE:
                 lr = dim["lr_menos"]
                 if lr is None or lr == 1.0:
                     e = 0.0
