@@ -713,7 +713,7 @@ class EpisodioRepo:
                         prom = json.loads(ft["promocion"])
                         if (
                             isinstance(prom, dict)
-                            and prom.get("promovido")
+                            and (prom.get("promueve") or prom.get("promovido"))
                             and prom.get("hipotesis")
                         ):
                             promovidos.append(str(prom["hipotesis"]))
@@ -938,12 +938,18 @@ class TicRepo:
         tic: no lleva fecha ni firma, y afirma el estado del paciente *ahora*.
         """
         try:
-            infones = self.linea_tiempo(paciente_id)
+            cx = self._db.conexion()
+            filas_inf = cx.execute(
+                """SELECT * FROM infon
+                    WHERE paciente_id = ? AND estado = 'VALIDADO'
+                    ORDER BY timestamp, id""",
+                (paciente_id,),
+            ).fetchall()
+            infones = [_fila_a_infon(f) for f in filas_inf]
             problemas = [p["termino"] for p in self.lista_problemas(paciente_id)]
             fondo = sintetizar(infones, problemas, hasta_tic=hasta_tic)
             texto = formatear_fondo(fondo)
             with self._db._escritura:
-                cx = self._db.conexion()
                 cx.execute(
                     "UPDATE paciente SET resumen_vivo = ? WHERE id = ?",
                     (texto, paciente_id),
