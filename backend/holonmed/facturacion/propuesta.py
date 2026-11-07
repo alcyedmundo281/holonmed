@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 
 from ..core.skills import SkillManager
 from ..llm import LLMUnavailable, OllamaClient
-from .modelos import Orden
+from .modelos import Orden, Solicitante
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,8 @@ class OrdenPropuesta:
     reconocida: bool = False
     faltantes: list[str] = field(default_factory=list)
     generico: bool = False
+    solicitante: Solicitante = Solicitante.MEDICO
+    motivo: str = ""
 
     @property
     def resumen(self) -> str:
@@ -98,6 +100,8 @@ class OrdenPropuesta:
             concepto_id=self.concepto_id,
             texto_origen=self.texto_origen,
             prescriptor=prescriptor,
+            solicitante=self.solicitante,
+            motivo=self.motivo,
             detalle=dict(self.detalle),
         )
 

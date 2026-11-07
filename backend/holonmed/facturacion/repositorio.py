@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db.store import Database
-from .modelos import Cargo, Ejecucion, EstadoCargo, EstadoOrden, Orden
+from .modelos import Cargo, Ejecucion, EstadoCargo, EstadoOrden, Orden, Solicitante
 
 logger = logging.getLogger(__name__)
 
@@ -338,6 +338,7 @@ class CargoRepo:
 
 
 def _a_orden(f: sqlite3.Row) -> Orden:
+    sol = _col(f, "solicitante")
     return Orden(
         id=str(f["id"]),
         paciente_id=f["paciente_id"],
@@ -349,6 +350,8 @@ def _a_orden(f: sqlite3.Row) -> Orden:
         concepto_id=f["concepto_id"],
         texto_origen=f["texto_origen"] or "",
         prescriptor=f["prescriptor"],
+        solicitante=Solicitante(sol) if sol else Solicitante.MEDICO,
+        motivo=_col(f, "motivo") or "",
         detalle=_desde_json(f["detalle"]),
         estado=EstadoOrden(f["estado"]),
         referencias=_desde_json(_col(f, "referencias")),

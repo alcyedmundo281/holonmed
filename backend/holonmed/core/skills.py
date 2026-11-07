@@ -333,14 +333,24 @@ class Signo:
 
         unidad_obs = (unidad or "").strip()
         unidad_decl = self.graduacion.unidad.strip()
-        if unidad_obs and unidad_decl and unidad_obs.lower() != unidad_decl.lower():
-            return EvaluacionTramo(
-                tramo=None,
-                motivo=(
-                    f"'{self.nombre}': unidad '{unidad_obs}' incompatible con la "
-                    f"graduación declarada ('{unidad_decl}'); no se aplica ningún tramo"
-                ),
-            )
+        if unidad_decl:
+            if not unidad_obs:
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': el hallazgo trae valor {valor:g} sin "
+                        f"unidad declarada (el protocolo exige '{unidad_decl}'); "
+                        f"no se aplica ningún tramo"
+                    ),
+                )
+            if unidad_obs.lower() != unidad_decl.lower():
+                return EvaluacionTramo(
+                    tramo=None,
+                    motivo=(
+                        f"'{self.nombre}': unidad '{unidad_obs}' incompatible con la "
+                        f"graduación declarada ('{unidad_decl}'); no se aplica ningún tramo"
+                    ),
+                )
 
         if pob_norm:
             candidatos = [
@@ -1153,6 +1163,20 @@ class Skill:
                 encabezado = "VALORES DE REFERENCIA DE ESTE PROTOCOLO:"
                 partes.append(encabezado + "\n" + "\n".join(lineas))
 
+        graduados = [s for s in self.signos if s.tramos]
+        if graduados:
+            lineas_grad = []
+            for s in graduados:
+                param = s.graduacion.parametro or s.nombre
+                uni = f" en {s.graduacion.unidad}" if s.graduacion.unidad else ""
+                lineas_grad.append(
+                    f"- {param}{uni}: extrae «{s.nombre}» con su valor numérico, "
+                    f"unidad y población (si consta)."
+                )
+            partes.append(
+                "PARÁMETROS GRADUADOS DE ESTE PROTOCOLO:\n" + "\n".join(lineas_grad)
+            )
+
         if self.signos:
             nombres = ", ".join(f"«{s.nombre}»" for s in self.signos)
             partes.append(f"TÉRMINOS QUE RECONOCE ESTE PROTOCOLO: {nombres}.")
@@ -1186,7 +1210,15 @@ class Skill:
             partes.append(_envolver("valores_de_referencia", filas))
 
         if self.signos:
-            filas = [f'  <signo nombre="{s.nombre}"/>' for s in self.signos]
+            filas = []
+            for s in self.signos:
+                attrs = [f'nombre="{s.nombre}"']
+                if s.tramos:
+                    if s.graduacion.parametro:
+                        attrs.append(f'parametro="{s.graduacion.parametro}"')
+                    if s.graduacion.unidad:
+                        attrs.append(f'unidad="{s.graduacion.unidad}"')
+                filas.append(f"  <signo {' '.join(attrs)}/>")
             partes.append(_envolver("terminos_reconocidos", filas))
 
         return "\n\n".join(partes)
@@ -1204,6 +1236,10 @@ class Skill:
             preferido = signo.codigo_preferido()
             if preferido:
                 salida[signo.nombre.strip().lower()] = preferido[1]
+                if signo.graduacion.parametro:
+                    salida.setdefault(
+                        signo.graduacion.parametro.strip().lower(), preferido[1]
+                    )
 
         for criterio in self.laboratorio:
             codigo = Signo("", criterio.codigos).codigo_preferido()

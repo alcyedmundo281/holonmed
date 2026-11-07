@@ -145,6 +145,39 @@ def _lineas_veredicto(veredicto) -> list[str]:
     return lineas
 
 
+def _lineas_promocion(promocion) -> list[str]:
+    """La tupla sensible/específica como control de flujo."""
+    if promocion is None:
+        return []
+
+    if promocion.promueve:
+        encabezado = f"Tupla de promoción: PROMUEVE a «{promocion.hipotesis}»"
+    elif promocion.vuelve_a_abduccion:
+        encabezado = (
+            f"Tupla de promoción: DESCARTADA por prueba sensible negativa "
+            f"({', '.join(promocion.sensible_negativa)}) — vuelve a la abducción"
+        )
+    else:
+        encabezado = f"Tupla de promoción: queda como PROBLEMA («{promocion.hipotesis}»)"
+
+    lineas = ["", encabezado]
+    for paso in promocion.traza:
+        lineas.append(f"  · {paso}")
+    for propuesta in promocion.propuestas:
+        codigo = (
+            f" [{propuesta.sistema}:{propuesta.codigo}]"
+            if propuesta.sistema and propuesta.codigo
+            else ""
+        )
+        lineas.append(
+            f"  → Propuesta de orden (solicitante={propuesta.solicitante}): "
+            f"{propuesta.termino}{codigo}"
+        )
+    if promocion.fuente:
+        lineas.append(f"  fuente: {promocion.fuente}")
+    return lineas
+
+
 def _lineas_acoplamiento(acoplamiento, repite_indagacion: bool = True) -> list[str]:
     """Φ con sus tres factores.
 
@@ -424,6 +457,7 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
                 print(f"    → {ev}")
 
         for bloque in (
+            _lineas_promocion(resultado.promocion),
             _lineas_acoplamiento(resultado.acoplamiento, resultado.reapertura is None),
             _lineas_reapertura(resultado.reapertura),
             _lineas_competencia(resultado),

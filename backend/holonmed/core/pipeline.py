@@ -35,6 +35,7 @@ from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .duda import ReabridorDeIndagacion
+from .promocion import EvaluadorDePromocion
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
 from .veredicto import EvaluadorDeVeredicto
@@ -59,10 +60,12 @@ Lee la narrativa del paciente y extrae hallazgos médicos ATÓMICOS.
 
 REGLA DE ORO PARA LABORATORIO:
 No extraigas números sueltos: INTERPRÉTALOS con los 'criterios_laboratorio'
-del protocolo de arriba.
+del protocolo de arriba, o incluye su magnitud (`valor`, `unidad`, `poblacion`)
+cuando el protocolo declare ese signo como parámetro graduado.
 - "Calcio 7.5"        -> termino_clinico: "Hipocalcemia"
 - "Leucocitos 18.500" -> termino_clinico: "Leucocitosis"
 - "FC 115"            -> termino_clinico: "Taquicardia"
+- "Potasio 5.8 mEq/L" -> termino_clinico: "Potasio sérico", valor: 5.8, unidad: "mEq/L"
 - Si el texto ya trae la interpretación ("hipocalcemia leve"), úsala.
 
 REGLAS DE PRECISIÓN:
@@ -83,9 +86,13 @@ REGLAS DE PRECISIÓN:
    - El texto NO DICE NADA del hallazgo -> no lo extraigas en absoluto.
      No inventes ausencias. Que no se mencione algo no significa que no
      esté: significa que no se sabe, y eso no es un hallazgo.
+8. MAGNITUD GRADUADA: sólo cuando la cita textual declare explícitamente una
+   cifra para un signo graduado del protocolo, incluye `"valor"` (número),
+   `"unidad"` (tal como consta en el texto) y `"poblacion"` (sólo si el texto
+   declara el estrato). Nunca inventes ni conviertas unidades.
 
 FORMATO JSON:
-{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true}}]}}"""
+{{"resumen": "una frase clínica", "infones": [{{"texto_origen": "cita textual", "termino_clinico": "término normalizado", "presente": true, "valor": null, "unidad": null, "poblacion": null}}]}}"""
 
 
 # La pasada genérica extrae con `general_triage`, que no declara ni un
@@ -208,12 +215,74 @@ def _sin_cortes_inventados(
 def _terminos_autorizados(skill: Skill) -> set[str]:
     """Los conceptos que este protocolo puede derivar de una cifra.
 
-    Salen de sus propios criterios de laboratorio, que son los cortes que
-    alguien declaró con su fuente. Un signo declarado sin corte no
-    autoriza nada: el protocolo dice que le interesa, no en qué cifra
-    empieza.
+    Salen de sus propios criterios de laboratorio y de los signos que
+    declaran tramos graduados con su fuente. Un signo declarado sin corte
+    ni tramos no autoriza nada: el protocolo dice que le interesa, no en
+    qué cifra empieza.
     """
-    return {_normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()}
+    autorizados = {
+        _normalizar(t) for criterio in skill.laboratorio for t in criterio.terminos()
+    }
+    for signo in skill.signos:
+        if signo.tramos:
+            autorizados.add(_normalizar(signo.nombre))
+            if signo.graduacion.parametro:
+                autorizados.add(_normalizar(signo.graduacion.parametro))
+    return autorizados
+
+
+def _auditar_magnitud(
+    cita: str,
+    texto_original: str,
+    valor: float | None,
+    unidad: str | None,
+    poblacion: str | None,
+) -> tuple[bool, str]:
+    """Verifica de forma determinista que `valor`, `unidad` y `poblacion`
+    consten literalmente en la evidencia textual antes de dejar que muevan
+    ningún tramo graduado.
+    """
+    import math
+    import re
+
+    fuente = (cita or texto_original).strip()
+    if not fuente or fuente not in texto_original:
+        fuente = texto_original
+    fuente_norm = _normalizar(fuente)
+
+    if valor is not None:
+        if not math.isfinite(valor):
+            return False, f"valor numérico no finito ({valor})"
+        tokens = re.findall(r"[-+]?\d+(?:[.,]\d+)?", fuente)
+        numeros_en_fuente: list[float] = []
+        for tok in tokens:
+            try:
+                numeros_en_fuente.append(float(tok.replace(",", ".")))
+            except ValueError:
+                continue
+        if not any(
+            math.isclose(valor, n, rel_tol=1e-6, abs_tol=1e-9) for n in numeros_en_fuente
+        ):
+            return (
+                False,
+                f"valor numérico propuesto ({valor:g}) no consta en la cita ('{fuente}')",
+            )
+
+    if unidad is not None:
+        if _normalizar(unidad) not in fuente_norm:
+            return (
+                False,
+                f"unidad propuesta ('{unidad}') no consta en la cita ('{fuente}')",
+            )
+
+    if poblacion is not None:
+        if _normalizar(poblacion) not in fuente_norm:
+            return (
+                False,
+                f"población propuesta ('{poblacion}') no consta en la cita ('{fuente}')",
+            )
+
+    return True, ""
 
 
 class CrystallizationPipeline:
@@ -231,6 +300,7 @@ class CrystallizationPipeline:
         acoplamiento: MedidorDeAcoplamiento | None = None,
         veredicto: EvaluadorDeVeredicto | None = None,
         duda: ReabridorDeIndagacion | None = None,
+        promocion: EvaluadorDePromocion | None = None,
     ):
         self.llm = llm
         self.skills = skills
@@ -241,6 +311,7 @@ class CrystallizationPipeline:
         self.acoplamiento = acoplamiento or MedidorDeAcoplamiento()
         self.veredicto = veredicto or EvaluadorDeVeredicto()
         self.duda = duda or ReabridorDeIndagacion()
+        self.promocion = promocion or EvaluadorDePromocion()
         self.settings = settings or get_settings()
 
     async def ejecutar(
@@ -437,6 +508,21 @@ class CrystallizationPipeline:
             )
         except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
             logger.exception("Reabridor de indagación falló; el tic sigue en pie")
+
+        # --- ETAPA 9: PROMOCIÓN Y CONTROL DE FLUJO DE LA TUPLA ---------
+        # La cuarta pregunta: ¿sigue siendo un problema en la lista, o ya
+        # es un diagnóstico? Y cuando no promueve, SnNOut/SpPIn dicen qué
+        # sigue: una sensible negativa cierra esta línea y manda de vuelta
+        # a la abducción; una sensible positiva sin específica propone la
+        # específica con `solicitante = promocion`.
+        try:
+            resultado.promocion = self.promocion.evaluar(
+                skill,
+                list(holon.linea_tiempo) + resultado.infones,
+                resultado.inferencia,
+            )
+        except Exception:  # noqa: BLE001 — un fallo aquí no anula el tic
+            logger.exception("Evaluador de promoción falló; el tic sigue en pie")
 
         return resultado
 
@@ -919,6 +1005,18 @@ class CrystallizationPipeline:
         )
         unidad = _texto_del_modelo(crudo, "unidad") or None
         poblacion = _texto_del_modelo(crudo, "poblacion") or None
+
+        if valor is not None or unidad is not None or poblacion is not None:
+            mag_ok, mag_razon = _auditar_magnitud(
+                cita, texto_original, valor, unidad, poblacion
+            )
+            if not mag_ok:
+                valor = None
+                unidad = None
+                poblacion = None
+                if estado == EstadoInfon.VALIDADO:
+                    estado = EstadoInfon.ALERTA
+                razon = f"{razon}; magnitud descartada ({mag_razon})"
 
         return Infon(
             texto_origen=cita or texto_original[:120],

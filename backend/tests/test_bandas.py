@@ -327,6 +327,52 @@ def test_unidad_incompatible_se_rechaza_en_vez_de_suponer_conversion():
     assert any("incompatible" in t for t in res.traza_logica)
 
 
+def test_unidad_ausente_se_rechaza_en_vez_de_asumir_la_del_protocolo():
+    skill = Skill("hiperkalemia", PROTOCOLO_HIPERKALEMIA)
+    hallazgo = [_infon("Potasio sérico", 5.8, unidad=None)]
+
+    res = AntigenPresentingCell().calcular({}, skill.para_bayes(), hallazgo)
+    assert res is not None
+    assert res.evidencia_utilizada == []
+    assert any("sin unidad declarada" in t for t in res.traza_logica)
+
+
+def test_auditoria_de_magnitud_descarta_cifras_o_unidades_no_respaldadas_por_cita():
+    from holonmed.core.pipeline import _auditar_magnitud, _terminos_autorizados
+
+    skill = Skill("hiperkalemia", PROTOCOLO_HIPERKALEMIA)
+    assert "potasio serico" in _terminos_autorizados(skill)
+
+    ok, _ = _auditar_magnitud(
+        "Potasio sérico 5.8 mEq/L",
+        "Laboratorio: Potasio sérico 5.8 mEq/L",
+        5.8,
+        "mEq/L",
+        None,
+    )
+    assert ok
+
+    ok_falso_valor, razon_val = _auditar_magnitud(
+        "Potasio sérico 5.6 mEq/L",
+        "Laboratorio: Potasio sérico 5.6 mEq/L",
+        6.5,
+        "mEq/L",
+        None,
+    )
+    assert not ok_falso_valor
+    assert "6.5" in razon_val
+
+    ok_falsa_unidad, razon_uni = _auditar_magnitud(
+        "Potasio sérico 5.6",
+        "Laboratorio: Potasio sérico 5.6",
+        5.6,
+        "mEq/L",
+        None,
+    )
+    assert not ok_falsa_unidad
+    assert "mEq/L" in razon_uni
+
+
 @pytest.mark.parametrize(
     "bloque_signo, fragmento_esperado",
     [

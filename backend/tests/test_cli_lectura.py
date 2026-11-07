@@ -273,3 +273,38 @@ def test_sin_duda_la_indagacion_si_se_imprime(medidor, ponderado):
 
     assert not acoplamiento.duda
     assert "? " in salida
+
+
+def test_la_promocion_imprime_propuestas_y_vuelta_a_abduccion():
+    from holonmed.cli import _lineas_promocion
+    from holonmed.models import Promocion, PropuestaPromocion
+
+    con_propuesta = Promocion(
+        promueve=False,
+        hipotesis="Faringitis estreptocócica",
+        terminos={"prueba_sensible": ["Adenopatía cervical anterior dolorosa"]},
+        propuestas=[
+            PropuestaPromocion(
+                termino="Exudado amigdalino",
+                codigo="6557-3",
+                sistema="loinc",
+                motivo="Sensible positiva",
+            )
+        ],
+        traza=["Falta la prueba específica."],
+    )
+    salida_propuesta = texto(_lineas_promocion(con_propuesta))
+    assert "queda como PROBLEMA" in salida_propuesta
+    assert "Exudado amigdalino [loinc:6557-3]" in salida_propuesta
+    assert "solicitante=promocion" in salida_propuesta
+
+    descartada = Promocion(
+        promueve=False,
+        hipotesis="Faringitis estreptocócica",
+        sensible_negativa=["Adenopatía cervical anterior dolorosa"],
+        vuelve_a_abduccion=True,
+        traza=["SnNOut: se vuelve a la abducción."],
+    )
+    salida_descartada = texto(_lineas_promocion(descartada))
+    assert "DESCARTADA por prueba sensible negativa" in salida_descartada
+    assert "vuelve a la abducción" in salida_descartada

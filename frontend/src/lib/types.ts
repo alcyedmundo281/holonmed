@@ -341,6 +341,41 @@ export interface ResultadoClasificacion {
   trastorno: Infon | null;
 }
 
+/**
+ * Un borrador de orden para medir la `prueba_especifica` que falta cuando la
+ * `prueba_sensible` ya dio positiva. Lleva `solicitante: "promocion"` y NO es
+ * una orden emitida hasta que un clínico la firme.
+ */
+export interface PropuestaPromocion {
+  termino: string;
+  codigo: string | null;
+  sistema: string | null;
+  rol: string;
+  solicitante: string;
+  motivo: string;
+}
+
+/**
+ * El veredicto de la tupla de promoción (SnNOut / SpPIn) como control de
+ * flujo. `null` en `ResultadoTic` cuando el protocolo no declara `promocion`.
+ */
+export interface Promocion {
+  hipotesis: string;
+  promueve: boolean;
+  exigido: Record<string, number>;
+  cumplido: Record<string, number>;
+  terminos: Record<string, string[]>;
+  faltan: Record<string, number>;
+  sensible_negativa: string[];
+  vuelve_a_abduccion: boolean;
+  propuestas: PropuestaPromocion[];
+  umbral_postest: number | null;
+  probabilidad: number | null;
+  umbral_cumplido: boolean | null;
+  fuente: string;
+  traza: string[];
+}
+
 export interface ResultadoTic {
   tic_id: string | null;
   timestamp: string;
@@ -371,6 +406,7 @@ export interface ResultadoTic {
   inferencia: InferenciaBayesiana | null;
   acoplamiento: Acoplamiento | null;
   veredicto_declarado: VeredictoDeclarado | null;
+  promocion: Promocion | null;
 
   /**
    * La competencia abductiva, que hoy sólo MIDE. El protocolo que se usó
