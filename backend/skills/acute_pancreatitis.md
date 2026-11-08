@@ -8,6 +8,7 @@ version: "2.0.1"
 condicion:
   nombre: Pancreatitis aguda
   codigos:
+    holonmed: "HM:6040"
     snomed: "197456007"
 
 # Ramas del grafo sobre las que actúa este protocolo. Permite preguntar
@@ -133,7 +134,7 @@ clasificacion:
   nombre: Criterios de Atlanta 2012
   fuente: >-
     Banks PA, Bollen TL, Dervenis C, et al. Classification of acute
-    pancreatitis 2012. Gut. 2013;62(1):102-111.
+    pancreatitis 2012. Gut. 2013;62(1):102-111. PMID: 23100216.
   requiere: 2
   criterios:
     - nombre: Dolor abdominal característico

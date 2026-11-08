@@ -194,6 +194,23 @@ async def lista_problemas(paciente_id: str, ctx: AppContext = Depends(get_contex
     return ctx.tics.lista_problemas(paciente_id)
 
 
+@router.get("/pacientes/{paciente_id}/triage")
+async def triage_paciente(paciente_id: str, ctx: AppContext = Depends(get_context)):
+    """Agrupación diagnóstica de la lista de problemas por criterios de consenso (medsemiotics-db)."""
+    problemas = ctx.tics.lista_problemas(paciente_id)
+    agrupaciones = ctx.pipeline.skills.triaje_agrupar(problemas)
+    return [a.model_dump() for a in agrupaciones]
+
+
+@router.post("/triage/agrupar")
+async def agrupar_problemas(
+    problemas: list[dict[str, Any]], ctx: AppContext = Depends(get_context)
+):
+    """Agrupa deterministamente una lista de problemas según criterios ontológicos con PMID."""
+    agrupaciones = ctx.pipeline.skills.triaje_agrupar(problemas)
+    return [a.model_dump() for a in agrupaciones]
+
+
 @router.get("/tics/{tic_id}")
 async def tic_completo(tic_id: str, ctx: AppContext = Depends(get_context)):
     """Un tic con su texto original y todos sus infones, incluidos los descartados."""

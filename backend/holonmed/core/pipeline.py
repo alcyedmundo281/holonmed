@@ -344,17 +344,23 @@ class CrystallizationPipeline:
         buscando lo que la hipótesis predice y la pasada genérica no supo
         ver.
         """
-        # --- ETAPA 1: TRIAJE, que ya no decide ------------------------
-        # Sigue corriendo, y no por inercia: comparar lo que dice el
-        # prompt con lo que elige el grafo es la cifra que justifica
-        # haberlo sustituido, y dejar de calcularla sería quedarse sin la
-        # prueba justo cuando empieza a importar. También es la red: si el
-        # grafo no propone nada, aquí está la hipótesis de siempre.
+        # --- ETAPA 1: TRIAJE BASADO EN CRITERIOS DE CONSENSO ----------
+        # Consulta medsemiotics-db y las skills para evaluar los criterios
+        # diagnósticos consensuados por expertos con sus PMID correspondientes
+        # sobre la lista de problemas del paciente (o texto). No se fía a
+        # "inteligencia" (un prompt libre).
+        problemas_paciente = list(holon.linea_tiempo) if holon.linea_tiempo else []
+        agrupaciones_triage = self.skills.triaje_agrupar(
+            problemas_paciente if problemas_paciente else texto
+        )
+
         if skill_forzada:
             triaje = self.skills.cargar_o_defecto(skill_forzada)
         else:
             try:
-                nombre = await self.skills.triaje(texto, self.llm)
+                nombre = await self.skills.triaje(
+                    texto, self.llm, problemas=problemas_paciente
+                )
             except LLMUnavailable:
                 nombre = None
             triaje = self.skills.cargar_o_defecto(nombre)
@@ -365,6 +371,7 @@ class CrystallizationPipeline:
             skill_activa=triaje.nombre,
             skill_version=triaje.version,
             skill_triaje=triaje.nombre,
+            agrupaciones_triage=agrupaciones_triage,
         )
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------

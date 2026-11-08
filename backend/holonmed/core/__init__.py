@@ -4,6 +4,7 @@ from .clasificacion import Clasificador, EstadoCriterio, ResultadoClasificacion,
 from .pipeline import CrystallizationPipeline
 from .skills import Skill, SkillManager
 from .terminology import Candidato, TerminologyIndex, VocabularyLoader
+from .triaje import TriajeOntologico
 from .validator import Match, OntologyValidator, hay_colision
 from .veredicto import EvaluadorDeVeredicto
 from .verifier import Auditoria, ClinicalVerifier
@@ -25,6 +26,7 @@ __all__ = [
     "Skill",
     "SkillManager",
     "TerminologyIndex",
+    "TriajeOntologico",
     "VocabularyLoader",
     "hay_colision",
 ]

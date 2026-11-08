@@ -803,6 +803,44 @@ class Promocion(BaseModel):
         return not self.promueve
 
 
+class ProblemaAgrupado(BaseModel):
+    """Un problema clínico emparejado con un criterio diagnóstico consensuado."""
+
+    termino: str
+    codigo: str | None = None
+    criterio_nombre: str
+    rol: str = "apoyo"
+    lr_positivo: float | None = None
+    lr_negativo: float | None = None
+    ref_pmid: str | None = None
+
+
+class AgrupacionDiagnostica(BaseModel):
+    """Agrupación de problemas bajo una construcción ontológica por consenso de expertos."""
+
+    condicion_id: str = Field(description="Identificador de la condición (HM:xxxx)")
+    condicion_nombre: str = Field(description="Nombre preferente de la condición")
+    skill_nombre: str | None = Field(
+        default=None, description="Protocolo asociado si existe"
+    )
+    consenso_nombre: str = Field(description="Nombre del criterio o escala de consenso")
+    fuente: str = Field(description="Cita bibliográfica del consenso")
+    pmid: str | None = Field(
+        default=None, description="Identificador PubMed (PMID) del consenso"
+    )
+    tipo_criterio: str = Field(
+        description="clasificacion | nucleo | escala | regla | tupla"
+    )
+    problemas_agrupados: list[ProblemaAgrupado] = Field(default_factory=list)
+    criterios_satisfechos: list[str] = Field(default_factory=list)
+    criterios_requeridos: int = 0
+    criterios_pendientes: list[str] = Field(default_factory=list)
+    cumplido: bool = False
+    estado: str = "SOSPECHA"  # CUMPLIDO | PARCIAL | SOSPECHA
+    score: float = 0.0
+    explicacion: str = ""
+
+
 class ResultadoTic(BaseModel):
     """Todo lo que produce un único ciclo de procesamiento (un *tic*)."""
 
@@ -927,6 +965,16 @@ class ResultadoTic(BaseModel):
             "Se dice en voz alta cuando la de mayor coseno quedó fuera por α: "
             "«encaja mejor y no puedo usarla porque su protocolo no cita». Si "
             "la compuerta actúa callada, el sistema trata otra cosa."
+        ),
+    )
+
+    # --- Triaje determinista por criterios ontológicos (medsemiotics-db) ---
+    agrupaciones_triage: list[AgrupacionDiagnostica] = Field(
+        default_factory=list,
+        description=(
+            "Agrupaciones diagnósticas de la lista de problemas del paciente "
+            "evaluadas contra criterios ontológicos consensuados (Atlanta, MDS, "
+            "Centor, etc.) procedentes de medsemiotics-db y sustentadas en PMID."
         ),
     )
 
