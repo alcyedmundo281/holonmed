@@ -23,6 +23,7 @@ escritos antes del cambio.
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -1623,15 +1624,53 @@ class SkillManager:
                 salida.append(skill)
         return salida
 
-    async def triaje(self, texto_clinico: str, llm: OllamaClient) -> str:
-        """Decide qué protocolo activar. El *primer tic* del sistema."""
+    @property
+    def triaje_ontologico(self):
+        if not hasattr(self, "_triaje_ontologico") or self._triaje_ontologico is None:
+            from .triaje import TriajeOntologico
+
+            self._triaje_ontologico = TriajeOntologico(skills_manager=self)
+        return self._triaje_ontologico
+
+    def triaje_agrupar(self, problemas_o_texto: Sequence[Any] | str) -> list[Any]:
+        """Agrupa la lista de problemas o texto según criterios ontológicos de consenso."""
+        return self.triaje_ontologico.agrupar_problemas(problemas_o_texto)
+
+    async def triaje(
+        self,
+        texto_clinico: str,
+        llm: OllamaClient | None = None,
+        problemas: Sequence[Any] | None = None,
+    ) -> str:
+        """Decide qué protocolo activar.
+
+        A partir de la lista de problemas o del texto clínico, consulta los
+        criterios diagnósticos de consenso en medsemiotics-db y las skills
+        (Atlanta, MDS, Centor, etc.), agrupando determinísticamente por evidencia
+        con PMID en lugar de depender de 'inteligencia' (un prompt).
+        """
         disponibles = self.listar()
         if not disponibles:
             return SKILL_POR_DEFECTO
         if len(disponibles) == 1:
             return disponibles[0]
 
-        prompt = f"""TAREA: clasifica el texto clínico en uno de estos protocolos.
+        # 1. Agrupación y selección determinista por criterios ontológicos
+        candidata = self.triaje_ontologico.seleccionar_protocolo(
+            problemas=problemas if problemas else texto_clinico,
+            disponibles=disponibles,
+        )
+        if candidata:
+            logger.info(
+                "Triaje determinista seleccionó '%s' por criterios ontológicos",
+                candidata,
+            )
+            return candidata
+
+        # 2. Respaldo por LLM sólo si se proporciona cliente y ningún criterio aplicó
+        if llm is not None:
+            try:
+                prompt = f"""TAREA: clasifica el texto clínico en uno de estos protocolos.
 
 PROTOCOLOS DISPONIBLES:
 {self.catalogo()}
@@ -1642,13 +1681,19 @@ Responde ÚNICAMENTE con el nombre exacto del protocolo, sin explicación.
 Si ninguno encaja claramente, responde: {SKILL_POR_DEFECTO}
 PROTOCOLO:"""
 
-        return await llm.elegir_opcion(
-            prompt,
-            opciones_validas=disponibles,
-            defecto=(
-                SKILL_POR_DEFECTO if SKILL_POR_DEFECTO in disponibles else disponibles[0]
-            ),
-        )
+                return await llm.elegir_opcion(
+                    prompt,
+                    opciones_validas=disponibles,
+                    defecto=(
+                        SKILL_POR_DEFECTO
+                        if SKILL_POR_DEFECTO in disponibles
+                        else disponibles[0]
+                    ),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        return SKILL_POR_DEFECTO if SKILL_POR_DEFECTO in disponibles else disponibles[0]
 
 
 def _num(valor: Any) -> float | None:

@@ -51,6 +51,8 @@ MODELOS = {
     "PropuestaPromocion": m.PropuestaPromocion,
     "Promocion": m.Promocion,
     "ReaperturaDeIndagacion": m.ReaperturaDeIndagacion,
+    "ProblemaAgrupado": m.ProblemaAgrupado,
+    "AgrupacionDiagnostica": m.AgrupacionDiagnostica,
     "ResultadoTic": m.ResultadoTic,
 }
 

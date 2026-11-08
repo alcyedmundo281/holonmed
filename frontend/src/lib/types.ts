@@ -470,6 +470,39 @@ export interface ResultadoTic {
    * Es un estado clínico propio y se muestra como tal.
    */
   todas_vetadas: string | null;
+
+  /**
+   * Agrupaciones diagnósticas de la lista de problemas por criterios ontológicos de consenso (medsemiotics-db).
+   */
+  agrupaciones_triage: AgrupacionDiagnostica[];
+}
+
+export interface ProblemaAgrupado {
+  termino: string;
+  codigo: string | null;
+  criterio_nombre: string;
+  rol: string;
+  lr_positivo: number | null;
+  lr_negativo: number | null;
+  ref_pmid: string | null;
+}
+
+export interface AgrupacionDiagnostica {
+  condicion_id: string;
+  condicion_nombre: string;
+  skill_nombre: string | null;
+  consenso_nombre: string;
+  fuente: string;
+  pmid: string | null;
+  tipo_criterio: string;
+  problemas_agrupados: ProblemaAgrupado[];
+  criterios_satisfechos: string[];
+  criterios_requeridos: number;
+  criterios_pendientes: string[];
+  cumplido: boolean;
+  estado: string;
+  score: number;
+  explicacion: string;
 }
 
 export interface Paciente {
