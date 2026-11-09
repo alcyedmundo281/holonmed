@@ -148,6 +148,27 @@ from collections.abc import Sequence
 from statistics import median
 from typing import TYPE_CHECKING, Any
 
+# La aritmética de Φ vive en ethosemiotics, que es la fuente canónica de la
+# fórmula. Este módulo conserva lo que depende de HolonMed: qué infón va en
+# qué dimensión, con qué peso, y la traza que lo explica.
+from ethosemiotics.acoplamiento import (
+    UMBRAL_ACOPLAMIENTO as UMBRAL_ACOPLAMIENTO,
+)
+from ethosemiotics.acoplamiento import (
+    UMBRAL_ARMONIA as UMBRAL_ARMONIA,
+)
+from ethosemiotics.acoplamiento import (
+    UMBRAL_DESARMONIA as UMBRAL_DESARMONIA,
+)
+from ethosemiotics.acoplamiento import (
+    UMBRAL_FRICCION as UMBRAL_FRICCION,
+)
+from ethosemiotics.acoplamiento import anclaje as anclaje_geometrico
+from ethosemiotics.acoplamiento import banda as banda_de_phi
+from ethosemiotics.acoplamiento import coseno as coseno_vectorial
+from ethosemiotics.acoplamiento import phi as phi_anclado
+from ethosemiotics.acoplamiento import phi_categorico as formula_phi_categorico
+
 from ..models import (
     Acoplamiento,
     ComponenteAcoplamiento,
@@ -166,12 +187,9 @@ logger = logging.getLogger(__name__)
 
 # --- Umbrales de lectura ---------------------------------------------
 # Las bandas son convenciones de presentación, no parte de la métrica: Φ
-# es continuo y la traza siempre acompaña al número. Se declaran aquí para
-# que un centro pueda moverlas sin tocar el cálculo.
-UMBRAL_ARMONIA = 0.60
-UMBRAL_ACOPLAMIENTO = 0.20
-UMBRAL_DESARMONIA = -0.60
-UMBRAL_FRICCION = -0.20
+# es continuo y la traza siempre acompaña al número. Se declaran en
+# ethosemiotics y se reexportan arriba con el mismo nombre, para que
+# `duda` y las pruebas sigan importándolos de este módulo.
 
 # Probabilidad a partir de la cual una hipótesis se considera "sostenida"
 # para efectos de la lectura por cuadrantes. Coincide con el corte de
@@ -250,22 +268,20 @@ class MedidorDeAcoplamiento:
             dimensiones, observaciones, residuo, skill, infones
         )
 
-        phi = max(-1.0, min(1.0, coseno * anclaje))
+        phi = phi_anclado(coseno, anclaje)
         # Cuando no hay LR declarados, `phi` vale 0 porque no hay vector que
         # proyectar — y 0 se leería como INERCIA, que es una afirmación
         # falsa sobre el caso. La banda se lee entonces del categórico, que
         # es la única lectura disponible.
         phi_para_bandas = phi
         if not dimensiones and phi_cat is not None:
-            phi_para_bandas = max(-1.0, min(1.0, phi_cat * anclaje))
+            phi_para_bandas = phi_anclado(phi_cat, anclaje)
 
         return Acoplamiento(
             phi=round(phi, 4),
             coseno=round(coseno, 4),
             phi_categorico=(
-                None
-                if phi_cat is None
-                else round(max(-1.0, min(1.0, phi_cat * anclaje)), 4)
+                None if phi_cat is None else round(phi_anclado(phi_cat, anclaje), 4)
             ),
             coseno_categorico=None if phi_cat is None else round(phi_cat, 4),
             dimensiones_categoricas=dims_cat,
@@ -367,7 +383,7 @@ class MedidorDeAcoplamiento:
             )
 
         suma = sum(contribuciones.values())
-        phi = suma / math.sqrt(len(dimensiones) * (medidos + resto))
+        phi = formula_phi_categorico(suma, len(dimensiones), medidos, resto)
         favor = sum(1 for v in contribuciones.values() if v > 0)
         traza = [
             f"Φ categórico: {favor} a favor, {medidos - favor} en contra, "
@@ -856,10 +872,11 @@ class MedidorDeAcoplamiento:
             )
             return 0.0, traza
 
-        coseno = producto / (norma_h * norma_e)
-        # El error de coma flotante puede sacar el coseno del intervalo por
-        # unas milmillonésimas; se recorta antes de que llegue a una banda.
-        coseno = max(-1.0, min(1.0, coseno))
+        # ethosemiotics calcula el mismo cociente y lo recorta a [−1, +1]
+        # para absorber el error de coma flotante.
+        coseno = coseno_vectorial(
+            [c.esperado for c in componentes], [c.observado for c in componentes]
+        )
         traza.append(
             f"cos(h,e) = {producto:.3f} / ({norma_h:.3f} × {norma_e:.3f}) = {coseno:.4f}"
         )
@@ -1030,7 +1047,7 @@ class MedidorDeAcoplamiento:
             "procedencia": round(a_proc, 4),
             "fuente": round(a_fuente, 4),
         }
-        alfa = (max(a_conf, 0.0) * max(a_proc, 0.0) * max(a_fuente, 0.0)) ** (1 / 3)
+        alfa = anclaje_geometrico(a_conf, a_proc, a_fuente)
 
         traza = [
             f"α confianza = {a_conf:.3f} · procedencia = {a_proc:.3f} · "
@@ -1073,15 +1090,9 @@ class MedidorDeAcoplamiento:
     def _veredicto(
         phi: float, componentes: Sequence[ComponenteAcoplamiento]
     ) -> VeredictoSemiotico:
-        if phi >= UMBRAL_ARMONIA:
-            return VeredictoSemiotico.ARMONIA
-        if phi >= UMBRAL_ACOPLAMIENTO:
-            return VeredictoSemiotico.ACOPLAMIENTO_PARCIAL
-        if phi <= UMBRAL_DESARMONIA:
-            return VeredictoSemiotico.DESARMONIA
-        if phi <= UMBRAL_FRICCION:
-            return VeredictoSemiotico.FRICCION
-        return VeredictoSemiotico.INERCIA
+        # Las bandas las define ethosemiotics; los nombres coinciden uno a
+        # uno con VeredictoSemiotico.
+        return VeredictoSemiotico[banda_de_phi(phi).name]
 
     @staticmethod
     def _cuadrante(phi: float, inferencia: InferenciaBayesiana | None) -> str:

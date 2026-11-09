@@ -27,6 +27,9 @@ dependencies = [
     "pypdf>=5.1",
     "pyyaml>=6.0",
     "dateparser>=1.2",
+    # Fuente canónica de la aritmética de Φ. Se fija a una etiqueta: subir
+    # de versión es una decisión explícita, con la suite como testigo.
+    "ethosemiotics @ git+https://github.com/alcyedmundo281/ethosemiotics@v0.1.0",
 ]
 
 [project.optional-dependencies]

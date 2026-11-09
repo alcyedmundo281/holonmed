@@ -31,3 +31,8 @@ pyyaml>=6.0
 
 # --- Utilidades ---
 dateparser>=1.2
+
+# --- Aritmética de Φ ---
+# Fuente canónica de la fórmula del acoplamiento. Fijada a una etiqueta,
+# igual que en pyproject.toml.
+ethosemiotics @ git+https://github.com/alcyedmundo281/ethosemiotics@v0.1.0
