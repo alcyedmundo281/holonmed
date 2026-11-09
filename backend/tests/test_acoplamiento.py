@@ -811,3 +811,24 @@ def test_con_las_dos_lecturas_manda_la_ponderada(medidor, skill):
     assert res.phi_categorico > 0.20  # y el categórico diría que no hay duda
     assert res.phi_legible == res.phi
     assert res.duda
+
+
+def test_la_aritmetica_de_phi_viene_de_ethosemiotics():
+    """Φ tiene una sola fuente de verdad.
+
+    Si alguien vuelve a escribir aquí un umbral o una fórmula, las dos
+    copias pueden separarse en silencio. Esta prueba lo impide: los
+    umbrales que reexporta el módulo son los mismos objetos que define
+    ethosemiotics.
+    """
+    import ethosemiotics.acoplamiento as canon
+
+    from holonmed.core import acoplamiento
+
+    for nombre in (
+        "UMBRAL_ARMONIA",
+        "UMBRAL_ACOPLAMIENTO",
+        "UMBRAL_DESARMONIA",
+        "UMBRAL_FRICCION",
+    ):
+        assert getattr(acoplamiento, nombre) is getattr(canon, nombre)
