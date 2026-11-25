@@ -40,6 +40,7 @@ from ..facturacion import (
 )
 from ..llm import OllamaClient
 from ..services import PrescriptionService, SchedulingService
+from ..services.propuestas_receta import PropuestasReceta
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ class AppContext:
         )
 
         self.recetas = PrescriptionService(self.settings)
+        self.propuestas_receta = PropuestasReceta()
         self.agenda = SchedulingService(self.citas)
 
     def _preparar_vocabulario(self) -> None:

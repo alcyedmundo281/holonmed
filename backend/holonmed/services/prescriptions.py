@@ -81,8 +81,12 @@ class PrescriptionService:
 
             farmaco = str(item.get("farmaco") or item.get("drug") or "Fármaco")
             dosis = str(item.get("concentracion") or item.get("concentration") or "")
+            # Un hueco se dice como hueco: «según criterio» sería una
+            # indicación que nadie dio ni vio al aprobar.
             indicacion = str(
-                item.get("indicaciones") or item.get("instructions") or "Según criterio"
+                item.get("indicaciones")
+                or item.get("instructions")
+                or "(no especificada)"
             )
 
             c.setFont("Helvetica-Bold", 12)

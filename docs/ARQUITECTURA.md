@@ -325,6 +325,12 @@ dónde viene:
 | `consulta` | Narrativa dictada por el clínico |
 | `laboratorio` | Informes de laboratorio, normalmente por PDF |
 | `farmacia` | Prescripciones emitidas |
+
+La receta tiene dos pasos. `/api/chat` pasa el mensaje por el detector de
+texto dirigido al sistema, extrae los ítems y devuelve una **propuesta** que
+no se escribe en ninguna parte. `/api/recetas/confirmar`, sin modelo, la
+convierte en PDF, tic y documento cuando alguien la aprueba con su nombre, y
+guarda ese nombre en `tic.actor`.
 | `enfermeria` | Constantes, evolución de planta |
 | `imagen` | Informes radiológicos |
 

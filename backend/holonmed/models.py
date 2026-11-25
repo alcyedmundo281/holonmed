@@ -14,8 +14,9 @@ El vocabulario es deliberado y viene de la teoría que sostiene el sistema:
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _now() -> str:
@@ -1079,6 +1080,44 @@ class CrystallizeRequest(BaseModel):
 class ChatRequest(BaseModel):
     mensaje: str = Field(min_length=1)
     paciente_id: str = "default"
+
+
+class ItemReceta(BaseModel):
+    """Un fármaco tal como se enseña para aprobar y como se escribe."""
+
+    farmaco: str = Field(min_length=1)
+    concentracion: str = ""
+    indicaciones: str = ""
+
+
+class PropuestaReceta(BaseModel):
+    """Una receta redactada que todavía no existe en el registro."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    items: list[ItemReceta] = Field(min_length=1)
+    indicaciones_generales: str = ""
+
+
+class ConfirmarReceta(BaseModel):
+    """La aprobación. No admite contenido: sólo señala qué propuesta y quién."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    propuesta_id: str = Field(min_length=1)
+    # Sin valor por defecto: la identidad del paciente no se presume.
+    paciente_id: str = Field(min_length=1)
+    confirmado_por: str = Field(description="Nombre declarado de quien aprueba")
+
+    @field_validator("confirmado_por")
+    @classmethod
+    def _con_nombre(cls, valor: str) -> str:
+        nombre = valor.strip()
+        if not any(c.isalpha() for c in nombre):
+            raise ValueError("La confirmación exige el nombre de quien aprueba")
+        return nombre
 
 
 class PacienteCreate(BaseModel):

@@ -637,10 +637,34 @@ export interface EstadoSistema {
   };
 }
 
+export interface ItemReceta {
+  farmaco: string;
+  concentracion: string;
+  indicaciones: string;
+}
+
+/** Una receta redactada que todavía no existe en el registro. */
+export interface PropuestaReceta {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  items: ItemReceta[];
+  indicaciones_generales: string;
+}
+
+export interface RecetaEmitida {
+  url: string;
+  items: ItemReceta[];
+  tic_id: string;
+  confirmado_por: string;
+  aviso: string;
+}
+
 export type RespuestaChat =
   | { tipo: 'texto'; datos: { respuesta: string } }
   | { tipo: 'tic'; datos: ResultadoTic }
-  | { tipo: 'receta'; datos: { url: string; items: unknown[]; aviso: string } }
+  | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
   | { tipo: 'agenda'; datos: { legible: string; motivo: string; estado: string } }
   | {
       tipo: 'whatsapp';

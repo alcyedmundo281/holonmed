@@ -1,20 +1,22 @@
 import { ExternalLink, Loader2, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import type { RespuestaChat } from '../lib/types';
+import type { PropuestaReceta, RespuestaChat } from '../lib/types';
+import { PropuestaRecetaCard } from './PropuestaRecetaCard';
 
 interface Mensaje {
   autor: 'usuario' | 'sistema';
   texto: string;
   accion?: { etiqueta: string; url: string; aviso?: string };
+  propuesta?: PropuestaReceta;
 }
 
 /**
  * Chat de acciones.
  *
- * Nada de lo que se decide aquí sale del sistema por su cuenta: si la
- * intención es enviar un WhatsApp o emitir una receta, la respuesta es un
- * enlace que una persona debe abrir y confirmar.
+ * Si la intención es enviar un WhatsApp, la respuesta es un enlace que una
+ * persona debe abrir y confirmar. Si es una receta, es una propuesta: no se
+ * escribe nada hasta que alguien la confirma con su nombre.
  */
 export function ChatPanel({ pacienteId }: { pacienteId: string }) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
@@ -75,6 +77,8 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
             >
               <p className="whitespace-pre-wrap break-words">{m.texto}</p>
 
+              {m.propuesta && <PropuestaRecetaCard propuesta={m.propuesta} />}
+
               {m.accion && (
                 <div className="mt-2 pt-2 border-t border-slate-300/40">
                   {m.accion.aviso && (
@@ -133,11 +137,11 @@ function interpretar(r: RespuestaChat): Mensaje {
     case 'texto':
       return { autor: 'sistema', texto: r.datos.respuesta };
 
-    case 'receta':
+    case 'receta_propuesta':
       return {
         autor: 'sistema',
-        texto: `Borrador de receta con ${r.datos.items.length} medicamento(s).`,
-        accion: { etiqueta: 'Abrir PDF', url: r.datos.url, aviso: r.datos.aviso },
+        texto: 'Receta propuesta para tu revisión.',
+        propuesta: r.datos,
       };
 
     case 'agenda':
