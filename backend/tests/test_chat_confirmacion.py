@@ -16,7 +16,7 @@ from holonmed.api.deps import AppContext, get_context
 from holonmed.api.routes.chat import INTENCIONES
 from holonmed.config import Settings
 from holonmed.core.cita import PeticionInvalida, citado_del_mensaje, interpretar_fecha
-from holonmed.db.store import Database
+from holonmed.db.store import Database, PacienteRepo
 from holonmed.llm import LLMUnavailable
 from holonmed.models import EstadoInfon, Infon, ResultadoTic
 
@@ -512,6 +512,37 @@ def test_si_no_se_escribe_la_propuesta_sigue_pendiente(
         assert cliente.post(CASOS[caso][1], json=cuerpo).status_code == 500
     assert _cambios(ctx) == antes
     assert cliente.post(CASOS[caso][1], json=cuerpo).status_code == 201
+
+
+@pytest.mark.parametrize("caso", CASOS)
+def test_si_la_base_rechaza_la_escritura_la_propuesta_sigue_pendiente(entorno, caso):
+    cliente, ctx = entorno
+    cuerpo = _cuerpo(caso, _proponer(entorno, caso)["propuesta_id"])
+    habia = len(_filas(ctx, CASOS[caso][2]))
+    # Las rutas corren en el hilo del cliente, con su propia conexión: el
+    # bloqueo se pone con una tercera, como lo haría otro proceso.
+    otra = sqlite3.connect(ctx.database.ruta)
+    otra.execute(
+        f"CREATE TRIGGER no_escribir BEFORE INSERT ON {CASOS[caso][2]} "
+        "BEGIN SELECT RAISE(FAIL, 'fallo sintético'); END"
+    )
+    otra.commit()
+
+    assert cliente.post(CASOS[caso][1], json=cuerpo).status_code == 500
+    assert len(_filas(ctx, CASOS[caso][2])) == habia
+
+    otra.execute("DROP TRIGGER no_escribir")
+    otra.commit()
+    otra.close()
+    assert cliente.post(CASOS[caso][1], json=cuerpo).status_code == 201
+
+
+def test_un_alta_con_la_base_en_solo_lectura_devuelve_nada(tmp_path):
+    base = Database(tmp_path / "h.db")
+    base.conexion().execute("PRAGMA query_only = ON")
+
+    assert PacienteRepo(base).crear({"nombre": "Persona Sintética"}) is None
+    base.cerrar()
 
 
 def test_una_base_anterior_gana_las_columnas_de_quien_confirmo(tmp_path):
