@@ -126,6 +126,15 @@ class EstadoInfon(str, Enum):
     RUIDO = "RUIDO"  # Descartado. Probable alucinación del modelo.
 
 
+class SenalInstruccion(BaseModel):
+    """Un trozo de la narrativa que le habla al sistema y no del paciente."""
+
+    categoria: str
+    fragmento: str = Field(
+        description="Coincidencia sobre el texto aplanado: sin acentos y en minúsculas"
+    )
+
+
 class Infon(BaseModel):
     """El átomo de verdad: una afirmación clínica validada y trazable."""
 
@@ -886,6 +895,10 @@ class ResultadoTic(BaseModel):
         ),
     )
     resumen: str = ""
+    # Texto imperativo dirigido al sistema, detectado sin modelo en
+    # `core/entrada_no_confiable.py`. Con una sola señal el tic no valida
+    # nada. Vacío NO significa que el texto sea confiable.
+    instrucciones_detectadas: list[SenalInstruccion] = Field(default_factory=list)
     infones: list[Infon] = Field(default_factory=list)
     # `Any` para no importar de core y crear un ciclo; en la práctica es
     # un ResultadoClasificacion.
