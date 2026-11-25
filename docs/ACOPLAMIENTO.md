@@ -110,12 +110,26 @@ Es decir: **Bayes lee la magnitud del vector de evidencia y Φ lee su
 dirección.** Por eso Φ puede añadir información sin contradecir la
 probabilidad, y por eso no debe modificarla jamás. Es también la razón de
 que el emparejamiento término↔signo viva en una sola función compartida
-(`bayes.emparejar_termino`): si los dos módulos poblaran el vector con
+(`bayes.emparejar_infon`): si los dos módulos poblaran el vector con
 criterios distintos, la identidad se rompería en silencio.
+
+**La regla de emparejamiento es un parámetro de seguridad.** Se resuelve
+contra todos los signos que el protocolo declara —y después cada módulo
+filtra los que le conciernen—, en este orden:
+
+1. el mismo nombre, salvo mayúsculas y espacios;
+2. el mismo código declarado, si nombra un solo signo («Hiperlipasemia» y
+   «Hiperlipasemia (>3x)» son `HM:0732`);
+3. el hallazgo observado **empieza** por el nombre del signo, en palabras
+   completas, y le añade calificadores. Sólo si consta presente: que falte
+   «X irradiado» no dice que falte «X».
+
+Un término genérico **nunca** hereda lo que se declara de uno específico:
+«Dolor torácico» no es «Dolor torácico irradiado a ambos brazos».
 
 **Dónde termina la identidad.** Es exacta, pero no incondicional, y decirlo
 importa: quien la dé por universal escribirá código que la rompa sin
-enterarse. Se cumple bajo tres condiciones.
+enterarse. Se cumple bajo dos condiciones.
 
 **1. La suma corre sobre el subespacio declarado, no sobre el vector
 completo.** El resto no simbolizado entra con un peso que es una convención
@@ -132,21 +146,20 @@ contra medio paciente no mediría nada. Con historial previo la identidad
 deja de valer numéricamente, aunque la relación conceptual —magnitud frente
 a dirección— se mantiene intacta.
 
-**3. A lo sumo un infón validado por dimensión.** Si dos infones emparejan
-con el mismo signo, Bayes multiplica su LR dos veces y este módulo lo cuenta
-una. Aquí la discrepancia no favorece a Bayes: contar dos veces la misma
-prueba es doble contabilidad de la evidencia. Se deja como está porque
-corregirlo es cambiar el motor bayesiano, y eso es otra conversación.
+Había una tercera condición —a lo sumo un infón por dimensión— porque Bayes
+multiplicaba el LR una vez por cada infón. Ya no: los dos módulos eligen un
+infón por signo con `bayes.elegir_por_signo` (si se contradicen manda el más
+reciente; si concuerdan, el de mayor confianza), y Bayes anota en la traza lo
+que descarta.
 
-Las tres condiciones están fijadas como tests —incluida la divergencia, que
-se afirma para que nadie la «arregle» creyendo que corrige un fallo:
+Las dos condiciones, y la invariante, están fijadas como tests:
 
 | test | qué fija |
 |---|---|
 | `test_phi_y_bayes_leen_el_mismo_vector` | la identidad sobre el subespacio declarado |
 | `test_la_identidad_sobrevive_al_resto_no_simbolizado` | que con residuo el subespacio cuadra y el vector completo no |
 | `test_la_identidad_exige_el_mismo_conjunto_de_infones` | la divergencia que introduce el historial |
-| `test_la_identidad_exige_un_infon_por_dimension` | el factor 2 del doble emparejamiento |
+| `test_dos_infones_sobre_un_signo_no_rompen_la_identidad` | que un signo cuente una vez en los dos |
 | `test_el_peso_declarado_excluye_el_residuo_por_construccion` | que la invariante viva en el código |
 
 ### 3.4 Los tres factores del coseno
@@ -606,17 +619,17 @@ confianza.
   conocer el LR de un hallazgo que el protocolo no contempla: si lo hubiera,
   estaría contemplado. La media cuadrática del caso es defendible y está
   documentada, pero es una elección.
-- **El emparejamiento término↔signo es por subcadena**, heredado del motor
-  bayesiano. Es su limitación conocida, y se hereda a propósito para
-  preservar la identidad de la sección 3.3.
+- **El emparejamiento término↔signo no es un analizador de lenguaje**
+  (sección 3.3). Un calificador pospuesto que niegue o desmienta («Disnea
+  descartada») sigue emparejando si la extracción no lo marcó en la
+  polaridad, y dos signos en relación de inclusión que el protocolo declare
+  por separado cuentan cada uno. Se comparte a propósito con el motor
+  bayesiano para preservar la identidad.
 - **En el pipeline, Bayes y Φ no ven el mismo conjunto de infones.** Es
   deliberado —Φ mide contra el paciente entero— pero significa que la
   identidad numérica sólo se observa en el primer tic de un paciente. Si
   alguna vez interesa comprobarla en producción, hay que llamar a `medir()`
   con el mismo conjunto que recibió Bayes.
-- **Bayes cuenta dos veces dos infones sobre el mismo signo.** Φ los cuenta
-  una. La divergencia está documentada y fijada como test; la corrección,
-  si se hace, va en el motor bayesiano.
 - **No se usa `ambito_grafo` todavía.** Un hallazgo que cae en una rama que
   el protocolo reconoce pero no cuantifica cuenta hoy como resto entero;
   podría contar como resto parcial.

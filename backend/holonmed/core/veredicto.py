@@ -71,16 +71,25 @@ if TYPE_CHECKING:  # pragma: no cover - sólo para tipado
 logger = logging.getLogger(__name__)
 
 
-def _emparejador(presentes: Sequence[str]):
-    """Devuelve una función que decide si un término consta como presente.
+def _emparejador(skill: "Skill", presentes: Sequence[Infon]):
+    """Devuelve una función que decide si un término exigido consta como presente.
 
-    Usa el mismo emparejamiento por subcadena que el motor bayesiano, para
-    que el núcleo y los signos no puedan divergir.
+    Usa el mismo emparejamiento que el motor bayesiano, para que el núcleo y
+    los signos no puedan divergir. La dirección importa: se pregunta a qué
+    corresponde cada cosa OBSERVADA, nunca si el término exigido cabe dentro de
+    lo observado ni al revés. Invertida, «Dolor torácico» satisfaría un núcleo
+    que exige que irradie a ambos brazos.
     """
-    from .bayes import emparejar_termino
+    from .bayes import construir_vocabulario, emparejar_infon
 
-    indice = {t.lower(): t for t in presentes}
-    return lambda termino: emparejar_termino(termino, indice) is not None
+    vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
+
+    def consta(termino: str) -> bool:
+        exigido = termino.lower()
+        con_exigido = {**vocabulario, exigido: vocabulario.get(exigido, {})}
+        return any(emparejar_infon(i, con_exigido) == exigido for i in presentes)
+
+    return consta
 
 
 class EvaluadorDeVeredicto:
@@ -129,10 +138,8 @@ class EvaluadorDeVeredicto:
         # diagnóstico sea imposible: es que la pregunta todavía no se puede
         # hacer.
         if skill.nucleo.declarado:
-            presentes = [
-                i.termino for _, i in observados if i.polaridad is Polaridad.PRESENTE
-            ]
-            if not skill.nucleo.satisfecho(_emparejador(presentes)):
+            presentes = [i for _, i in observados if i.polaridad is Polaridad.PRESENTE]
+            if not skill.nucleo.satisfecho(_emparejador(skill, presentes)):
                 traza.append("Núcleo no documentado: el criterio no se aplica todavía")
                 return VeredictoDeclarado(
                     apoyos=apoyos,
@@ -209,16 +216,17 @@ class EvaluadorDeVeredicto:
         hallazgo en alerta se le muestra al clínico pero no veta un
         diagnóstico ni satisface un criterio.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
         indice = {s.nombre.lower(): s for s in skill.signos}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         salida: list[tuple[Signo, Infon]] = []
         vistos: set[str] = set()
 
         for infon in infones:
             if not infon.es_valido:
                 continue
-            clave = emparejar_termino(infon.termino, indice)
+            clave = emparejar_infon(infon, vocabulario)
             if clave is None or clave in vistos:
                 continue
             vistos.add(clave)  # un signo cuenta una vez, no dos

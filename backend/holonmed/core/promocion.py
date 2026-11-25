@@ -216,8 +216,9 @@ class EvaluadorDePromocion:
         y un signo cuenta una vez aunque varios infones emparejen con él —
         la misma regla que Φ y el veredicto declarado.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         # Sólo `apoya`: la tupla cuenta lo que el protocolo declara que apoya.
         # `evidencia` pesa en la probabilidad pero no satisface ninguna tupla.
         indice = {s.nombre.lower(): s for s in skill.signos if s.efecto == "apoya"}
@@ -229,8 +230,8 @@ class EvaluadorDePromocion:
         for infon in infones:
             if not infon.es_valido or infon.abre_problema:
                 continue
-            clave = emparejar_termino(infon.termino, indice)
-            if clave is None:
+            clave = emparejar_infon(infon, vocabulario)
+            if clave is None or clave not in indice:
                 continue
             signo: Signo = indice[clave]
             observada = "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
@@ -266,7 +267,7 @@ class EvaluadorDePromocion:
         contra): pedir lo que ya se hizo es el error que `VALIDACION.md`
         denuncia.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
         especificas = [
             s
@@ -276,12 +277,12 @@ class EvaluadorDePromocion:
         if not especificas:
             return []
 
-        indice_esp = {s.nombre.lower(): s for s in especificas}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         ya_medidas: set[str] = set()
         for infon in infones:
             if not infon.es_valido or infon.abre_problema:
                 continue
-            clave = emparejar_termino(infon.termino, indice_esp)
+            clave = emparejar_infon(infon, vocabulario)
             if clave is not None:
                 ya_medidas.add(clave)
 

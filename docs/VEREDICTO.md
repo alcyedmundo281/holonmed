@@ -131,7 +131,8 @@ lo que consta.** Es lo que impide que vuelva por una tercera puerta.
 
 Es una firma rara, y sin conocer lo que evita parece un rodeo. Recibe el
 emparejador en vez de un conjunto de cadenas porque **el núcleo tiene que
-casar igual que todo lo demás**: por subcadena, con `bayes.emparejar_termino`.
+casar igual que todo lo demás**, con `bayes.emparejar_infon` y en la misma
+dirección: se pregunta a qué corresponde cada cosa observada.
 
 La primera versión comparaba por igualdad exacta, y entonces un infón
 «Bradicinesia leve» satisfacía un signo y **no** el núcleo. Es exactamente la
@@ -279,11 +280,11 @@ un test.
 - **Ningún protocolo del repositorio los declara aún.** Todo lo verificado
   corre sobre protocolos de prueba; el primer caso real será apendicitis o
   intestino irritable, cuando el índice los tenga.
-- **El emparejamiento es por subcadena**, heredado del motor bayesiano con su
-  limitación conocida, y heredado a propósito (§5).
+- **El emparejamiento es el del motor bayesiano**, a propósito (§5), con sus
+  límites: ver `ACOPLAMIENTO.md` §3.3.
 - **Un signo cuenta una vez**, aunque varios infones emparejen con él. Es la
-  misma regla que Φ aplica y que Bayes no — ver `ACOPLAMIENTO.md` §3.3,
-  condición 3.
+  misma regla que aplican Bayes y Φ. Aquí manda el primero que llega; ellos
+  eligen con `bayes.elegir_por_signo`.
 - **Sólo entra evidencia VALIDADA.** Un hallazgo en ALERTA se le muestra al
   clínico pero no veta un diagnóstico ni satisface un criterio. La dirección
   del error importa: un falso positivo en una exclusión retira una
