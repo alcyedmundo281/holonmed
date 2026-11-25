@@ -5,6 +5,10 @@ Verifica que el triaje:
 2. Agrupa deterministamente la lista de problemas del paciente sin depender de LLM ("inteligencia").
 3. Asocia la procedencia y el PMID correspondiente a cada agrupación y criterio.
 4. Distingue criterios cumplidos, parciales y sospechas iniciales.
+
+Las pruebas marcadas con `requiere_indice` comprueban criterios que sólo
+declara `medsemiotics-db` y se saltan si no está; el resto sale de las skills
+del propio repositorio. CI lo clona y no permite el salto (ver `conftest.py`).
 """
 
 from pathlib import Path
@@ -14,7 +18,7 @@ import pytest
 
 from holonmed.core.pipeline import CrystallizationPipeline
 from holonmed.core.skills import SkillManager
-from holonmed.core.triaje import TriajeOntologico
+from holonmed.core.triaje import TriajeOntologico, buscar_ruta_medsemiotics
 from holonmed.core.validator import OntologyValidator
 from holonmed.core.verifier import ClinicalVerifier
 from holonmed.models import (
@@ -23,6 +27,18 @@ from holonmed.models import (
     Infon,
     Polaridad,
     ResultadoTic,
+)
+
+# La misma búsqueda que usa el motor (incluye `HOLONMED_MEDSEMIOTICS_DIR`):
+# la prueba se salta exactamente cuando el motor no tiene de dónde leer.
+INDICE = buscar_ruta_medsemiotics()
+
+requiere_indice = pytest.mark.skipif(
+    INDICE is None or not (INDICE / "condiciones").is_dir(),
+    reason=(
+        "no hay un clon de medsemiotics-db: clónalo junto a este repositorio "
+        "o apunta HOLONMED_MEDSEMIOTICS_DIR a uno"
+    ),
 )
 
 
@@ -36,6 +52,7 @@ def triaje(skills_manager: SkillManager) -> TriajeOntologico:
     return TriajeOntologico(skills_manager=skills_manager)
 
 
+@requiere_indice
 def test_carga_construcciones_con_pmid(triaje: TriajeOntologico) -> None:
     """Verifica que las construcciones ontológicas se cargan con sus PMID."""
     construcciones = triaje.cargar_construcciones()
@@ -106,6 +123,7 @@ def test_agrupar_pancreatitis_criterios_atlanta(triaje: TriajeOntologico) -> Non
     assert any("imagen" in p.lower() for p in primera.criterios_pendientes)
 
 
+@requiere_indice
 def test_agrupar_parkinson_criterios_mds_nucleo(triaje: TriajeOntologico) -> None:
     """Parkinson: núcleo motor de MDS 2015 (bradicinesia + temblor de reposo)."""
     problemas = [
@@ -127,6 +145,7 @@ def test_agrupar_parkinson_criterios_mds_nucleo(triaje: TriajeOntologico) -> Non
     assert "Temblor de reposo" in terminos_agrupados
 
 
+@requiere_indice
 def test_agrupar_faringitis_centor_con_pmid(triaje: TriajeOntologico) -> None:
     """Faringitis estreptocócica: criterios Centor/McIsaac con PMID 11147989/6763125."""
     problemas = [
@@ -185,6 +204,7 @@ async def test_triaje_skill_manager_determinista_sin_llm(
     assert protocolo == "acute_pancreatitis"
 
 
+@requiere_indice
 @pytest.mark.asyncio
 async def test_triaje_texto_determinista_sin_llm(
     skills_manager: SkillManager,
@@ -297,6 +317,7 @@ async def test_pipeline_etapa1_registra_agrupaciones(tmp_path: Path) -> None:
     assert primera.cumplido is True
 
 
+@requiere_indice
 def test_api_triage_endpoints(tmp_path: Path) -> None:
     """Verifica los endpoints /api/pacientes/{id}/triage y /api/triage/agrupar."""
     from fastapi.testclient import TestClient
