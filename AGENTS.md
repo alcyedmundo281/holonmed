@@ -103,8 +103,9 @@ Este apartado existe para que el contrato no mienta. Son requisitos vigentes, si
   pero nadie registra las *lecturas*, y ninguna tabla está protegida contra reescritura.
 - **No hay tabla de política.** Las operaciones expuestas al modelo no se consultan contra una
   decisión declarada con su razón.
-- **No hay aprobación humana nombrada.** `confirmar_cargo` es lo más cercano, y confirma un cargo,
-  no una escritura en el expediente.
+- **La aprobación humana nombrada sólo cubre la receta.** `/api/recetas/confirmar` exige el nombre
+  de quien aprueba antes de escribirla, pero el nombre es declarado, no autenticado. Cristalización,
+  laboratorio, episodios, órdenes, cargos, citas y altas de paciente siguen escribiendo sin ella.
 
 Cerrarlos es trabajo pendiente. Mientras tanto, ningún cambio puede alejarlos más.
 

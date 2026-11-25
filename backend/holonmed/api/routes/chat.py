@@ -5,9 +5,13 @@ herramienta correspondiente. La clasificación usa el modelo rápido y tiene
 red de seguridad: si no reconoce la intención, cae en consulta médica
 general en vez de ejecutar una acción equivocada.
 
-Nota de diseño: ninguna intención ejecuta algo irreversible sin que el
-resultado vuelva al clínico. Enviar por WhatsApp devuelve un enlace que el
-profesional debe pulsar; el sistema no envía nada por su cuenta.
+Nada sale del sistema por su cuenta: enviar por WhatsApp devuelve un enlace
+que el profesional debe pulsar. La receta sólo se **propone** aquí; este
+módulo no genera el PDF ni la escribe en la historia, y emitirla exige la
+confirmación nombrada de `routes/recetas.py`.
+
+`agendar`, `crear_paciente` y `cristalizar` sí escriben sin esa
+confirmación. Es deuda declarada.
 """
 
 import logging
@@ -16,8 +20,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from ...core.entrada_no_confiable import detectar_instrucciones
+from ...core.receta import ExtraccionInvalida, validar_extraccion
 from ...llm import LLMUnavailable
-from ...models import ChatRequest, OrigenTic, ResultadoTic
+from ...models import ChatRequest, HolonPaciente, OrigenTic, PropuestaReceta
 from ..deps import AppContext, get_context
 
 logger = logging.getLogger(__name__)
@@ -38,7 +44,7 @@ PROMPT_ROUTER = """Clasifica la intención del mensaje del usuario.
 INTENCIONES:
 - agendar: pedir una cita (extrae "fecha" y "motivo")
 - whatsapp: mandar un mensaje al paciente (extrae "mensaje")
-- receta: generar una receta o documento (extrae "peticion")
+- receta: generar una receta o documento
 - buscar_paciente: localizar un paciente (extrae "consulta")
 - crear_paciente: dar de alta un paciente (extrae "nombre")
 - cristalizar: procesar una narrativa clínica y extraer hallazgos
@@ -97,9 +103,7 @@ async def chat(
         }
 
     if intencion == "receta":
-        return await _generar_receta(
-            ctx, holon, str(clasificacion.get("peticion", req.mensaje))
-        )
+        return await _proponer_receta(ctx, holon, req.mensaje)
 
     if intencion == "buscar_paciente":
         encontrado = ctx.pacientes.buscar(str(clasificacion.get("consulta", req.mensaje)))
@@ -127,7 +131,33 @@ async def chat(
     return await _consulta_medica(ctx, holon, req.mensaje)
 
 
-async def _generar_receta(ctx: AppContext, holon, peticion: str) -> dict[str, Any]:
+async def _proponer_receta(
+    ctx: AppContext, holon: HolonPaciente, mensaje: str
+) -> dict[str, Any]:
+    """Redacta una propuesta de receta. No escribe nada en ningún sitio.
+
+    Recibe el mensaje tal como lo envió la persona. Una `peticion` devuelta
+    por el router sería una reescritura de un modelo: podría añadir un
+    fármaco que nadie pidió, o quitar la frase que delata una inyección.
+    """
+    # El chat le habla al sistema, así que el imperativo es normal («haz la
+    # receta», «prescribe…») y no da señal. Lo que sí la da retiene la
+    # petición entera antes de extraer nada. Un «registra que…» legítimo cae
+    # aquí y cuesta reformular; no se filtra por categoría porque la
+    # inyección observada era justamente una orden de escritura.
+    senales = detectar_instrucciones(mensaje)
+    if senales:
+        encontrado = "; ".join(f"«{s.fragmento}»" for s in senales)
+        return {
+            "tipo": "error",
+            "mensaje": (
+                "No se prepara la receta: el mensaje contiene texto dirigido al "
+                f"sistema ({encontrado}). No se ha extraído ni registrado nada. "
+                "Revisa lo que hayas pegado y pide la receta indicando sólo "
+                "fármaco, concentración e indicaciones."
+            ),
+        }
+
     skill = ctx.skills.cargar("receta")
     instrucciones = (
         skill.contenido
@@ -137,58 +167,27 @@ async def _generar_receta(ctx: AppContext, holon, peticion: str) -> dict[str, An
 
     try:
         datos = await ctx.llm.generar_json(
-            f"{instrucciones}\n\nPACIENTE: {holon.nombre}\nPETICIÓN: {peticion}\n\nJSON:",
+            f"{instrucciones}\n\nPACIENTE: {holon.nombre}\nPETICIÓN: {mensaje}\n\nJSON:",
             model=ctx.settings.model_clinical,
             timeout=ctx.settings.llm_timeout_slow,
         )
     except LLMUnavailable as exc:
         return {"tipo": "error", "mensaje": str(exc)}
 
-    items = datos.get("items") or datos.get("rx_items") or []
-    if not items:
-        return {
-            "tipo": "error",
-            "mensaje": "No se identificaron medicamentos en la petición.",
-        }
+    try:
+        items, generales = validar_extraccion(datos)
+    except ExtraccionInvalida as exc:
+        return {"tipo": "error", "mensaje": str(exc)}
 
-    ruta = ctx.recetas.generar(items, holon.nombre)
-    if not ruta:
-        return {"tipo": "error", "mensaje": "No se pudo generar el PDF."}
-
-    # La receta entra en la historia como un tic de origen `farmacia`.
-    # Antes sólo se generaba el PDF: el fármaco prescrito no dejaba rastro
-    # y desaparecía en cuanto se cerraba la ventana. Un fármaco prescrito
-    # es parte del registro clínico, y su ausencia rompe la conciliación
-    # de la medicación en la visita siguiente.
-    resumen = ", ".join(
-        f"{i.get('farmaco') or i.get('drug', '?')} {i.get('concentracion', '')}".strip()
-        for i in items
-    )
-    tic = ResultadoTic(
+    propuesta = PropuestaReceta(
         paciente_id=holon.paciente_id,
-        texto_original=peticion,
-        origen=OrigenTic.FARMACIA,
-        skill_activa="receta",
-        resumen=f"Receta: {resumen}",
+        paciente_nombre=holon.nombre,
+        texto_original=mensaje,
+        items=items,
+        indicaciones_generales=generales,
     )
-    tic.tic_id = ctx.tics.guardar(tic)
-    ctx.documentos.registrar(
-        holon.paciente_id,
-        tipo="receta",
-        archivo=ruta.name,
-        datos={"items": items, "indicaciones": datos.get("indicaciones_generales", "")},
-        tic_id=tic.tic_id,
-    )
-
-    return {
-        "tipo": "receta",
-        "datos": {
-            "url": f"/api/documentos/{ruta.name}",
-            "items": items,
-            "tic_id": tic.tic_id,
-            "aviso": "Borrador sin validez hasta que lo revises y lo firmes.",
-        },
-    }
+    ctx.propuestas_receta.guardar(propuesta)
+    return {"tipo": "receta_propuesta", "datos": propuesta}
 
 
 async def _consulta_medica(ctx: AppContext, holon, mensaje: str) -> dict[str, Any]:

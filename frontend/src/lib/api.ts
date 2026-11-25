@@ -8,6 +8,7 @@ import type {
   OrdenPropuesta,
   Paciente,
   Problema,
+  RecetaEmitida,
   RespuestaChat,
   ResultadoTic,
   ResumenOrigen,
@@ -70,6 +71,17 @@ export const api = {
     pedir<RespuestaChat>('/api/chat', {
       method: 'POST',
       body: JSON.stringify({ mensaje, paciente_id: pacienteId }),
+    }),
+
+  // El chat sólo propone la receta; emitirla exige el nombre de quien aprueba.
+  confirmarReceta: (propuestaId: string, pacienteId: string, confirmadoPor: string) =>
+    pedir<RecetaEmitida>('/api/recetas/confirmar', {
+      method: 'POST',
+      body: JSON.stringify({
+        propuesta_id: propuestaId,
+        paciente_id: pacienteId,
+        confirmado_por: confirmadoPor,
+      }),
     }),
 
   pacientes: () => pedir<Paciente[]>('/api/pacientes'),
