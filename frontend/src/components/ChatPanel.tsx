@@ -1,20 +1,36 @@
 import { ExternalLink, Loader2, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
-import type { RespuestaChat } from '../lib/types';
+import type {
+  PropuestaCita,
+  PropuestaPaciente,
+  PropuestaReceta,
+  PropuestaTic,
+  RespuestaChat,
+} from '../lib/types';
+import {
+  PropuestaCitaCard,
+  PropuestaPacienteCard,
+  PropuestaTicCard,
+} from './PropuestaEscrituraCards';
+import { PropuestaRecetaCard } from './PropuestaRecetaCard';
 
 interface Mensaje {
   autor: 'usuario' | 'sistema';
   texto: string;
   accion?: { etiqueta: string; url: string; aviso?: string };
+  propuesta?: PropuestaReceta;
+  cita?: PropuestaCita;
+  alta?: PropuestaPaciente;
+  tic?: PropuestaTic;
 }
 
 /**
  * Chat de acciones.
  *
- * Nada de lo que se decide aquí sale del sistema por su cuenta: si la
- * intención es enviar un WhatsApp o emitir una receta, la respuesta es un
- * enlace que una persona debe abrir y confirmar.
+ * Si la intención es enviar un WhatsApp, la respuesta es un enlace que una
+ * persona debe abrir y confirmar. Receta, cita, alta de paciente y tic son
+ * propuestas: no se escribe nada hasta que alguien las confirma con su nombre.
  */
 export function ChatPanel({ pacienteId }: { pacienteId: string }) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
@@ -75,6 +91,11 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
             >
               <p className="whitespace-pre-wrap break-words">{m.texto}</p>
 
+              {m.propuesta && <PropuestaRecetaCard propuesta={m.propuesta} />}
+              {m.cita && <PropuestaCitaCard propuesta={m.cita} />}
+              {m.alta && <PropuestaPacienteCard propuesta={m.alta} />}
+              {m.tic && <PropuestaTicCard propuesta={m.tic} />}
+
               {m.accion && (
                 <div className="mt-2 pt-2 border-t border-slate-300/40">
                   {m.accion.aviso && (
@@ -133,15 +154,18 @@ function interpretar(r: RespuestaChat): Mensaje {
     case 'texto':
       return { autor: 'sistema', texto: r.datos.respuesta };
 
-    case 'receta':
+    case 'receta_propuesta':
       return {
         autor: 'sistema',
-        texto: `Borrador de receta con ${r.datos.items.length} medicamento(s).`,
-        accion: { etiqueta: 'Abrir PDF', url: r.datos.url, aviso: r.datos.aviso },
+        texto: 'Receta propuesta para tu revisión.',
+        propuesta: r.datos,
       };
 
-    case 'agenda':
-      return { autor: 'sistema', texto: `Cita ${r.datos.estado}: ${r.datos.legible} — ${r.datos.motivo}` };
+    case 'cita_propuesta':
+      return { autor: 'sistema', texto: 'Cita propuesta para tu revisión.', cita: r.datos };
+
+    case 'paciente_propuesto':
+      return { autor: 'sistema', texto: 'Alta propuesta para tu revisión.', alta: r.datos };
 
     case 'whatsapp':
       return {
@@ -156,11 +180,13 @@ function interpretar(r: RespuestaChat): Mensaje {
         texto: r.datos ? `Paciente: ${r.datos.nombre} (${r.datos.id})` : 'Sin coincidencias.',
       };
 
-    case 'tic': {
-      const validados = r.datos.infones.filter((i) => i.estado === 'VALIDADO').length;
+    case 'tic_propuesto': {
+      const { tic } = r.datos;
+      const validados = tic.infones.filter((i) => i.estado === 'VALIDADO').length;
       return {
         autor: 'sistema',
-        texto: `Procesado con «${r.datos.skill_activa}»: ${validados} de ${r.datos.infones.length} hallazgos validados.`,
+        texto: `Procesado con «${tic.skill_activa}»: ${validados} de ${tic.infones.length} hallazgos validados. Sin guardar.`,
+        tic: r.datos,
       };
     }
 
