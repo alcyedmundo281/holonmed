@@ -353,7 +353,7 @@ class CrystallizationPipeline:
         # "inteligencia" (un prompt libre).
         problemas_paciente = list(holon.linea_tiempo) if holon.linea_tiempo else []
         #
-        # Sin el índice el triaje se detiene: el tic sale sin agrupaciones,
+        # Sin el índice, o con una ficha rota, el triaje se detiene: el tic sale sin agrupaciones,
         # dice por qué, y no se elige protocolo —se lee con el genérico, salvo
         # que quien llama fuerce uno—. El tic no se pierde: la extracción no
         # depende del índice.

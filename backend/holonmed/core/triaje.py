@@ -21,6 +21,11 @@ SIN EL ÍNDICE EL TRIAJE SE DETIENE (`IndiceNoDisponible`). Las skills sólo
 aportan una fracción de las construcciones, y agrupar con ellas devolvería una
 lista vacía —o más corta— que se lee como «ningún criterio se cumple» cuando lo
 cierto es «no se pudo mirar».
+
+LO MISMO CON UNA SOLA FICHA ILEGIBLE O MAL FORMADA (`FichaIlegible`). La
+condición que falta no sale en la lista, y el concepto que falta deja sin
+sinónimos a los criterios que lo citan: en los dos casos un criterio que se
+cumple se puede leer como que no.
 """
 
 from __future__ import annotations
@@ -95,13 +100,125 @@ class IndiceNoDisponible(RuntimeError):
     no incluye rutas de la máquina; éstas van sólo al log.
     """
 
-    def __init__(self, causa: str):
+    def __init__(self, causa: str, explicacion: str | None = None):
         super().__init__(
-            f"Triaje detenido: {causa}. Sin el índice medsemiotics-db no se puede "
-            "saber qué criterios de consenso se cumplen, y una lista vacía se "
-            "leería como «ninguno». Clónalo junto a este repositorio o apunta "
-            "HOLONMED_MEDSEMIOTICS_DIR a un clon."
+            f"Triaje detenido: {causa}. "
+            + (
+                explicacion
+                or "Sin el índice medsemiotics-db no se puede saber qué criterios "
+                "de consenso se cumplen, y una lista vacía se leería como "
+                "«ninguno». Clónalo junto a este repositorio o apunta "
+                "HOLONMED_MEDSEMIOTICS_DIR a un clon."
+            )
         )
+
+
+# Cuántas fichas rotas se nombran en el motivo.
+MAX_FICHAS_NOMBRADAS = 5
+
+
+class FichaIlegible(IndiceNoDisponible):
+    """El índice está, pero alguna ficha no se puede leer: se detiene igual.
+
+    Hereda de `IndiceNoDisponible` porque quien llama debe tratarlas igual.
+    `fichas` son pares (ruta relativa al índice, motivo).
+    """
+
+    def __init__(self, fichas: Sequence[tuple[str, str]]):
+        self.fichas = list(fichas)
+        nombradas = "; ".join(
+            f"{ruta} ({motivo})" for ruta, motivo in self.fichas[:MAX_FICHAS_NOMBRADAS]
+        )
+        resto = len(self.fichas) - MAX_FICHAS_NOMBRADAS
+        if resto > 0:
+            nombradas += f"; y {resto} más"
+        super().__init__(
+            f"fichas ilegibles o mal formadas en medsemiotics-db: {nombradas}",
+            "Con el índice incompleto, un criterio que se cumple podría leerse "
+            "como que no. Corrige las fichas o usa un clon sano.",
+        )
+
+
+class _FormaInvalida(ValueError):
+    """Motivo, apto para la respuesta de la API, de que una ficha no valga."""
+
+
+def _lista_de(datos: dict[str, Any], campo: str, tipo: type, donde: str = "") -> list:
+    """`datos[campo]` como lista de `tipo`; ausente o nulo es lista vacía."""
+    valor = datos.get(campo)
+    if valor is None:
+        return []
+    if not isinstance(valor, list) or not all(isinstance(v, tipo) for v in valor):
+        forma = "textos" if tipo is str else "mapas"
+        raise _FormaInvalida(f"`{donde}{campo}` no es una lista de {forma}")
+    return valor
+
+
+def _exigir_mapa(datos: dict[str, Any], campo: str, donde: str = "") -> None:
+    if datos.get(campo) is not None and not isinstance(datos[campo], dict):
+        raise _FormaInvalida(f"`{donde}{campo}` no es un mapa")
+
+
+def _leer_ficha(archivo: Path) -> dict[str, Any]:
+    """El contenido de una ficha, o `_FormaInvalida` con el motivo.
+
+    El motivo no repite la excepción original, que puede llevar rutas de la
+    máquina o trozos de la ficha; ésa va sólo al log.
+    """
+    try:
+        texto = archivo.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        logger.warning("No se pudo leer %s: %s", archivo, exc)
+        raise _FormaInvalida("no se pudo leer como UTF-8") from exc
+    try:
+        datos = yaml.safe_load(texto)
+    except Exception as exc:  # noqa: BLE001 - PyYAML no lanza sólo YAMLError
+        logger.warning("YAML inválido en %s: %s", archivo, exc)
+        raise _FormaInvalida("no es YAML válido") from exc
+
+    if not isinstance(datos, dict):
+        raise _FormaInvalida("vacía o no es un mapa")
+    for campo in ("id", "termino"):
+        if not isinstance(datos.get(campo), str) or not datos[campo].strip():
+            raise _FormaInvalida(f"sin un `{campo}` de texto")
+    _lista_de(datos, "sinonimos", str)
+    _exigir_mapa(datos, "codigos")
+    return datos
+
+
+def _validar_condicion(datos: dict[str, Any]) -> None:
+    """La forma de lo que el triaje lee de una condición, además de lo común.
+
+    Sin esto, parte de las fichas mal escritas no lanza nada: un texto donde va
+    una lista se recorre letra a letra, un signo sin `concepto` se salta y un
+    LR que no es un mapa se pierde.
+    """
+    _exigir_mapa(datos, "procedencia")
+
+    if "nucleo" in datos:
+        nucleo = datos["nucleo"]
+        if not isinstance(nucleo, dict):
+            raise _FormaInvalida("`nucleo` no es un mapa")
+        requeridos = _lista_de(nucleo, "requiere", str, "nucleo.")
+        alternativos = _lista_de(nucleo, "y_al_menos_uno_de", str, "nucleo.")
+        if not requeridos and not alternativos:
+            raise _FormaInvalida("`nucleo` no declara ningún criterio")
+
+    for escala in _lista_de(datos, "escalas", dict):
+        _lista_de(escala, "tramos", dict, "escalas.")
+
+    for signo in _lista_de(datos, "signos", dict):
+        if not isinstance(signo.get("concepto"), str) or not signo["concepto"]:
+            raise _FormaInvalida("hay un signo sin `concepto`")
+        if "rol" in signo and not isinstance(signo["rol"], str):
+            raise _FormaInvalida("`signos.rol` no es un texto")
+        for campo in ("lr_positivo", "lr_negativo"):
+            _exigir_mapa(signo, campo, "signos.")
+            lr = (signo.get(campo) or {}).get("valor")
+            if lr is not None and (
+                isinstance(lr, bool) or not isinstance(lr, int | float)
+            ):
+                raise _FormaInvalida(f"`signos.{campo}.valor` no es un número")
 
 
 def buscar_ruta_medsemiotics() -> Path | None:
@@ -249,23 +366,27 @@ class TriajeOntologico:
 
         ruta = self.exigir_indice()
         conceptos: dict[str, dict[str, Any]] = {}
-        for archivo in (ruta / "conceptos").glob("*.yaml"):
+        rotas: list[tuple[str, str]] = []
+        for archivo in sorted((ruta / "conceptos").glob("*.yaml")):
             try:
-                datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
-                cid = datos.get("id")
-                if cid:
-                    cid_str = str(cid).strip()
-                    info = {
-                        "id": cid_str,
-                        "termino": str(datos.get("termino") or ""),
-                        "sinonimos": datos.get("sinonimos") or [],
-                        "codigos": datos.get("codigos") or {},
-                    }
-                    conceptos[cid_str] = info
-                    # Alias sin dos puntos ("HM0202")
-                    conceptos[cid_str.replace(":", "")] = info
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Error leyendo concepto en %s: %s", archivo.name, exc)
+                datos = _leer_ficha(archivo)
+            except _FormaInvalida as exc:
+                rotas.append((f"conceptos/{archivo.name}", str(exc)))
+                continue
+            cid_str = datos["id"].strip()
+            info = {
+                "id": cid_str,
+                "termino": datos["termino"],
+                "sinonimos": datos.get("sinonimos") or [],
+                "codigos": datos.get("codigos") or {},
+            }
+            conceptos[cid_str] = info
+            # Alias sin dos puntos ("HM0202")
+            conceptos[cid_str.replace(":", "")] = info
+
+        if rotas:
+            # Sin cachear: corregida la ficha, el siguiente triaje la relee.
+            raise FichaIlegible(rotas)
 
         self._conceptos_cache = conceptos
         return conceptos
@@ -278,6 +399,7 @@ class TriajeOntologico:
         conceptos = self.cargar_conceptos()
         construcciones: list[ConstruccionDiagnostica] = []
         condiciones_vistas: set[str] = set()
+        rotas: list[tuple[str, str]] = []
 
         # 1. Cargar desde las skills activas en HolonMed (tienen frontmatter validado)
         if self.skills_manager:
@@ -455,12 +577,10 @@ class TriajeOntologico:
         # 2. Cargar desde medsemiotics-db/condiciones/*.yaml
         for archivo in sorted((self.exigir_indice() / "condiciones").glob("*.yaml")):
             try:
-                datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
-                cid = datos.get("id")
-                if not cid:
-                    continue
-                cid_str = str(cid).strip()
-                nombre_cond = str(datos.get("termino") or archivo.stem)
+                datos = _leer_ficha(archivo)
+                _validar_condicion(datos)
+                cid_str = datos["id"].strip()
+                nombre_cond = datos["termino"]
                 sinonimos = datos.get("sinonimos") or []
                 codigos = datos.get("codigos") or {}
                 proc = datos.get("procedencia") or {}
@@ -686,8 +806,16 @@ class TriajeOntologico:
                     construcciones.append(c_diag)
                     condiciones_vistas.add(cid_str)
 
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Error leyendo condición en %s: %s", archivo.name, exc)
+            except _FormaInvalida as exc:
+                rotas.append((f"condiciones/{archivo.name}", str(exc)))
+            except Exception:  # noqa: BLE001
+                # Una forma que la validación no previó. La ficha puede haber
+                # quedado cargada a medias: tampoco se sigue sin ella.
+                logger.warning("Error procesando %s", archivo, exc_info=True)
+                rotas.append((f"condiciones/{archivo.name}", "no se pudo procesar"))
+
+        if rotas:
+            raise FichaIlegible(rotas)
 
         self._construcciones_cache = construcciones
         return construcciones
