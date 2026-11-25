@@ -57,6 +57,9 @@ MODELOS = {
     "ResultadoTic": m.ResultadoTic,
     "ItemReceta": m.ItemReceta,
     "PropuestaReceta": m.PropuestaReceta,
+    "PropuestaCita": m.PropuestaCita,
+    "PropuestaPaciente": m.PropuestaPaciente,
+    "PropuestaTic": m.PropuestaTic,
 }
 
 # Los enums que el frontend reproduce como uniones de literales.

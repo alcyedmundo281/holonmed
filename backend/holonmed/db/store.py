@@ -147,6 +147,8 @@ class Database:
         ("infon", "valor", "REAL"),
         ("infon", "unidad", "TEXT"),
         ("infon", "poblacion", "TEXT"),
+        ("paciente", "alta_confirmada_por", "TEXT"),
+        ("cita", "confirmada_por", "TEXT"),
         (
             "paciente",
             "resumen_vivo",
@@ -416,13 +418,16 @@ class PacienteRepo:
             "telefono": datos.get("telefono"),
             "antecedentes": datos.get("antecedentes", "") or "",
             "creado": _ahora(),
+            "alta_confirmada_por": datos.get("alta_confirmada_por"),
         }
         try:
             with self._db._escritura:
                 cx = self._db.conexion()
                 cx.execute(
-                    """INSERT INTO paciente (id, nombre, edad, sexo, telefono, antecedentes, creado)
-                       VALUES (:id, :nombre, :edad, :sexo, :telefono, :antecedentes, :creado)""",
+                    """INSERT INTO paciente (id, nombre, edad, sexo, telefono,
+                                             antecedentes, creado, alta_confirmada_por)
+                       VALUES (:id, :nombre, :edad, :sexo, :telefono,
+                               :antecedentes, :creado, :alta_confirmada_por)""",
                     registro,
                 )
                 cx.commit()
@@ -1299,8 +1304,9 @@ class CitaRepo:
                     (datos["paciente_id"], datos["paciente_id"], _ahora()),
                 )
                 cursor = cx.execute(
-                    """INSERT INTO cita (paciente_id, fecha, interpretada, motivo, estado, creada)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    """INSERT INTO cita (paciente_id, fecha, interpretada, motivo,
+                                         estado, creada, confirmada_por)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
                         datos["paciente_id"],
                         datos["fecha"],
@@ -1308,6 +1314,7 @@ class CitaRepo:
                         datos.get("motivo", ""),
                         datos.get("estado", "agendada"),
                         _ahora(),
+                        datos.get("confirmada_por"),
                     ),
                 )
                 cx.commit()

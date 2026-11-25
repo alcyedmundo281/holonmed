@@ -661,16 +661,44 @@ export interface RecetaEmitida {
   aviso: string;
 }
 
+/** Una cita redactada que todavía no está en la agenda. */
+export interface PropuestaCita {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  fecha_texto: string;
+  fecha: string;
+  motivo: string;
+}
+
+/** Un alta redactada: el paciente todavía no existe. */
+export interface PropuestaPaciente {
+  propuesta_id: string;
+  texto_original: string;
+  nombre: string;
+}
+
+/** Un tic procesado que todavía no está en la historia. */
+export interface PropuestaTic {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  huella_historia: string;
+  tic: ResultadoTic;
+}
+
 export type RespuestaChat =
   | { tipo: 'texto'; datos: { respuesta: string } }
-  | { tipo: 'tic'; datos: ResultadoTic }
+  | { tipo: 'tic_propuesto'; datos: PropuestaTic }
   | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
-  | { tipo: 'agenda'; datos: { legible: string; motivo: string; estado: string } }
+  | { tipo: 'cita_propuesta'; datos: PropuestaCita }
+  | { tipo: 'paciente_propuesto'; datos: PropuestaPaciente }
   | {
       tipo: 'whatsapp';
       datos: { url: string; telefono: string; mensaje: string; aviso: string };
     }
-  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean; creado?: boolean }
+  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean }
   | { tipo: 'error'; mensaje: string };
 
 // Umbrales de presentación. Coinciden con el veredicto del backend.

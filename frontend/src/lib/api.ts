@@ -84,6 +84,33 @@ export const api = {
       }),
     }),
 
+  confirmarCita: (propuestaId: string, pacienteId: string, confirmadoPor: string) =>
+    pedir<{ id: string; confirmado_por: string }>('/api/citas/confirmar', {
+      method: 'POST',
+      body: JSON.stringify({
+        propuesta_id: propuestaId,
+        paciente_id: pacienteId,
+        confirmado_por: confirmadoPor,
+      }),
+    }),
+
+  // Sin paciente: es el que todavía no existe.
+  confirmarAlta: (propuestaId: string, confirmadoPor: string) =>
+    pedir<{ id: string; nombre: string; confirmado_por: string }>('/api/pacientes/confirmar', {
+      method: 'POST',
+      body: JSON.stringify({ propuesta_id: propuestaId, confirmado_por: confirmadoPor }),
+    }),
+
+  confirmarTic: (propuestaId: string, pacienteId: string, confirmadoPor: string) =>
+    pedir<{ tic_id: string; confirmado_por: string }>('/api/tics/confirmar', {
+      method: 'POST',
+      body: JSON.stringify({
+        propuesta_id: propuestaId,
+        paciente_id: pacienteId,
+        confirmado_por: confirmadoPor,
+      }),
+    }),
+
   pacientes: () => pedir<Paciente[]>('/api/pacientes'),
 
   crearPaciente: (datos: {
