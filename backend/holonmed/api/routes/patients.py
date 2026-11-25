@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ...core.cita import PeticionInvalida
 from ...models import CitaCreate, PacienteCreate
 from ..deps import AppContext, get_context
 
@@ -51,4 +52,13 @@ async def listar_citas(
 
 @router.post("/citas", status_code=201)
 async def crear_cita(datos: CitaCreate, ctx: AppContext = Depends(get_context)):
-    return ctx.agenda.agendar(datos.paciente_id, datos.fecha, datos.motivo)
+    # La agenda daría de alta la ficha que falte, con el identificador por nombre.
+    if ctx.pacientes.obtener(datos.paciente_id) is None:
+        raise HTTPException(404, "El paciente no está dado de alta. No se agendó nada.")
+    try:
+        cita = ctx.agenda.agendar(datos.paciente_id, datos.fecha, datos.motivo)
+    except PeticionInvalida as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not cita["id"]:
+        raise HTTPException(500, "No se pudo agendar. No se registró nada.")
+    return cita
