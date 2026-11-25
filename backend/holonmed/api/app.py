@@ -12,6 +12,7 @@ from .deps import AppContext
 from .routes import (
     chat,
     clinical,
+    confirmaciones,
     documents,
     episodios,
     facturacion,
@@ -76,6 +77,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(episodios.router)
     app.include_router(chat.router)
     app.include_router(recetas.router)
+    app.include_router(confirmaciones.router)
     app.include_router(patients.router)
     app.include_router(documents.router)
     app.include_router(graph.router)

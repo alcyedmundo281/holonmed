@@ -32,6 +32,25 @@ class SchedulingService:
             "motivo": motivo,
         }
 
+    def registrar(
+        self, paciente_id: str, fecha: datetime, motivo: str, confirmada_por: str
+    ) -> str | None:
+        """Escribe una cita ya aprobada, con la fecha que se enseñó.
+
+        No interpreta nada: reinterpretar «mañana» al confirmar podría dar
+        otro día que el aprobado.
+        """
+        return self.repo.crear(
+            {
+                "paciente_id": paciente_id,
+                "fecha": fecha.isoformat(),
+                "fecha_interpretada": True,
+                "motivo": motivo,
+                "estado": "agendada",
+                "confirmada_por": confirmada_por,
+            }
+        )
+
     @staticmethod
     def _interpretar(texto: str) -> datetime | None:
         """ "el próximo martes" -> datetime. Devuelve None si no se entiende."""

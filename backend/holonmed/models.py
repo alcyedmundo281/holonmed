@@ -1101,14 +1101,44 @@ class PropuestaReceta(BaseModel):
     indicaciones_generales: str = ""
 
 
-class ConfirmarReceta(BaseModel):
+class PropuestaCita(BaseModel):
+    """Una cita redactada que todavía no está en la agenda."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    fecha_texto: str = Field(description="La fecha tal como está escrita en el mensaje")
+    fecha: str = Field(description="Lo que se escribirá, en ISO y hora local")
+    motivo: str = Field(min_length=1)
+
+
+class PropuestaPaciente(BaseModel):
+    """Un alta redactada: el paciente todavía no existe."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    texto_original: str
+    nombre: str = Field(min_length=1)
+
+
+class PropuestaTic(BaseModel):
+    """Un tic procesado que todavía no está en la historia."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    huella_historia: str = Field(
+        description="Resumen de la historia contra la que se calculó el tic"
+    )
+    tic: ResultadoTic
+
+
+class ConfirmarAlta(BaseModel):
     """La aprobación. No admite contenido: sólo señala qué propuesta y quién."""
 
     model_config = ConfigDict(extra="forbid")
 
     propuesta_id: str = Field(min_length=1)
-    # Sin valor por defecto: la identidad del paciente no se presume.
-    paciente_id: str = Field(min_length=1)
     confirmado_por: str = Field(description="Nombre declarado de quien aprueba")
 
     @field_validator("confirmado_por")
@@ -1118,6 +1148,17 @@ class ConfirmarReceta(BaseModel):
         if not any(c.isalpha() for c in nombre):
             raise ValueError("La confirmación exige el nombre de quien aprueba")
         return nombre
+
+
+class ConfirmarEnPaciente(ConfirmarAlta):
+    """La aprobación de algo que se escribe sobre un paciente."""
+
+    # Sin valor por defecto: la identidad del paciente no se presume.
+    paciente_id: str = Field(min_length=1)
+
+
+class ConfirmarReceta(ConfirmarEnPaciente):
+    """La aprobación de una receta."""
 
 
 class PacienteCreate(BaseModel):
