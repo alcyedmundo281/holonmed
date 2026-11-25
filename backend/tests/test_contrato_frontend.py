@@ -53,6 +53,7 @@ MODELOS = {
     "ReaperturaDeIndagacion": m.ReaperturaDeIndagacion,
     "ProblemaAgrupado": m.ProblemaAgrupado,
     "AgrupacionDiagnostica": m.AgrupacionDiagnostica,
+    "SenalInstruccion": m.SenalInstruccion,
     "ResultadoTic": m.ResultadoTic,
 }
 

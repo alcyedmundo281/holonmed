@@ -376,6 +376,11 @@ export interface Promocion {
   traza: string[];
 }
 
+export interface SenalInstruccion {
+  categoria: string;
+  fragmento: string;
+}
+
 export interface ResultadoTic {
   tic_id: string | null;
   timestamp: string;
@@ -401,6 +406,8 @@ export interface ResultadoTic {
    */
   skill_version: string | null;
   resumen: string;
+  /** Con una sola señal el tic no valida nada. Vacío no es «texto confiable». */
+  instrucciones_detectadas: SenalInstruccion[];
   infones: Infon[];
   clasificacion: ResultadoClasificacion | null;
   inferencia: InferenciaBayesiana | null;
