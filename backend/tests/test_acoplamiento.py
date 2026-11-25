@@ -524,28 +524,23 @@ def test_la_identidad_exige_el_mismo_conjunto_de_infones(skill):
     assert ac.peso_evidencia_declarado > delta_bayesiano(inferencia)
 
 
-def test_la_identidad_exige_un_infon_por_dimension(skill):
-    """Tercera condición: dos infones sobre un mismo signo.
+def test_dos_infones_sobre_un_signo_no_rompen_la_identidad(skill):
+    """Bayes y este módulo eligen UN infón por signo con la misma función.
 
-    Bayes multiplica el LR dos veces; este módulo lo cuenta una. La
-    discrepancia no favorece a Bayes —contar dos veces la misma prueba es
-    doble contabilidad de la evidencia— pero corregirlo es cambiar el motor
-    bayesiano, no medir el acoplamiento. Queda fijado como comportamiento
-    conocido.
+    Antes Bayes multiplicaba el LR dos veces: doble contabilidad de la
+    evidencia, y una identidad que dejaba de cumplirse por un factor de 2.
     """
-    infones = [infon("Hiperlipasemia"), infon("Hiperlipasemia", confianza=90.0)]
+    nombre = "Hiperlipasemia (>3x)"
+    infones = [infon(nombre), infon(nombre, confianza=90.0)]
 
     inferencia = AntigenPresentingCell().calcular(
         {"edad": 50, "antecedentes": ""}, skill.para_bayes(), infones
     )
     ac = MedidorDeAcoplamiento().medir(skill, infones, inferencia)
 
-    # Tolerancia relativa y no absoluta: el delta se reconstruye desde una
-    # probabilidad redondeada a dos decimales, y con dos LR de 26.6 el
-    # posterior roza el techo, donde los odds son muy sensibles a ese
-    # redondeo. Lo que se afirma es el factor de 2, no el cuarto decimal.
+    assert len(inferencia.evidencia_utilizada) == 1
     assert delta_bayesiano(inferencia) == pytest.approx(
-        2 * ac.peso_evidencia_declarado, rel=1e-3
+        ac.peso_evidencia_declarado, rel=1e-3
     )
 
 
