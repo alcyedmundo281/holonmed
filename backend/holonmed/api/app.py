@@ -17,6 +17,7 @@ from .routes import (
     facturacion,
     graph,
     patients,
+    tutorial,
 )
 
 logging.basicConfig(
@@ -78,6 +79,8 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(documents.router)
     app.include_router(graph.router)
     app.include_router(facturacion.router)
+    if settings.modo_demo:
+        app.include_router(tutorial.router)
 
     @app.get("/health", tags=["sistema"])
     async def health():
