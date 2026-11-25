@@ -14,8 +14,9 @@ El vocabulario es deliberado y viene de la teoría que sostiene el sistema:
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _now() -> str:
@@ -124,6 +125,15 @@ class EstadoInfon(str, Enum):
     VALIDADO = "VALIDADO"  # Ontología y lógica coinciden. Utilizable.
     ALERTA = "ALERTA"  # Acierto ontológico, duda lógica. Requiere ojo humano.
     RUIDO = "RUIDO"  # Descartado. Probable alucinación del modelo.
+
+
+class SenalInstruccion(BaseModel):
+    """Un trozo de la narrativa que le habla al sistema y no del paciente."""
+
+    categoria: str
+    fragmento: str = Field(
+        description="Coincidencia sobre el texto aplanado: sin acentos y en minúsculas"
+    )
 
 
 class Infon(BaseModel):
@@ -886,6 +896,10 @@ class ResultadoTic(BaseModel):
         ),
     )
     resumen: str = ""
+    # Texto imperativo dirigido al sistema, detectado sin modelo en
+    # `core/entrada_no_confiable.py`. Con una sola señal el tic no valida
+    # nada. Vacío NO significa que el texto sea confiable.
+    instrucciones_detectadas: list[SenalInstruccion] = Field(default_factory=list)
     infones: list[Infon] = Field(default_factory=list)
     # `Any` para no importar de core y crear un ciclo; en la práctica es
     # un ResultadoClasificacion.
@@ -1066,6 +1080,85 @@ class CrystallizeRequest(BaseModel):
 class ChatRequest(BaseModel):
     mensaje: str = Field(min_length=1)
     paciente_id: str = "default"
+
+
+class ItemReceta(BaseModel):
+    """Un fármaco tal como se enseña para aprobar y como se escribe."""
+
+    farmaco: str = Field(min_length=1)
+    concentracion: str = ""
+    indicaciones: str = ""
+
+
+class PropuestaReceta(BaseModel):
+    """Una receta redactada que todavía no existe en el registro."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    items: list[ItemReceta] = Field(min_length=1)
+    indicaciones_generales: str = ""
+
+
+class PropuestaCita(BaseModel):
+    """Una cita redactada que todavía no está en la agenda."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    fecha_texto: str = Field(description="La fecha tal como está escrita en el mensaje")
+    fecha: str = Field(description="Lo que se escribirá, en ISO y hora local")
+    motivo: str = Field(min_length=1)
+
+
+class PropuestaPaciente(BaseModel):
+    """Un alta redactada: el paciente todavía no existe."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    texto_original: str
+    nombre: str = Field(min_length=1)
+
+
+class PropuestaTic(BaseModel):
+    """Un tic procesado que todavía no está en la historia."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    huella_historia: str = Field(
+        description="Resumen de la historia contra la que se calculó el tic"
+    )
+    tic: ResultadoTic
+
+
+class ConfirmarAlta(BaseModel):
+    """La aprobación. No admite contenido: sólo señala qué propuesta y quién."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    propuesta_id: str = Field(min_length=1)
+    confirmado_por: str = Field(description="Nombre declarado de quien aprueba")
+
+    @field_validator("confirmado_por")
+    @classmethod
+    def _con_nombre(cls, valor: str) -> str:
+        nombre = valor.strip()
+        if not any(c.isalpha() for c in nombre):
+            raise ValueError("La confirmación exige el nombre de quien aprueba")
+        return nombre
+
+
+class ConfirmarEnPaciente(ConfirmarAlta):
+    """La aprobación de algo que se escribe sobre un paciente."""
+
+    # Sin valor por defecto: la identidad del paciente no se presume.
+    paciente_id: str = Field(min_length=1)
+
+
+class ConfirmarReceta(ConfirmarEnPaciente):
+    """La aprobación de una receta."""
 
 
 class PacienteCreate(BaseModel):

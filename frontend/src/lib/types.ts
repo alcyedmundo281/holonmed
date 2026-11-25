@@ -376,6 +376,11 @@ export interface Promocion {
   traza: string[];
 }
 
+export interface SenalInstruccion {
+  categoria: string;
+  fragmento: string;
+}
+
 export interface ResultadoTic {
   tic_id: string | null;
   timestamp: string;
@@ -401,6 +406,8 @@ export interface ResultadoTic {
    */
   skill_version: string | null;
   resumen: string;
+  /** Con una sola señal el tic no valida nada. Vacío no es «texto confiable». */
+  instrucciones_detectadas: SenalInstruccion[];
   infones: Infon[];
   clasificacion: ResultadoClasificacion | null;
   inferencia: InferenciaBayesiana | null;
@@ -635,16 +642,68 @@ export interface EstadoSistema {
   };
 }
 
+export interface ItemReceta {
+  farmaco: string;
+  concentracion: string;
+  indicaciones: string;
+}
+
+/** Una receta redactada que todavía no existe en el registro. */
+export interface PropuestaReceta {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  items: ItemReceta[];
+  indicaciones_generales: string;
+}
+
+export interface RecetaEmitida {
+  url: string;
+  items: ItemReceta[];
+  tic_id: string;
+  confirmado_por: string;
+  aviso: string;
+}
+
+/** Una cita redactada que todavía no está en la agenda. */
+export interface PropuestaCita {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  fecha_texto: string;
+  fecha: string;
+  motivo: string;
+}
+
+/** Un alta redactada: el paciente todavía no existe. */
+export interface PropuestaPaciente {
+  propuesta_id: string;
+  texto_original: string;
+  nombre: string;
+}
+
+/** Un tic procesado que todavía no está en la historia. */
+export interface PropuestaTic {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  huella_historia: string;
+  tic: ResultadoTic;
+}
+
 export type RespuestaChat =
   | { tipo: 'texto'; datos: { respuesta: string } }
-  | { tipo: 'tic'; datos: ResultadoTic }
-  | { tipo: 'receta'; datos: { url: string; items: unknown[]; aviso: string } }
-  | { tipo: 'agenda'; datos: { legible: string; motivo: string; estado: string } }
+  | { tipo: 'tic_propuesto'; datos: PropuestaTic }
+  | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
+  | { tipo: 'cita_propuesta'; datos: PropuestaCita }
+  | { tipo: 'paciente_propuesto'; datos: PropuestaPaciente }
   | {
       tipo: 'whatsapp';
       datos: { url: string; telefono: string; mensaje: string; aviso: string };
     }
-  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean; creado?: boolean }
+  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean }
   | { tipo: 'error'; mensaje: string };
 
 // Umbrales de presentación. Coinciden con el veredicto del backend.

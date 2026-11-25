@@ -43,6 +43,9 @@ class Candidato:
     sistema: str
     termino: str
     score: float
+    # Sólo la trae la recuperación amplia, que es donde el validador la mira.
+    # `None` en un vocabulario que no la declara (una importación RF2).
+    semantica: str | None = None
 
 
 class TerminologyIndex:
@@ -134,6 +137,7 @@ class TerminologyIndex:
                     fila["sistema"],
                     fila["termino_preferente"],
                     score,
+                    fila["semantica"],
                 )
 
         ordenados = sorted(puntuados.values(), key=lambda c: c.score, reverse=True)
@@ -144,7 +148,7 @@ class TerminologyIndex:
         if not consulta:
             return []
         aql = """
-            SELECT t.concepto_id, t.texto, c.codigo, c.sistema,
+            SELECT t.concepto_id, t.texto, c.codigo, c.sistema, c.semantica,
                    c.termino AS termino_preferente
             FROM termino_fts f
             JOIN termino t ON t.id = f.rowid

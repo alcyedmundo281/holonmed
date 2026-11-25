@@ -48,6 +48,13 @@ COLISIONES_PROHIBIDAS: list[tuple[str, str]] = [
 ]
 
 
+# Conceptos que existen para ordenar la jerarquía. Se llega a ellos subiendo
+# por el grafo, no normalizando: llevar «Cáncer de páncreas» a «Enfermedad
+# del páncreas» borra justo lo que se afirmaba, y deja codificada una frase
+# que nadie escribió. Sólo se aceptan si el texto los nombra tal cual.
+SEMANTICAS_NO_ASIGNABLES = frozenset({"agrupacion", "raiz"})
+
+
 def hay_colision(texto_a: str, texto_b: str) -> str | None:
     """Detecta si dos términos son un emparejamiento clínicamente prohibido."""
     a, b = texto_a.lower(), texto_b.lower()
@@ -150,6 +157,14 @@ class OntologyValidator:
         # Un acierto exacto sobre el vocabulario no necesita arbitraje.
         if candidatos[0].score >= 100.0 and len(candidatos) == 1:
             return self._construir(candidatos[0], "exacto")
+
+        # Guarda dura, antes de que nadie elija: lo que no se ofrece al
+        # re-ranking no lo puede escoger, ni el fallback difuso tampoco.
+        candidatos = [
+            c for c in candidatos if c.semantica not in SEMANTICAS_NO_ASIGNABLES
+        ]
+        if not candidatos:
+            return Match.ruido(texto_candidato, "solo_agrupaciones")
 
         # CAPA 2 — Re-ranking semántico con auditoría clínica.
         match = await self._rerank_con_llm(candidato, candidatos)
