@@ -969,6 +969,14 @@ class ResultadoTic(BaseModel):
     )
 
     # --- Triaje determinista por criterios ontológicos (medsemiotics-db) ---
+    aviso_triaje: str | None = Field(
+        default=None,
+        description=(
+            "Se rellena cuando el triaje se detuvo, con el motivo. Entonces "
+            "`agrupaciones_triage` vacía NO dice que ningún criterio se "
+            "cumpla, sino que no se pudo mirar. None si el triaje corrió."
+        ),
+    )
     agrupaciones_triage: list[AgrupacionDiagnostica] = Field(
         default_factory=list,
         description=(

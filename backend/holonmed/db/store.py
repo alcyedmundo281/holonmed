@@ -127,6 +127,7 @@ class Database:
         ("tic", "sin_candidatas", "TEXT"),
         ("tic", "conceptos_no_cubiertos", "TEXT"),
         ("tic", "aviso_competencia", "TEXT"),
+        ("tic", "aviso_triaje", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("tic", "promocion", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
@@ -818,8 +819,9 @@ class TicRepo:
                                         ganadora_abductiva, triaje_coincide,
                                         triaje_en_candidatas, skill_triaje,
                                         sin_candidatas, conceptos_no_cubiertos,
-                                        aviso_competencia, reapertura, promocion)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                        aviso_competencia, aviso_triaje,
+                                        reapertura, promocion)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -855,6 +857,7 @@ class TicRepo:
                         if resultado.conceptos_no_cubiertos
                         else None,
                         resultado.aviso_competencia,
+                        resultado.aviso_triaje,
                         _json(resultado.reapertura),
                         _json(resultado.promocion),
                     ),
@@ -1023,12 +1026,18 @@ class TicRepo:
         contraria, y eso es inventar una tasa de error. Se devuelven en su
         propia clave para que el consumidor no pueda confundirlos con un
         cero, igual que `Historia.sin_ubicar`.
+
+        Con el triaje detenido `triaje_coincide` también es NULL, pero no
+        porque faltara competencia: esos tics van en `triaje_detenido`.
         """
         sql = """SELECT
                      SUM(CASE WHEN triaje_coincide = 1 THEN 1 ELSE 0 END) AS coinciden,
                      SUM(CASE WHEN triaje_coincide = 0 THEN 1 ELSE 0 END) AS discrepan,
-                     SUM(CASE WHEN triaje_coincide IS NULL THEN 1 ELSE 0 END)
+                     SUM(CASE WHEN triaje_coincide IS NULL
+                                   AND aviso_triaje IS NULL THEN 1 ELSE 0 END)
                          AS sin_competencia,
+                     SUM(CASE WHEN aviso_triaje IS NOT NULL THEN 1 ELSE 0 END)
+                         AS triaje_detenido,
                      SUM(CASE WHEN triaje_en_candidatas = 0 THEN 1 ELSE 0 END)
                          AS fuera_del_grafo,
                      COUNT(*) AS tics
@@ -1048,6 +1057,7 @@ class TicRepo:
             "coinciden": coinciden,
             "discrepan": discrepan,
             "sin_competencia": int(fila["sin_competencia"] or 0),
+            "triaje_detenido": int(fila["triaje_detenido"] or 0),
             # Subconjunto de `discrepan`, no una cuarta categoría: el tic
             # que el grafo no propuso siquiera discrepa además de eso. Se
             # cuenta aparte porque un prompt que elige entre lo que el

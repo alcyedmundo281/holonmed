@@ -3,11 +3,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..config import Settings, get_settings
+from ..core.triaje import IndiceNoDisponible
 from .deps import AppContext
 from .routes import (
     chat,
@@ -70,6 +72,11 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["*"],
     )
+
+    # 503 y no `[]`: la lista vacía se leería como «ningún criterio se cumple».
+    @app.exception_handler(IndiceNoDisponible)
+    async def triaje_detenido(request: Request, exc: IndiceNoDisponible) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     app.include_router(clinical.router)
     app.include_router(episodios.router)

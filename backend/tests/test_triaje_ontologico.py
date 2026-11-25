@@ -7,8 +7,10 @@ Verifica que el triaje:
 4. Distingue criterios cumplidos, parciales y sospechas iniciales.
 
 Las pruebas marcadas con `requiere_indice` comprueban criterios que sólo
-declara `medsemiotics-db` y se saltan si no está; el resto sale de las skills
-del propio repositorio. CI lo clona y no permite el salto (ver `conftest.py`).
+declara `medsemiotics-db` y se saltan si no está; CI lo clona y no permite el
+salto. El resto comprueba criterios que salen de las skills del propio
+repositorio y usa `indice_minimo`, porque sin ningún índice el triaje se detiene
+(ver `test_triaje_sin_indice.py`).
 """
 
 from pathlib import Path
@@ -75,6 +77,7 @@ def test_carga_construcciones_con_pmid(triaje: TriajeOntologico) -> None:
     assert len(parkinson.items) > 0
 
 
+@pytest.mark.usefixtures("indice_minimo")
 def test_agrupar_pancreatitis_criterios_atlanta(triaje: TriajeOntologico) -> None:
     """Pancreatitis aguda: 2 de 3 criterios de Atlanta cumplidos deterministamente."""
     problemas = [
@@ -163,6 +166,7 @@ def test_agrupar_faringitis_centor_con_pmid(triaje: TriajeOntologico) -> None:
     assert len(faringitis.problemas_agrupados) >= 2
 
 
+@pytest.mark.usefixtures("indice_minimo")
 def test_agrupar_sindrome_coronario_agudo(triaje: TriajeOntologico) -> None:
     """SCA: dolor torácico + descenso ST con PMID 26547467 (Fanaroff 2015)."""
     problemas = [
@@ -186,6 +190,7 @@ def test_agrupar_sindrome_coronario_agudo(triaje: TriajeOntologico) -> None:
     assert st_prob.lr_positivo == 5.3
 
 
+@pytest.mark.usefixtures("indice_minimo")
 @pytest.mark.asyncio
 async def test_triaje_skill_manager_determinista_sin_llm(
     skills_manager: SkillManager,
@@ -242,6 +247,7 @@ class IndexEco:
         return {"HM:0201", "HM:0730", "HM:0202"}
 
 
+@pytest.mark.usefixtures("indice_minimo")
 @pytest.mark.asyncio
 async def test_pipeline_etapa1_registra_agrupaciones(tmp_path: Path) -> None:
     """El pipeline registra agrupaciones_triage con criterios de consenso y PMID."""

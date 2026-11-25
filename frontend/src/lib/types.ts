@@ -472,6 +472,13 @@ export interface ResultadoTic {
   todas_vetadas: string | null;
 
   /**
+   * Por qué el triaje se detuvo (falta el índice). Si viene relleno,
+   * `agrupaciones_triage` vacía no dice que ningún criterio se cumpla, sino
+   * que no se pudo mirar. `null` si el triaje corrió.
+   */
+  aviso_triaje: string | null;
+
+  /**
    * Agrupaciones diagnósticas de la lista de problemas por criterios ontológicos de consenso (medsemiotics-db).
    */
   agrupaciones_triage: AgrupacionDiagnostica[];

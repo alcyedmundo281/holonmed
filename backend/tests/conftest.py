@@ -8,6 +8,24 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
+@pytest.fixture
+def indice_minimo(tmp_path_factory, monkeypatch):
+    """Un índice sintético que se lee y no aporta ninguna construcción.
+
+    Para las pruebas del pipeline que no tratan del índice: sin ninguno el
+    triaje se detiene, y con éste corre igual en cualquier máquina.
+    """
+    raiz = tmp_path_factory.mktemp("indice")
+    for carpeta, ficha in (
+        ("conceptos", "id: 'HM:9999'\ntermino: Concepto de prueba\n"),
+        ("condiciones", "id: 'HM:9998'\ntermino: Condición de prueba\n"),
+    ):
+        (raiz / carpeta).mkdir()
+        (raiz / carpeta / "prueba.yaml").write_text(ficha, encoding="utf-8")
+    monkeypatch.setenv("HOLONMED_MEDSEMIOTICS_DIR", str(raiz))
+    return raiz
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_makereport(item, call):
     """Con `HOLONMED_EXIGIR_INDICE=1`, saltarse por falta de índice es un fallo.

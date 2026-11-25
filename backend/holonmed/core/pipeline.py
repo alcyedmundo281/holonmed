@@ -37,6 +37,7 @@ from .clasificacion import Clasificador
 from .duda import ReabridorDeIndagacion
 from .promocion import EvaluadorDePromocion
 from .skills import Skill, SkillManager
+from .triaje import IndiceNoDisponible
 from .validator import OntologyValidator
 from .veredicto import EvaluadorDeVeredicto
 from .verifier import ClinicalVerifier
@@ -350,12 +351,25 @@ class CrystallizationPipeline:
         # sobre la lista de problemas del paciente (o texto). No se fía a
         # "inteligencia" (un prompt libre).
         problemas_paciente = list(holon.linea_tiempo) if holon.linea_tiempo else []
-        agrupaciones_triage = self.skills.triaje_agrupar(
-            problemas_paciente if problemas_paciente else texto
-        )
+        #
+        # Sin el índice el triaje se detiene: el tic sale sin agrupaciones,
+        # dice por qué, y no se elige protocolo —se lee con el genérico, salvo
+        # que quien llama fuerce uno—. El tic no se pierde: la extracción no
+        # depende del índice.
+        agrupaciones_triage = []
+        aviso_triaje = None
+        try:
+            agrupaciones_triage = self.skills.triaje_agrupar(
+                problemas_paciente if problemas_paciente else texto
+            )
+        except IndiceNoDisponible as exc:
+            aviso_triaje = str(exc)
+            logger.warning("%s", aviso_triaje)
 
         if skill_forzada:
             triaje = self.skills.cargar_o_defecto(skill_forzada)
+        elif aviso_triaje:
+            triaje = self.skills.cargar_o_defecto(None)
         else:
             try:
                 nombre = await self.skills.triaje(
@@ -370,8 +384,10 @@ class CrystallizationPipeline:
             texto_original=texto,
             skill_activa=triaje.nombre,
             skill_version=triaje.version,
-            skill_triaje=triaje.nombre,
+            # None con el triaje detenido: no eligió nada que registrar.
+            skill_triaje=None if aviso_triaje else triaje.nombre,
             agrupaciones_triage=agrupaciones_triage,
+            aviso_triaje=aviso_triaje,
         )
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
@@ -695,8 +711,7 @@ class CrystallizationPipeline:
             resultado.sin_candidatas = SinCandidatas.NADA_VALIDADO
             logger.warning(
                 "La lectura inicial no validó ni un solo hallazgo: la abducción "
-                "no tuvo de qué partir, y el protocolo '%s' lo eligió el "
-                "triaje solo.",
+                "no tuvo de qué partir, y el tic corre con '%s' sin ella.",
                 resultado.skill_activa,
             )
             return
@@ -741,8 +756,12 @@ class CrystallizationPipeline:
         # que propuso. Esto dice que no propuso ésta en absoluto, que es
         # otra cosa: el prompt eligió fuera de lo que el paciente sugiere.
         propuestas = {c.nombre for c in candidatas}
-        resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
-        if not resultado.triaje_en_candidatas:
+        # Con el triaje detenido no hay elección suya que comparar: registrarla
+        # metería el protocolo por defecto en la tasa que autoriza
+        # `abduccion_decide`.
+        if not resultado.aviso_triaje:
+            resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
+        if resultado.triaje_en_candidatas is False:
             logger.warning(
                 "El triaje eligió '%s', que el grafo NO propuso. Propuso: %s. "
                 "No se cambia el protocolo: sólo se registra.",
@@ -804,20 +823,23 @@ class CrystallizationPipeline:
             return
 
         resultado.ganadora_abductiva = ganadora.skill
-        resultado.triaje_coincide = ganadora.skill == resultado.skill_activa
+        if not resultado.aviso_triaje:
+            resultado.triaje_coincide = ganadora.skill == resultado.skill_activa
         resultado.aviso_competencia = aviso
         if aviso:
             logger.warning("%s", aviso)
 
         logger.info(
             "Competencia abductiva: %d candidatas, gana '%s' (%s %.4f); "
-            "el triaje dijo '%s' — %s",
+            "protocolo en uso '%s' — %s",
             len(resultado.competencia),
             ganadora.skill,
             ganadora.lectura,
             ganadora.clave,
             resultado.skill_activa,
-            "coinciden" if resultado.triaje_coincide else "DISCREPAN",
+            {True: "coinciden", False: "DISCREPAN", None: "triaje detenido"}[
+                resultado.triaje_coincide
+            ],
         )
 
     @staticmethod
