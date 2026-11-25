@@ -169,12 +169,14 @@ async def holon_de_fondo(
                 "subjetivo": list(b.subjetivo),
                 "objetivo": list(b.objetivo),
                 "derivado": list(b.derivado),
+                "ausente": list(b.ausente),
             }
             for b in fondo.bloques
         ],
         # Lo que no cayó bajo ningún problema. No se descarta: lo que no
         # esté en el fondo no llegará nunca al médico.
         "sin_sintetizar": list(fondo.sin_sintetizar),
+        "negativos": list(fondo.negativos),
         "al_dia": fondo.al_dia,
         "impresion": {
             "imprime": decision.imprime,

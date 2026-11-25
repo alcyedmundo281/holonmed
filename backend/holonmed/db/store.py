@@ -296,13 +296,13 @@ class GraphRepo:
         return [f["id"] for f in filas]
 
     def cohorte(self, codigo: str, sistema: str) -> list[sqlite3.Row]:
-        """Pacientes con algún hallazgo validado bajo una rama del grafo."""
+        """Pacientes con algún hallazgo validado y presente bajo una rama."""
         aql = """
             SELECT p.id, p.nombre, COUNT(DISTINCT i.id) AS hallazgos,
                    MAX(i.timestamp) AS ultimo
             FROM infon i
             JOIN paciente p ON p.id = i.paciente_id
-            WHERE i.estado = 'VALIDADO'
+            WHERE i.estado = 'VALIDADO' AND i.polaridad = 'presente'
               AND i.concepto_id IN (
                   SELECT a.descendiente_id FROM ancestro a
                   JOIN concepto c ON c.id = a.ancestro_id
@@ -331,6 +331,7 @@ class GraphRepo:
                       COUNT(i.id) AS apariciones
                FROM infon i JOIN concepto c ON c.id = i.concepto_id
                WHERE i.paciente_id = ? AND i.estado = 'VALIDADO'
+                 AND i.polaridad = 'presente'
                GROUP BY c.id ORDER BY apariciones DESC LIMIT ?""",
             (paciente_id, limite),
         ).fetchall()
@@ -685,6 +686,7 @@ class EpisodioRepo:
                     """SELECT termino
                          FROM infon
                         WHERE paciente_id = ? AND estado = 'VALIDADO' AND tic_id <= ?
+                          AND polaridad = 'presente'
                         GROUP BY COALESCE(codigo, termino)""",
                     (paciente_id, ultimo_id),
                 ).fetchall()
@@ -1198,22 +1200,49 @@ class TicRepo:
         }
 
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
-        """Lista de problemas: conceptos validados, agrupados y fechados.
+        """Lista de problemas: conceptos validados y presentes, agrupados y fechados.
 
         Es la vista que un clínico mira primero. Se deduplica por concepto
         y se conserva la primera y la última vez que apareció, que es la
         información que dice si algo es agudo o arrastrado.
+
+        LO NEGADO NO ES UN PROBLEMA. Un concepto entra sólo si alguna vez
+        constó presente, y las ausencias no cuentan como apariciones ni
+        mueven sus fechas. «Sin ictericia» está validado —es evidencia, y
+        resta en la inferencia— pero no abre «Ictericia».
+
+        UNA AUSENCIA POSTERIOR NO RESUELVE NADA. Si el concepto constó
+        presente y después ausente, sigue en la lista: que una nota no lo
+        encuentre no es que alguien lo haya dado por resuelto (la fiebre
+        cede con el antipirético, un signo es intermitente). Esa ausencia
+        viaja en `consta_ausente` —la fecha de la última registrada en el
+        mismo tic que la última presencia o en uno posterior— para que la
+        vea quien sí puede decidir. Si vuelve a constar presente en un tic
+        posterior queda en `None`; el infón de la ausencia no se toca.
         """
         filas = self._db.conexion().execute(
-            """SELECT termino, codigo, sistema, cie10, linaje,
-                      COUNT(*) AS apariciones,
-                      MIN(timestamp) AS primera,
-                      MAX(timestamp) AS ultima,
-                      MAX(confianza) AS confianza
-               FROM infon
-               WHERE paciente_id = ? AND estado = 'VALIDADO'
-               GROUP BY COALESCE(codigo, termino)
-               ORDER BY ultima DESC""",
+            """WITH problema AS (
+                   SELECT COALESCE(codigo, termino) AS clave,
+                          paciente_id, termino, codigo, sistema, cie10, linaje,
+                          COUNT(*) AS apariciones,
+                          MIN(timestamp) AS primera,
+                          MAX(timestamp) AS ultima,
+                          MAX(confianza) AS confianza,
+                          MAX(tic_id) AS ultimo_tic
+                     FROM infon
+                    WHERE paciente_id = ? AND estado = 'VALIDADO'
+                      AND polaridad = 'presente'
+                    GROUP BY COALESCE(codigo, termino)
+               )
+               SELECT p.termino, p.codigo, p.sistema, p.cie10, p.linaje,
+                      p.apariciones, p.primera, p.ultima, p.confianza,
+                      (SELECT MAX(a.timestamp) FROM infon a
+                        WHERE a.paciente_id = p.paciente_id
+                          AND a.estado = 'VALIDADO' AND a.polaridad = 'ausente'
+                          AND COALESCE(a.codigo, a.termino) = p.clave
+                          AND a.tic_id >= p.ultimo_tic) AS consta_ausente
+                 FROM problema p
+                ORDER BY p.ultima DESC""",
             (paciente_id,),
         )
         return [dict(f) for f in filas]
