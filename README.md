@@ -298,6 +298,15 @@ El proyecto usa nombres deliberados, y merece la pena entenderlos:
 
 ---
 
+### El triaje necesita el índice
+
+El triaje por criterios de consenso lee
+[`medsemiotics-db`](https://github.com/alcyedmundo281/medsemiotics-db). El
+sistema arranca sin él, pero **el triaje se detiene**: sus dos endpoints
+responden 503 y cada tic sale sin agrupaciones, con el motivo en
+`aviso_triaje`, y leído con `general_triage` salvo que se fuerce un protocolo.
+Una lista vacía se leería como «ningún criterio se cumple».
+
 ## Protocolos clínicos (*skills*)
 
 Un protocolo es un Markdown con frontmatter YAML. La prosa instruye al

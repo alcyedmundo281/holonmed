@@ -16,6 +16,11 @@ Los problemas se agrupan bajo las construcciones diagnósticas correspondientes:
 - Tupla bayesiana de Weed (manifestación, prueba sensible, prueba específica).
 - Escalas clínicas validadas y reglas de predicción clínica.
 - Trazabilidad y procedencia completa: fuente del consenso y PMID.
+
+SIN EL ÍNDICE EL TRIAJE SE DETIENE (`IndiceNoDisponible`). Las skills sólo
+aportan una fracción de las construcciones, y agrupar con ellas devolvería una
+lista vacía —o más corta— que se lee como «ningún criterio se cumple» cuando lo
+cierto es «no se pudo mirar».
 """
 
 from __future__ import annotations
@@ -83,11 +88,32 @@ def _extraer_pmid(texto: str) -> str | None:
     return m.group(1) if m else None
 
 
+class IndiceNoDisponible(RuntimeError):
+    """No hay índice del que leer los criterios: el triaje se detiene.
+
+    El mensaje llega a la respuesta de la API y se guarda en el tic, así que
+    no incluye rutas de la máquina; éstas van sólo al log.
+    """
+
+    def __init__(self, causa: str):
+        super().__init__(
+            f"Triaje detenido: {causa}. Sin el índice medsemiotics-db no se puede "
+            "saber qué criterios de consenso se cumplen, y una lista vacía se "
+            "leería como «ninguno». Clónalo junto a este repositorio o apunta "
+            "HOLONMED_MEDSEMIOTICS_DIR a un clon."
+        )
+
+
 def buscar_ruta_medsemiotics() -> Path | None:
-    """Localiza el repositorio medsemiotics-db en el entorno."""
+    """Localiza el repositorio medsemiotics-db en el entorno.
+
+    Si `HOLONMED_MEDSEMIOTICS_DIR` está definida, manda: apuntando a algo que
+    no es un directorio no se busca otro clon, porque sería leer de un índice
+    distinto del que se pidió.
+    """
     env_dir = os.environ.get("HOLONMED_MEDSEMIOTICS_DIR")
-    if env_dir and Path(env_dir).is_dir():
-        return Path(env_dir)
+    if env_dir:
+        return Path(env_dir) if Path(env_dir).is_dir() else None
 
     # Rutas relativas habituales en el workspace de trabajo
     # holonmed/backend/holonmed/core/triaje.py -> parents[3] es la raíz donde conviven repos
@@ -195,30 +221,51 @@ class TriajeOntologico:
         self._conceptos_cache: dict[str, dict[str, Any]] | None = None
         self._construcciones_cache: list[ConstruccionDiagnostica] | None = None
 
+    def exigir_indice(self) -> Path:
+        """La ruta del índice, o `IndiceNoDisponible` si no se puede leer."""
+        ruta = self.ruta_medsemiotics
+        if ruta is None:
+            raise IndiceNoDisponible(
+                "HOLONMED_MEDSEMIOTICS_DIR no apunta a un directorio"
+                if os.environ.get("HOLONMED_MEDSEMIOTICS_DIR")
+                else "no se encontró ningún clon"
+            )
+        vacias = [
+            nombre
+            for nombre in ("conceptos", "condiciones")
+            if not any((ruta / nombre).glob("*.yaml"))
+        ]
+        if vacias:
+            logger.warning("Índice incompleto en %s", ruta)
+            raise IndiceNoDisponible(
+                f"el índice localizado no tiene fichas en {' ni en '.join(vacias)}"
+            )
+        return ruta
+
     def cargar_conceptos(self) -> dict[str, dict[str, Any]]:
         """Carga y cachea los conceptos de medsemiotics-db/conceptos."""
         if self._conceptos_cache is not None:
             return self._conceptos_cache
 
+        ruta = self.exigir_indice()
         conceptos: dict[str, dict[str, Any]] = {}
-        if self.ruta_medsemiotics and (self.ruta_medsemiotics / "conceptos").is_dir():
-            for archivo in (self.ruta_medsemiotics / "conceptos").glob("*.yaml"):
-                try:
-                    datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
-                    cid = datos.get("id")
-                    if cid:
-                        cid_str = str(cid).strip()
-                        info = {
-                            "id": cid_str,
-                            "termino": str(datos.get("termino") or ""),
-                            "sinonimos": datos.get("sinonimos") or [],
-                            "codigos": datos.get("codigos") or {},
-                        }
-                        conceptos[cid_str] = info
-                        # Alias sin dos puntos ("HM0202")
-                        conceptos[cid_str.replace(":", "")] = info
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Error leyendo concepto en %s: %s", archivo.name, exc)
+        for archivo in (ruta / "conceptos").glob("*.yaml"):
+            try:
+                datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
+                cid = datos.get("id")
+                if cid:
+                    cid_str = str(cid).strip()
+                    info = {
+                        "id": cid_str,
+                        "termino": str(datos.get("termino") or ""),
+                        "sinonimos": datos.get("sinonimos") or [],
+                        "codigos": datos.get("codigos") or {},
+                    }
+                    conceptos[cid_str] = info
+                    # Alias sin dos puntos ("HM0202")
+                    conceptos[cid_str.replace(":", "")] = info
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Error leyendo concepto en %s: %s", archivo.name, exc)
 
         self._conceptos_cache = conceptos
         return conceptos
@@ -406,250 +453,241 @@ class TriajeOntologico:
                         condiciones_vistas.add(cond_id)
 
         # 2. Cargar desde medsemiotics-db/condiciones/*.yaml
-        if self.ruta_medsemiotics and (self.ruta_medsemiotics / "condiciones").is_dir():
-            for archivo in sorted(
-                (self.ruta_medsemiotics / "condiciones").glob("*.yaml")
-            ):
-                try:
-                    datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
-                    cid = datos.get("id")
-                    if not cid:
-                        continue
-                    cid_str = str(cid).strip()
-                    nombre_cond = str(datos.get("termino") or archivo.stem)
-                    sinonimos = datos.get("sinonimos") or []
-                    codigos = datos.get("codigos") or {}
-                    proc = datos.get("procedencia") or {}
-                    fuente_proc = (
-                        str(proc.get("fuente") or "") if isinstance(proc, dict) else ""
-                    )
-                    skill_asoc = MAPA_CONDICION_SKILL.get(cid_str)
+        for archivo in sorted((self.exigir_indice() / "condiciones").glob("*.yaml")):
+            try:
+                datos = yaml.safe_load(archivo.read_text(encoding="utf-8")) or {}
+                cid = datos.get("id")
+                if not cid:
+                    continue
+                cid_str = str(cid).strip()
+                nombre_cond = str(datos.get("termino") or archivo.stem)
+                sinonimos = datos.get("sinonimos") or []
+                codigos = datos.get("codigos") or {}
+                proc = datos.get("procedencia") or {}
+                fuente_proc = (
+                    str(proc.get("fuente") or "") if isinstance(proc, dict) else ""
+                )
+                skill_asoc = MAPA_CONDICION_SKILL.get(cid_str)
 
-                    # a) Núcleo obligatorio (ej. HM:6015 Parkinson)
-                    if "nucleo" in datos and cid_str not in condiciones_vistas:
-                        nuc_data = datos["nucleo"]
-                        ref_str = str(nuc_data.get("ref") or fuente_proc)
-                        pmid_nuc = _extraer_pmid(ref_str)
-                        req_list = nuc_data.get("requiere") or []
-                        alt_list = nuc_data.get("y_al_menos_uno_de") or []
+                # a) Núcleo obligatorio (ej. HM:6015 Parkinson)
+                if "nucleo" in datos and cid_str not in condiciones_vistas:
+                    nuc_data = datos["nucleo"]
+                    ref_str = str(nuc_data.get("ref") or fuente_proc)
+                    pmid_nuc = _extraer_pmid(ref_str)
+                    req_list = nuc_data.get("requiere") or []
+                    alt_list = nuc_data.get("y_al_menos_uno_de") or []
 
-                        items_nuc = []
-                        for req in req_list:
-                            cinfo = conceptos.get(req) or conceptos.get(
-                                req.replace(":", "")
-                            )
-                            t_ref = [req]
-                            nom = req
-                            if cinfo:
-                                nom = cinfo["termino"]
-                                t_ref.append(cinfo["termino"])
-                                t_ref.extend(cinfo.get("sinonimos", []))
-                            items_nuc.append(
-                                ItemCriterio(
-                                    nombre=nom,
-                                    rol="nucleo",
-                                    conceptos=[req],
-                                    terminos_referencia=t_ref,
-                                    ref_pmid=pmid_nuc,
-                                )
-                            )
-
-                        for alt in alt_list:
-                            cinfo = conceptos.get(alt) or conceptos.get(
-                                alt.replace(":", "")
-                            )
-                            t_ref = [alt]
-                            nom = alt
-                            if cinfo:
-                                nom = cinfo["termino"]
-                                t_ref.append(cinfo["termino"])
-                                t_ref.extend(cinfo.get("sinonimos", []))
-                            items_nuc.append(
-                                ItemCriterio(
-                                    nombre=nom,
-                                    rol="nucleo",
-                                    conceptos=[alt],
-                                    terminos_referencia=t_ref,
-                                    ref_pmid=pmid_nuc,
-                                )
-                            )
-
-                        construcciones.append(
-                            ConstruccionDiagnostica(
-                                condicion_id=cid_str,
-                                termino=nombre_cond,
-                                sinonimos=sinonimos,
-                                codigos=codigos,
-                                skill_nombre=skill_asoc,
-                                tipo_criterio="nucleo",
-                                consenso_nombre="Criterios clínicos de consenso (Núcleo)",
-                                fuente=ref_str or fuente_proc,
-                                pmid=pmid_nuc,
-                                requiere=len(req_list) + (1 if alt_list else 0),
-                                items=items_nuc,
-                                nucleo_requerido=req_list,
-                                nucleo_al_menos_uno=alt_list,
-                            )
-                        )
-                        condiciones_vistas.add(cid_str)
-
-                    # b) Escalas diagnósticas declaradas (ej. Centor, McIsaac, HEART, Wells)
-                    for esc in datos.get("escalas") or []:
-                        esc_nom = str(esc.get("nombre") or "Escala de consenso")
-                        tramos = esc.get("tramos") or []
-                        pmids_esc: list[str] = []
-                        for tramo in tramos:
-                            pmid_t = _extraer_pmid(str(tramo.get("ref") or ""))
-                            if pmid_t:
-                                pmids_esc.append(pmid_t)
-                        pmid_final = (
-                            pmids_esc[0]
-                            if pmids_esc
-                            else _extraer_pmid(
-                                str(esc.get("componentes_declarados") or "")
+                    items_nuc = []
+                    for req in req_list:
+                        cinfo = conceptos.get(req) or conceptos.get(req.replace(":", ""))
+                        t_ref = [req]
+                        nom = req
+                        if cinfo:
+                            nom = cinfo["termino"]
+                            t_ref.append(cinfo["termino"])
+                            t_ref.extend(cinfo.get("sinonimos", []))
+                        items_nuc.append(
+                            ItemCriterio(
+                                nombre=nom,
+                                rol="nucleo",
+                                conceptos=[req],
+                                terminos_referencia=t_ref,
+                                ref_pmid=pmid_nuc,
                             )
                         )
 
-                        # Parsear componentes declarados
-                        comp_decl = str(esc.get("componentes_declarados") or "")
-                        items_esc: list[ItemCriterio] = []
-
-                        # Signos de la condición asociados
-                        for s_data in datos.get("signos") or []:
-                            cid_s = s_data.get("concepto")
-                            if not cid_s:
-                                continue
-                            cinfo = conceptos.get(cid_s) or conceptos.get(
-                                str(cid_s).replace(":", "")
-                            )
-                            t_ref = [str(cid_s)]
-                            nom_s = str(cid_s)
-                            if cinfo:
-                                nom_s = cinfo["termino"]
-                                t_ref.append(cinfo["termino"])
-                                t_ref.extend(cinfo.get("sinonimos", []))
-
-                            lr_pos = (
-                                s_data.get("lr_positivo", {}).get("valor")
-                                if isinstance(s_data.get("lr_positivo"), dict)
-                                else None
-                            )
-                            lr_neg = (
-                                s_data.get("lr_negativo", {}).get("valor")
-                                if isinstance(s_data.get("lr_negativo"), dict)
-                                else None
-                            )
-                            ref_pmid_s = None
-                            if isinstance(s_data.get("lr_positivo"), dict):
-                                ref_pmid_s = _extraer_pmid(
-                                    str(s_data["lr_positivo"].get("ref") or "")
-                                )
-
-                            items_esc.append(
-                                ItemCriterio(
-                                    nombre=nom_s,
-                                    rol=s_data.get("rol", "apoyo"),
-                                    conceptos=[str(cid_s)],
-                                    terminos_referencia=t_ref,
-                                    lr_positivo=lr_pos,
-                                    lr_negativo=lr_neg,
-                                    ref_pmid=ref_pmid_s or pmid_final,
-                                    nota=str(s_data.get("decision") or ""),
-                                )
-                            )
-
-                        construcciones.append(
-                            ConstruccionDiagnostica(
-                                condicion_id=cid_str,
-                                termino=nombre_cond,
-                                sinonimos=sinonimos,
-                                codigos=codigos,
-                                skill_nombre=skill_asoc,
-                                tipo_criterio="escala",
-                                consenso_nombre=esc_nom,
-                                fuente=comp_decl or fuente_proc,
-                                pmid=pmid_final or _extraer_pmid(fuente_proc),
-                                requiere=2,
-                                items=items_esc,
+                    for alt in alt_list:
+                        cinfo = conceptos.get(alt) or conceptos.get(alt.replace(":", ""))
+                        t_ref = [alt]
+                        nom = alt
+                        if cinfo:
+                            nom = cinfo["termino"]
+                            t_ref.append(cinfo["termino"])
+                            t_ref.extend(cinfo.get("sinonimos", []))
+                        items_nuc.append(
+                            ItemCriterio(
+                                nombre=nom,
+                                rol="nucleo",
+                                conceptos=[alt],
+                                terminos_referencia=t_ref,
+                                ref_pmid=pmid_nuc,
                             )
                         )
-                        condiciones_vistas.add(cid_str)
 
-                    # c) Si no ha entrado aún, registrar su construcción bayesiana con signos y PMID
-                    if cid_str not in condiciones_vistas and datos.get("signos"):
-                        items_signos = []
-                        pmids_cond = []
-                        for s_data in datos.get("signos") or []:
-                            cid_s = s_data.get("concepto")
-                            if not cid_s:
-                                continue
-                            cinfo = conceptos.get(cid_s) or conceptos.get(
-                                str(cid_s).replace(":", "")
-                            )
-                            t_ref = [str(cid_s)]
-                            nom_s = str(cid_s)
-                            if cinfo:
-                                nom_s = cinfo["termino"]
-                                t_ref.append(cinfo["termino"])
-                                t_ref.extend(cinfo.get("sinonimos", []))
-
-                            lr_pos = (
-                                s_data.get("lr_positivo", {}).get("valor")
-                                if isinstance(s_data.get("lr_positivo"), dict)
-                                else None
-                            )
-                            lr_neg = (
-                                s_data.get("lr_negativo", {}).get("valor")
-                                if isinstance(s_data.get("lr_negativo"), dict)
-                                else None
-                            )
-                            ref_pmid_s = None
-                            if isinstance(s_data.get("lr_positivo"), dict):
-                                ref_pmid_s = _extraer_pmid(
-                                    str(s_data["lr_positivo"].get("ref") or "")
-                                )
-                            elif isinstance(s_data.get("lr_negativo"), dict):
-                                ref_pmid_s = _extraer_pmid(
-                                    str(s_data["lr_negativo"].get("ref") or "")
-                                )
-                            if ref_pmid_s:
-                                pmids_cond.append(ref_pmid_s)
-
-                            items_signos.append(
-                                ItemCriterio(
-                                    nombre=nom_s,
-                                    rol=s_data.get("rol", "apoyo"),
-                                    conceptos=[str(cid_s)],
-                                    terminos_referencia=t_ref,
-                                    lr_positivo=lr_pos,
-                                    lr_negativo=lr_neg,
-                                    ref_pmid=ref_pmid_s,
-                                    nota=str(s_data.get("decision") or ""),
-                                )
-                            )
-
-                        pmid_gral = (
-                            pmids_cond[0] if pmids_cond else _extraer_pmid(fuente_proc)
-                        )
-                        c_diag = ConstruccionDiagnostica(
+                    construcciones.append(
+                        ConstruccionDiagnostica(
                             condicion_id=cid_str,
                             termino=nombre_cond,
                             sinonimos=sinonimos,
                             codigos=codigos,
                             skill_nombre=skill_asoc,
-                            tipo_criterio="tupla",
-                            consenso_nombre=f"Criterios de {nombre_cond}",
-                            fuente=fuente_proc
-                            or str(datos.get("conclusion_de_la_fuente") or ""),
-                            pmid=pmid_gral,
-                            requiere=2,
-                            items=items_signos,
+                            tipo_criterio="nucleo",
+                            consenso_nombre="Criterios clínicos de consenso (Núcleo)",
+                            fuente=ref_str or fuente_proc,
+                            pmid=pmid_nuc,
+                            requiere=len(req_list) + (1 if alt_list else 0),
+                            items=items_nuc,
+                            nucleo_requerido=req_list,
+                            nucleo_al_menos_uno=alt_list,
                         )
-                        construcciones.append(c_diag)
-                        condiciones_vistas.add(cid_str)
+                    )
+                    condiciones_vistas.add(cid_str)
 
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Error leyendo condición en %s: %s", archivo.name, exc)
+                # b) Escalas diagnósticas declaradas (ej. Centor, McIsaac, HEART, Wells)
+                for esc in datos.get("escalas") or []:
+                    esc_nom = str(esc.get("nombre") or "Escala de consenso")
+                    tramos = esc.get("tramos") or []
+                    pmids_esc: list[str] = []
+                    for tramo in tramos:
+                        pmid_t = _extraer_pmid(str(tramo.get("ref") or ""))
+                        if pmid_t:
+                            pmids_esc.append(pmid_t)
+                    pmid_final = (
+                        pmids_esc[0]
+                        if pmids_esc
+                        else _extraer_pmid(str(esc.get("componentes_declarados") or ""))
+                    )
+
+                    # Parsear componentes declarados
+                    comp_decl = str(esc.get("componentes_declarados") or "")
+                    items_esc: list[ItemCriterio] = []
+
+                    # Signos de la condición asociados
+                    for s_data in datos.get("signos") or []:
+                        cid_s = s_data.get("concepto")
+                        if not cid_s:
+                            continue
+                        cinfo = conceptos.get(cid_s) or conceptos.get(
+                            str(cid_s).replace(":", "")
+                        )
+                        t_ref = [str(cid_s)]
+                        nom_s = str(cid_s)
+                        if cinfo:
+                            nom_s = cinfo["termino"]
+                            t_ref.append(cinfo["termino"])
+                            t_ref.extend(cinfo.get("sinonimos", []))
+
+                        lr_pos = (
+                            s_data.get("lr_positivo", {}).get("valor")
+                            if isinstance(s_data.get("lr_positivo"), dict)
+                            else None
+                        )
+                        lr_neg = (
+                            s_data.get("lr_negativo", {}).get("valor")
+                            if isinstance(s_data.get("lr_negativo"), dict)
+                            else None
+                        )
+                        ref_pmid_s = None
+                        if isinstance(s_data.get("lr_positivo"), dict):
+                            ref_pmid_s = _extraer_pmid(
+                                str(s_data["lr_positivo"].get("ref") or "")
+                            )
+
+                        items_esc.append(
+                            ItemCriterio(
+                                nombre=nom_s,
+                                rol=s_data.get("rol", "apoyo"),
+                                conceptos=[str(cid_s)],
+                                terminos_referencia=t_ref,
+                                lr_positivo=lr_pos,
+                                lr_negativo=lr_neg,
+                                ref_pmid=ref_pmid_s or pmid_final,
+                                nota=str(s_data.get("decision") or ""),
+                            )
+                        )
+
+                    construcciones.append(
+                        ConstruccionDiagnostica(
+                            condicion_id=cid_str,
+                            termino=nombre_cond,
+                            sinonimos=sinonimos,
+                            codigos=codigos,
+                            skill_nombre=skill_asoc,
+                            tipo_criterio="escala",
+                            consenso_nombre=esc_nom,
+                            fuente=comp_decl or fuente_proc,
+                            pmid=pmid_final or _extraer_pmid(fuente_proc),
+                            requiere=2,
+                            items=items_esc,
+                        )
+                    )
+                    condiciones_vistas.add(cid_str)
+
+                # c) Si no ha entrado aún, registrar su construcción bayesiana con signos y PMID
+                if cid_str not in condiciones_vistas and datos.get("signos"):
+                    items_signos = []
+                    pmids_cond = []
+                    for s_data in datos.get("signos") or []:
+                        cid_s = s_data.get("concepto")
+                        if not cid_s:
+                            continue
+                        cinfo = conceptos.get(cid_s) or conceptos.get(
+                            str(cid_s).replace(":", "")
+                        )
+                        t_ref = [str(cid_s)]
+                        nom_s = str(cid_s)
+                        if cinfo:
+                            nom_s = cinfo["termino"]
+                            t_ref.append(cinfo["termino"])
+                            t_ref.extend(cinfo.get("sinonimos", []))
+
+                        lr_pos = (
+                            s_data.get("lr_positivo", {}).get("valor")
+                            if isinstance(s_data.get("lr_positivo"), dict)
+                            else None
+                        )
+                        lr_neg = (
+                            s_data.get("lr_negativo", {}).get("valor")
+                            if isinstance(s_data.get("lr_negativo"), dict)
+                            else None
+                        )
+                        ref_pmid_s = None
+                        if isinstance(s_data.get("lr_positivo"), dict):
+                            ref_pmid_s = _extraer_pmid(
+                                str(s_data["lr_positivo"].get("ref") or "")
+                            )
+                        elif isinstance(s_data.get("lr_negativo"), dict):
+                            ref_pmid_s = _extraer_pmid(
+                                str(s_data["lr_negativo"].get("ref") or "")
+                            )
+                        if ref_pmid_s:
+                            pmids_cond.append(ref_pmid_s)
+
+                        items_signos.append(
+                            ItemCriterio(
+                                nombre=nom_s,
+                                rol=s_data.get("rol", "apoyo"),
+                                conceptos=[str(cid_s)],
+                                terminos_referencia=t_ref,
+                                lr_positivo=lr_pos,
+                                lr_negativo=lr_neg,
+                                ref_pmid=ref_pmid_s,
+                                nota=str(s_data.get("decision") or ""),
+                            )
+                        )
+
+                    pmid_gral = (
+                        pmids_cond[0] if pmids_cond else _extraer_pmid(fuente_proc)
+                    )
+                    c_diag = ConstruccionDiagnostica(
+                        condicion_id=cid_str,
+                        termino=nombre_cond,
+                        sinonimos=sinonimos,
+                        codigos=codigos,
+                        skill_nombre=skill_asoc,
+                        tipo_criterio="tupla",
+                        consenso_nombre=f"Criterios de {nombre_cond}",
+                        fuente=fuente_proc
+                        or str(datos.get("conclusion_de_la_fuente") or ""),
+                        pmid=pmid_gral,
+                        requiere=2,
+                        items=items_signos,
+                    )
+                    construcciones.append(c_diag)
+                    condiciones_vistas.add(cid_str)
+
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Error leyendo condición en %s: %s", archivo.name, exc)
 
         self._construcciones_cache = construcciones
         return construcciones

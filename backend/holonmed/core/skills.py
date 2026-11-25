@@ -1648,6 +1648,10 @@ class SkillManager:
         criterios diagnósticos de consenso en medsemiotics-db y las skills
         (Atlanta, MDS, Centor, etc.), agrupando determinísticamente por evidencia
         con PMID en lugar de depender de 'inteligencia' (un prompt).
+
+        Sin el índice lanza `IndiceNoDisponible` y NO cae al respaldo por LLM:
+        ése es para cuando se miraron los criterios y ninguno aplicó. Usarlo
+        sin haberlos mirado pondría el prompt en el sitio del consenso.
         """
         disponibles = self.listar()
         if not disponibles:
