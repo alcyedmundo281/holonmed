@@ -35,6 +35,7 @@ from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .duda import ReabridorDeIndagacion
+from .entrada_no_confiable import AVISO_RESUMEN, detectar_instrucciones
 from .promocion import EvaluadorDePromocion
 from .skills import Skill, SkillManager
 from .validator import OntologyValidator
@@ -373,6 +374,9 @@ class CrystallizationPipeline:
             skill_triaje=triaje.nombre,
             agrupaciones_triage=agrupaciones_triage,
         )
+        # Determinista y sobre el texto crudo: no depende de lo que ningún
+        # modelo haya entendido de él.
+        resultado.instrucciones_detectadas = detectar_instrucciones(texto)
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
         # El interruptor gobierna la FORMA del tic y no sólo quién vota.
@@ -393,6 +397,8 @@ class CrystallizationPipeline:
         resultado.resumen = resumen
         if not extraidos:
             logger.info("Sin hallazgos extraíbles en el tic")
+            if resultado.instrucciones_detectadas:
+                self._retener(resultado)
             return resultado
 
         hints_base = base.hints_snomed()
@@ -400,6 +406,16 @@ class CrystallizationPipeline:
             infon = await self._validar_hallazgo(crudo, texto, base, hints_base)
             if infon:
                 resultado.infones.append(infon)
+
+        # Con texto dirigido al sistema el tic termina aquí. El extractor y
+        # el auditor leyeron la narrativa entera, así que ninguno de sus
+        # veredictos sirve, y no se puede saber hasta dónde alcanzó la
+        # orden: la cita del hallazgo inducido no tiene por qué contenerla.
+        # Y nada de lo que sigue —competencia, clasificación, Bayes (que lee
+        # la narrativa cruda para el a priori)— debe correr sobre ella.
+        if resultado.instrucciones_detectadas:
+            self._retener(resultado)
+            return resultado
 
         # --- ETAPA 3: LA COMPETENCIA ABDUCTIVA, que ahora decide ------
         # Corre sobre el conjunto común y ANTES de la clasificación: la
@@ -532,6 +548,33 @@ class CrystallizationPipeline:
             logger.exception("Evaluador de promoción falló; el tic sigue en pie")
 
         return resultado
+
+    @staticmethod
+    def _retener(resultado: ResultadoTic) -> None:
+        """Fallo cerrado ante una narrativa con texto dirigido al sistema.
+
+        Los hallazgos no se borran: quedan en ALERTA, a la vista de quien
+        revisa y fuera de la línea de tiempo, que sólo carga VALIDADO. El
+        resumen del modelo se sustituye entero —es texto libre que nadie
+        valida y que se persiste— y el aviso no repite nada de la narrativa.
+        Las agrupaciones del triaje salen del mismo texto y se retiran.
+        """
+        categorias = ", ".join(
+            sorted({s.categoria for s in resultado.instrucciones_detectadas})
+        )
+        logger.warning(
+            "Texto dirigido al sistema en la narrativa (%s): el tic no valida nada",
+            categorias,
+        )
+        resultado.resumen = AVISO_RESUMEN
+        resultado.agrupaciones_triage = []
+        for infon in resultado.infones:
+            if infon.estado == EstadoInfon.VALIDADO:
+                infon.estado = EstadoInfon.ALERTA
+            infon.razon_auditoria = (
+                f"{infon.razon_auditoria}; retenido: texto dirigido al sistema "
+                f"en la narrativa ({categorias})"
+            )
 
     def _elegir_hipotesis(
         self,

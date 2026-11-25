@@ -1,10 +1,13 @@
 """El tutorial sólo existe en modo demo, y no abre un segundo camino al modelo."""
 
+import re
+
 from fastapi.testclient import TestClient
 
 from holonmed.api.app import crear_app
 from holonmed.api.routes.tutorial import PAGINA
 from holonmed.config import Settings
+from holonmed.core.entrada_no_confiable import detectar_instrucciones
 
 
 def _cliente(modo_demo: bool) -> TestClient:
@@ -59,3 +62,17 @@ def test_una_medida_ausente_no_se_pinta_como_cero():
     assert "Number(c.clave)" not in pagina
     assert "medida(c.clave)" in pagina
     assert '"sin medida"' in pagina
+
+
+def test_solo_el_caso_trampa_del_guion_dispara_el_detector_y_la_pagina_lo_dice():
+    """Si el detector marcara un caso normal, el paso entero quedaría retenido
+    delante del público; y si la página no leyera la señal, daría otra causa."""
+    pagina = PAGINA.read_text(encoding="utf-8")
+    bloque = pagina[pagina.index("const CASOS = {") : pagina.index("const PASOS")]
+    casos = dict(
+        re.findall(r'(\w+): \{\s*protocolo: "[^"]+",\s*texto: "([^"]+)"', bloque)
+    )
+    assert len(casos) == 4
+    for nombre, texto in casos.items():
+        assert bool(detectar_instrucciones(texto)) is (nombre == "trampa"), nombre
+    assert "instrucciones_detectadas" in pagina

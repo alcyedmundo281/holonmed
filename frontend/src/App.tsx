@@ -239,6 +239,28 @@ export default function App() {
                       )}
                     </div>
 
+                    {tic.instrucciones_detectadas.length > 0 && (
+                      <section
+                        role="alert"
+                        className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 shadow-sm"
+                      >
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          La narrativa contiene texto dirigido al sistema
+                        </h3>
+                        <p className="text-sm text-amber-900">
+                          Ningún hallazgo queda validado y no se calcula inferencia.
+                          Revisa el texto original.
+                        </p>
+                        <ul className="text-xs text-amber-900 mt-2 list-disc pl-5">
+                          {tic.instrucciones_detectadas.map((s) => (
+                            <li key={`${s.categoria}:${s.fragmento}`}>
+                              {s.categoria}: «{s.fragmento}»
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+
                     <section className="bg-white border border-slate-200 rounded-lg p-4">
                       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                         Narrativa y evidencia
@@ -251,6 +273,11 @@ export default function App() {
                       />
                       {tic.resumen && (
                         <p className="text-sm text-slate-600 italic mt-3 pt-3 border-t border-slate-100">
+                          {tic.instrucciones_detectadas.length === 0 && (
+                            <span className="not-italic text-xs text-slate-400">
+                              Resumen del modelo, sin validar:{' '}
+                            </span>
+                          )}
                           {tic.resumen}
                         </p>
                       )}

@@ -81,8 +81,12 @@ class PrescriptionService:
 
             farmaco = str(item.get("farmaco") or item.get("drug") or "Fármaco")
             dosis = str(item.get("concentracion") or item.get("concentration") or "")
+            # Un hueco se dice como hueco: «según criterio» sería una
+            # indicación que nadie dio ni vio al aprobar.
             indicacion = str(
-                item.get("indicaciones") or item.get("instructions") or "Según criterio"
+                item.get("indicaciones")
+                or item.get("instructions")
+                or "(no especificada)"
             )
 
             c.setFont("Helvetica-Bold", 12)
@@ -122,7 +126,15 @@ class PrescriptionService:
             "firma del profesional responsable, que asume la decisión clínica.",
         )
 
-        c.save()
+        existia = ruta.exists()
+        try:
+            c.save()
+        except Exception:
+            # Un PDF a medias no puede quedar descargable. El que ya estaba
+            # (mismo nombre en el mismo segundo) no se borra: no es de éste.
+            if not existia:
+                ruta.unlink(missing_ok=True)
+            raise
         logger.info("Receta generada: %s", ruta.name)
         return ruta
 

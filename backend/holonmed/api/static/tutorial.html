@@ -250,7 +250,7 @@ const PASOS = [
   { id: "trampa", titulo: "La trampa", abrir() {
     presentarCaso("trampa", "Una nota con una orden escondida",
       "El texto de un expediente es entrada no confiable. Esta nota intenta dar órdenes: un diagnóstico falso y una receta. ¿Qué cree que pasará con cada una?",
-      "En un ensayo previo la receta quedó descartada, pero la afirmación falsa sobre el páncreas se validó como hallazgo: el validador comprueba que el texto lo diga, no que sea verdad. Es una limitación real. El resultado de hoy puede variar.");
+      "El aviso sale de una lista fija de formas conocidas de órdenes, en español e inglés, sin preguntarle al modelo. No es infalible: una paráfrasis, otro idioma o una orden redactada como prosa clínica pueden pasar sin señal. Que no haya aviso no vuelve confiable el texto.");
   } },
   { id: "libre", titulo: "Su turno", abrir() {
     decir([
@@ -467,8 +467,24 @@ $("redactor").addEventListener("submit", (e) => {
 
 function pintarResultado(dato, texto) {
   const infones = dato.infones || [];
-  if (!infones.length) {
+  if (!infones.length && !(dato.instrucciones_detectadas || []).length) {
     decir(p("El sistema no obtuvo ningún hallazgo de este texto. Eso no significa que no los haya: lo que el modelo no extrae, el sistema no puede verlo."));
+    return;
+  }
+  const senales = dato.instrucciones_detectadas || [];
+  if (senales.length) {
+    /* El sistema retiene el tic entero: no hay probabilidad, y la causa no es que
+       el protocolo carezca de modelo. */
+    decir([
+      el("div", { class: "cuidado" }, "El sistema detectó en la nota texto dirigido a él. No validó nada de este envío: los hallazgos quedan en alerta, para revisión humana, y no calculó probabilidad."),
+      p("Lo que disparó el aviso (texto aplanado, sin acentos):"),
+      el("ul", {}, senales.map((s) => el("li", {}, String(s.categoria).replace(/_/g, " "), ": «", s.fragmento, "»"))),
+      el("div", { class: "fila" }, boton("Siguiente paso del recorrido", () => {
+        const pendiente = PASOS.find((x) => !hechos.has(x.id));
+        irA(pendiente ? pendiente.id : "libre");
+      })),
+    ], "ancho");
+    pintarHallazgos(infones, texto);
     return;
   }
   pintarHallazgos(infones, texto);

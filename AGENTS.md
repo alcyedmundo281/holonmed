@@ -103,8 +103,10 @@ Este apartado existe para que el contrato no mienta. Son requisitos vigentes, si
   pero nadie registra las *lecturas*, y ninguna tabla está protegida contra reescritura.
 - **No hay tabla de política.** Las operaciones expuestas al modelo no se consultan contra una
   decisión declarada con su razón.
-- **No hay aprobación humana nombrada.** `confirmar_cargo` es lo más cercano, y confirma un cargo,
-  no una escritura en el expediente.
+- **La aprobación humana nombrada sólo cubre lo que se pide por chat.** `/api/chat` no escribe:
+  receta, cita, alta de paciente y tic se proponen, y su ruta de confirmación exige el nombre de
+  quien aprueba, que es declarado, no autenticado. Las rutas directas de cristalización, citas y
+  pacientes, y las de laboratorio, episodios, órdenes y cargos, siguen escribiendo sin ella.
 
 Cerrarlos es trabajo pendiente. Mientras tanto, ningún cambio puede alejarlos más.
 
