@@ -8,6 +8,7 @@ El nombre es **declarado, no autenticado**: sin identidad en el sistema, deja
 constancia de quién dice haber aprobado, y no lo demuestra.
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ...models import ConfirmarReceta, OrigenTic, ResultadoTic
 from ..deps import AppContext, get_context
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["recetas"])
 
 
@@ -37,7 +39,13 @@ async def confirmar_receta(
     ctx.propuestas_receta.retirar(propuesta.propuesta_id)
     items = [item.model_dump() for item in propuesta.items]
 
-    ruta = ctx.recetas.generar(items, propuesta.paciente_nombre)
+    try:
+        ruta = ctx.recetas.generar(items, propuesta.paciente_nombre)
+    except Exception as exc:  # noqa: BLE001 — todavía no hay nada registrado
+        # Sólo la clase: el mensaje de un OSError lleva la ruta, y la ruta
+        # lleva el nombre del paciente.
+        logger.error("Falló la generación del PDF: %s", type(exc).__name__)
+        ruta = None
     if not ruta:
         ctx.propuestas_receta.guardar(propuesta)
         raise HTTPException(500, "No se pudo generar el PDF. No se registró nada.")

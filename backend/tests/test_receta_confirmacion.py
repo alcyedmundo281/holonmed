@@ -323,3 +323,26 @@ def test_las_propuestas_pendientes_no_crecen_sin_limite(entorno):
 
     assert almacen.ver("0") is None
     assert almacen.ver(str(MAX_PENDIENTES)) is not None
+
+
+@pytest.mark.parametrize("error", [OSError, ValueError])
+def test_si_el_pdf_revienta_la_propuesta_sigue_pendiente(entorno, monkeypatch, error):
+    """El disco lleno falla al guardar, con el PDF quizá a medias."""
+    from reportlab.pdfgen.canvas import Canvas
+
+    cliente, ctx = entorno
+    propuesta_id = _pedir(cliente)["datos"]["propuesta_id"]
+
+    def revienta(lienzo):
+        with open(lienzo._filename, "wb") as a_medias:
+            a_medias.write(b"%PDF")
+        raise error("fallo sintético")
+
+    with monkeypatch.context() as parche:
+        parche.setattr(Canvas, "save", revienta)
+        respuesta = _confirmar(cliente, propuesta_id)
+
+    assert respuesta.status_code == 500
+    assert "No se registró nada" in respuesta.json()["detail"]
+    _nada_escrito(ctx)
+    assert _confirmar(cliente, propuesta_id).status_code == 201

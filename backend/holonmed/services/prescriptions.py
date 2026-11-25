@@ -126,7 +126,15 @@ class PrescriptionService:
             "firma del profesional responsable, que asume la decisión clínica.",
         )
 
-        c.save()
+        existia = ruta.exists()
+        try:
+            c.save()
+        except Exception:
+            # Un PDF a medias no puede quedar descargable. El que ya estaba
+            # (mismo nombre en el mismo segundo) no se borra: no es de éste.
+            if not existia:
+                ruta.unlink(missing_ok=True)
+            raise
         logger.info("Receta generada: %s", ruta.name)
         return ruta
 
