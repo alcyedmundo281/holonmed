@@ -18,10 +18,10 @@ juntos para que otro sistema decida. Aquí los fragmentos son infones.
 
 import logging
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, NamedTuple
 
-from ..models import InferenciaBayesiana, Infon
+from ..models import InferenciaBayesiana, Infon, Polaridad
 
 logger = logging.getLogger(__name__)
 
@@ -207,15 +207,41 @@ class AntigenPresentingCell:
         mapa_signos = self._mapa_signos(skill_json)
         evidencia: list[str] = []
 
+        # Se resuelve contra TODO lo que el protocolo declara y después se
+        # mira si el signo trae cociente. Resolver sólo contra los que lo
+        # traen haría que un hallazgo que nombra un signo sin LR cayera en
+        # otro que sí lo tiene.
+        vocabulario = self._vocabulario(skill_json)
+        pares: list[tuple[str, Infon]] = []
         for infon in infones:
             # Sólo evidencia validada mueve la probabilidad. Un hallazgo en
             # ALERTA o RUIDO se muestra al clínico pero no entra al cálculo.
             if not infon.es_valido:
                 continue
+            clave = emparejar_infon(infon, vocabulario)
+            if clave is not None and clave in mapa_signos:
+                pares.append((clave, infon))
 
-            etiqueta = emparejar_termino(infon.termino, mapa_signos)
-            if etiqueta is None:
+        # Un signo, una vez: dos menciones de la misma observación no son dos
+        # pruebas independientes y su LR no se multiplica dos veces.
+        elegidos = elegir_por_signo(pares)
+        for clave, infon in pares:
+            if infon is elegidos[clave]:
                 continue
+            nombre_signo = mapa_signos[clave].nombre
+            if infon.polaridad is not elegidos[clave].polaridad:
+                traza.append(
+                    f"'{nombre_signo}': registro contradictorio — se descarta "
+                    f"'{infon.termino}' ({infon.polaridad.value}) y manda la "
+                    f"observación más reciente"
+                )
+            else:
+                traza.append(
+                    f"'{nombre_signo}': dos observaciones del mismo signo — se "
+                    f"cuenta UNA vez y se descarta '{infon.termino}'"
+                )
+
+        for etiqueta, infon in elegidos.items():
             signo = mapa_signos[etiqueta]
 
             if signo.tramos:
@@ -383,52 +409,142 @@ class AntigenPresentingCell:
         return mapa
 
     @staticmethod
-    def _mapa_likelihood_ratios(
-        skill_json: dict[str, Any],
-    ) -> dict[str, tuple[float | None, float | None]]:
-        """Término -> (LR+, LR-). Ambos opcionales."""
-        mapa: dict[str, tuple[float | None, float | None]] = {}
-        for signo in skill_json.get("signDetected", []) or []:
-            if not isinstance(signo, dict):
-                continue
-            nombre = signo.get("name")
-            if not nombre:
-                continue
-            positivo = _recortar(signo.get("bayes_lr"), nombre, "LR+")
-            negativo = _recortar(signo.get("bayes_lr_negativo"), nombre, "LR-")
-            if positivo is None and negativo is None:
-                continue
-            mapa[str(nombre).lower()] = (positivo, negativo)
-        return mapa
-
-    @staticmethod
-    def _buscar_lr(termino: str, mapa: dict[str, tuple[float | None, float | None]]):
-        """Empareja el término normalizado con un LR del protocolo."""
-        clave = emparejar_termino(termino, mapa)
-        if clave is None:
-            return None, ""
-        return mapa[clave], clave
+    def _vocabulario(skill_json: dict[str, Any]) -> dict[str, dict[str, str]]:
+        """Todo signo declarado, lleve LR o no, con sus códigos."""
+        declarados: list[tuple[str, Mapping[str, Any]]] = []
+        for lista in ("vocabulario", "signDetected"):
+            for item in skill_json.get(lista, []) or []:
+                if not isinstance(item, dict):
+                    continue
+                nombre = item.get("name") or item.get("nombre") or item.get("analito")
+                if nombre:
+                    declarados.append((str(nombre), item.get("codigos") or {}))
+        return construir_vocabulario(declarados)
 
 
-def emparejar_termino(termino: str, mapa: dict[str, Any]) -> str | None:
-    """Localiza la clave del protocolo que corresponde a un término clínico.
+# --- Emparejamiento término ↔ signo ---------------------------------------
+#
+# PARÁMETRO DE SEGURIDAD. Vive aquí, y no duplicado en cada consumidor, porque
+# Bayes, el veredicto declarado, la promoción y el medidor de acoplamiento
+# tienen que emparejar **igual**: Φ lee la dirección del mismo vector cuya
+# magnitud lee Bayes, y si poblaran ese vector con criterios distintos la
+# relación entre las dos métricas dejaría de ser cierta.
+#
+# La regla anterior era contención de subcadena en las dos direcciones. Con
+# ella «Dolor torácico» heredaba el LR de «Dolor torácico irradiado a ambos
+# brazos», «Tos» emparejaba con «Vómitos» y la cadena vacía con cualquiera.
 
-    Vive aquí, y no duplicada en cada consumidor, porque el motor bayesiano
-    y el medidor de acoplamiento tienen que emparejar **igual**: Φ lee la
-    dirección del mismo vector cuya magnitud lee Bayes, y si los dos
-    módulos poblaran ese vector con criterios distintos la relación entre
-    las dos métricas dejaría de ser cierta.
+# Lo que puede seguir a la clave para que el resto sea un calificador suyo. El
+# guion no está: «AUDIT-C» no es un «AUDIT» con apellido, es otro instrumento.
+_TRAS_LA_CLAVE = " ,;:("
+
+
+def _normalizar(texto: str) -> str:
+    return " ".join(str(texto).lower().split())
+
+
+def emparejar_termino(termino: str, mapa: Mapping[str, Any]) -> str | None:
+    """La clave que nombra el término, o una que el término especifica.
+
+    Sólo dos casos emparejan:
+
+    * el mismo nombre, salvo mayúsculas y espacios;
+    * el término **empieza** por la clave, en palabras completas, y añade
+      calificadores: «Odinofagia intensa» es un caso de «Odinofagia».
+
+    Nunca al revés: un término genérico no hereda lo que el protocolo declara
+    de uno específico, porque eso afirma un dato que nadie observó. Tampoco
+    basta con que la clave aparezca en medio: «Sensación de frío previa al
+    síncope» no es un síncope y «Antecedente de disnea» no es disnea.
+
+    No es un analizador de lenguaje: un calificador pospuesto que niegue
+    («Disnea descartada») sigue emparejando. La polaridad se resuelve en la
+    extracción y llega en `Infon.polaridad`.
     """
-    objetivo = termino.lower()
-    if objetivo in mapa:
-        return objetivo
-    # Coincidencia por contención: "hiperamilasemia (>3x)" contra
-    # "hiperamilasemia". Se prefiere la clave más larga, que es la más
-    # específica de las que encajan.
-    candidatas = [clave for clave in mapa if clave in objetivo or objetivo in clave]
+    objetivo = _normalizar(termino)
+    claves = {_normalizar(clave): clave for clave in mapa}
+    if not objetivo:
+        return None
+    if objetivo in claves:
+        return claves[objetivo]
+    candidatas = [
+        normal
+        for normal in claves
+        if normal
+        and objetivo.startswith(normal)
+        and objetivo[len(normal)] in _TRAS_LA_CLAVE
+    ]
     if candidatas:
-        return max(candidatas, key=len)
+        return claves[max(candidatas, key=len)]
     return None
+
+
+def construir_vocabulario(
+    declarados: Iterable[tuple[str, Mapping[str, Any]]],
+) -> dict[str, dict[str, str]]:
+    """Nombre en minúsculas -> códigos, de cada signo que el protocolo declara."""
+    vocabulario: dict[str, dict[str, str]] = {}
+    for nombre, codigos in declarados:
+        entrada = vocabulario.setdefault(nombre.lower(), {})
+        entrada.update({str(s): str(c) for s, c in codigos.items()})
+    return vocabulario
+
+
+def emparejar_infon(
+    infon: Infon, vocabulario: Mapping[str, Mapping[str, str]]
+) -> str | None:
+    """El signo declarado al que corresponde un infón, o None.
+
+    `vocabulario` debe ser el protocolo ENTERO: quien sólo mire un subconjunto
+    filtra el resultado, no la entrada. En este orden:
+
+    1. el mismo nombre;
+    2. el mismo código, que es identidad declarada por el protocolo y la
+       ontología («Hiperlipasemia» y «Hiperlipasemia (>3x)» son HM:0732). Si
+       el código nombra más de un signo no se elige ninguno;
+    3. el término especifica a la clave, **sólo si consta presente**. Que
+       falte «X irradiado» no dice que falte «X», y aplicarle su LR− bajaría
+       la probabilidad con una ausencia que nadie documentó.
+    """
+    clave = emparejar_termino(infon.termino, vocabulario)
+    if clave is not None and _normalizar(clave) == _normalizar(infon.termino):
+        return clave
+    if infon.codigo and infon.sistema:
+        mismas = [
+            k for k, c in vocabulario.items() if c.get(infon.sistema) == infon.codigo
+        ]
+        if mismas:
+            return mismas[0] if len(mismas) == 1 else None
+    if infon.polaridad is not Polaridad.PRESENTE:
+        return None
+    return clave
+
+
+def elegir_por_signo(pares: Iterable[tuple[str, Infon]]) -> dict[str, Infon]:
+    """Un infón por signo, con el mismo criterio para Bayes y para Φ.
+
+    Si dos infones del mismo signo se contradicen, manda el más reciente: una
+    lipasa normal hoy no queda anulada por una alta de la semana pasada,
+    aunque aquella se midiera con más confianza. Si concuerdan, manda el de
+    mejor confianza.
+    """
+    elegidos: dict[str, Infon] = {}
+    for clave, infon in pares:
+        previo = elegidos.get(clave)
+        if previo is None:
+            elegidos[clave] = infon
+        elif previo.polaridad is not infon.polaridad:
+            logger.info(
+                "Registro contradictorio sobre '%s': %s vs %s; manda el reciente",
+                clave,
+                previo.polaridad.value,
+                infon.polaridad.value,
+            )
+            if infon.timestamp > previo.timestamp:
+                elegidos[clave] = infon
+        elif infon.confianza > previo.confianza:
+            elegidos[clave] = infon
+    return elegidos
 
 
 def _a_float(valor: Any, defecto: float) -> float:

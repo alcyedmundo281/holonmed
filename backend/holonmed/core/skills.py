@@ -629,8 +629,8 @@ class Nucleo:
         """`empareja(termino)` decide si ese término consta como presente.
 
         Se recibe el emparejador en vez de un conjunto de cadenas para que
-        el núcleo case igual que todo lo demás: por subcadena, con
-        `bayes.emparejar_termino`. Comparar aquí por igualdad exacta hacía
+        el núcleo case igual que todo lo demás, con
+        `bayes.emparejar_infon`. Comparar aquí por igualdad exacta hacía
         que un infón «Bradicinesia leve» satisficiera un signo y no el
         núcleo — la clase de divergencia silenciosa que la §3.3 de
         ACOPLAMIENTO.md existe para impedir.
@@ -1267,6 +1267,11 @@ class Skill:
             return {"name": self.titulo}
         return {
             "name": self.condicion.get("nombre") or self.titulo,
+            # Todo lo declarado, lleve LR o no: el emparejamiento se resuelve
+            # contra el protocolo entero antes de mirar quién trae cociente.
+            "vocabulario": [
+                {"name": s.nombre, "codigos": s.codigos} for s in self.signos
+            ],
             "modelo_bayesiano": {
                 "probabilidad_base": self.bayes.probabilidad_base,
                 "factores_riesgo_a_priori": self.bayes.factores_riesgo,
@@ -1274,6 +1279,7 @@ class Skill:
             "signDetected": [
                 {
                     "name": s.nombre,
+                    "codigos": s.codigos,
                     "bayes_lr": s.lr,
                     "bayes_lr_negativo": s.lr_negativo,
                     **(
@@ -1648,6 +1654,10 @@ class SkillManager:
         criterios diagnósticos de consenso en medsemiotics-db y las skills
         (Atlanta, MDS, Centor, etc.), agrupando determinísticamente por evidencia
         con PMID en lugar de depender de 'inteligencia' (un prompt).
+
+        Sin el índice, o con una ficha rota, lanza `IndiceNoDisponible` y NO cae al respaldo por LLM:
+        ése es para cuando se miraron los criterios y ninguno aplicó. Usarlo
+        sin haberlos mirado pondría el prompt en el sitio del consenso.
         """
         disponibles = self.listar()
         if not disponibles:

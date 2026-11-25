@@ -61,6 +61,9 @@ class IndexEco:
         return {self.codigo} if list(concepto_ids) else set()
 
 
+pytestmark = pytest.mark.usefixtures("indice_minimo")
+
+
 def construir(tmp_path, llm, index, decide=True, **protocolos):
     """`decide` se pasa siempre y no se hereda del defecto.
 

@@ -245,7 +245,7 @@ class MedidorDeAcoplamiento:
             )
             return None
 
-        observaciones = self._observar(dimensiones, infones)
+        observaciones = self._observar(skill, dimensiones, infones)
         residuo = self._resto_no_simbolizado(skill, dimensiones, infones)
 
         traza_tramos: list[str] = []
@@ -403,22 +403,23 @@ class MedidorDeAcoplamiento:
         los infones por su cuenta, los factores podrían describir una
         medición distinta de la que produjo el número, y la identidad
         cerraría o no según el caso. Es el mismo motivo por el que
-        `emparejar_termino` es una sola función compartida con Bayes.
+        `emparejar_infon` es una sola función compartida con Bayes.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
         dimensiones = [s for s in skill.signos if s.efecto != "excluye"]
         if not dimensiones:
             return [], {}
 
         indice = {s.nombre.lower(): s for s in dimensiones}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         contribuciones: dict[str, int] = {}
 
         for infon in infones:
             if not infon.es_valido:
                 continue
-            clave = emparejar_termino(infon.termino, indice)
-            if clave is None or clave in contribuciones:
+            clave = emparejar_infon(infon, vocabulario)
+            if clave is None or clave not in indice or clave in contribuciones:
                 continue
             signo = indice[clave]
             if signo.tramos:
@@ -620,49 +621,29 @@ class MedidorDeAcoplamiento:
 
     @staticmethod
     def _observar(
-        dimensiones: list[dict[str, Any]], infones: Sequence[Infon]
+        skill: "Skill", dimensiones: list[dict[str, Any]], infones: Sequence[Infon]
     ) -> dict[str, Infon]:
         """Empareja cada dimensión con el infón validado que la informa.
 
-        Se reutiliza el mismo emparejamiento por subcadena que usa el motor
-        bayesiano. Es deliberado: si los dos módulos emparejaran distinto,
-        la identidad Σeᵢ = ln(odds posterior / odds previo) dejaría de
-        cumplirse y Φ ya no estaría leyendo el mismo vector que Bayes.
+        Se reutilizan el emparejamiento y la elección por signo del motor
+        bayesiano. Es deliberado: si los dos módulos poblaran el vector
+        distinto, la identidad Σeᵢ = ln(odds posterior / odds previo) dejaría
+        de cumplirse y Φ ya no estaría leyendo el mismo vector que Bayes.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, elegir_por_signo, emparejar_infon
 
-        indice = {d["clave"]: d for d in dimensiones}
-        elegidos: dict[str, Infon] = {}
+        indice = {d["clave"] for d in dimensiones}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
+        pares: list[tuple[str, Infon]] = []
 
         for infon in infones:
             if not infon.es_valido:
                 continue  # Sólo evidencia auditada entra en el vector.
-            clave = emparejar_termino(infon.termino, indice)
-            if clave is None:
-                continue
+            clave = emparejar_infon(infon, vocabulario)
+            if clave is not None and clave in indice:
+                pares.append((clave, infon))
 
-            previo = elegidos.get(clave)
-            if previo is None:
-                elegidos[clave] = infon
-                continue
-
-            # Dos infones sobre el mismo signo. Si se contradicen, manda el
-            # más reciente: una lipasa normal hoy no queda anulada por una
-            # lipasa alta de la semana pasada, aunque aquella se midiera con
-            # más confianza. Si concuerdan, manda el de mejor confianza.
-            if previo.polaridad is not infon.polaridad:
-                logger.info(
-                    "Registro contradictorio sobre '%s': %s vs %s; manda el reciente",
-                    clave,
-                    previo.polaridad.value,
-                    infon.polaridad.value,
-                )
-                if infon.timestamp > previo.timestamp:
-                    elegidos[clave] = infon
-            elif infon.confianza > previo.confianza:
-                elegidos[clave] = infon
-
-        return elegidos
+        return elegir_por_signo(pares)
 
     @staticmethod
     def _resto_no_simbolizado(
@@ -677,13 +658,13 @@ class MedidorDeAcoplamiento:
         nombre de la condición, para que el diagnóstico no figure como
         evidencia contra sí mismo.
         """
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
         # Se indexan TODOS los signos declarados y no sólo los que llevan
         # likelihood ratio: un signo declarado categóricamente está
         # contemplado por el protocolo, y contarlo como resto diría que la
         # hipótesis no lo explica cuando sí lo declara.
-        indice = {s.nombre.lower(): s for s in skill.signos}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         condicion = str(skill.condicion.get("nombre") or skill.titulo).lower()
 
         # El mismo hallazgo puede llegar dos veces —una desde la línea de
@@ -699,7 +680,7 @@ class MedidorDeAcoplamiento:
             termino = infon.termino.lower()
             if termino in condicion or condicion in termino:
                 continue
-            if emparejar_termino(infon.termino, indice) is not None:
+            if emparejar_infon(infon, vocabulario) is not None:
                 continue
             previo = resto.get(termino)
             if previo is None or infon.confianza > previo.confianza:
@@ -1064,15 +1045,16 @@ class MedidorDeAcoplamiento:
     @staticmethod
     def _emparejar_signos(skill: "Skill", infones: Sequence[Infon]) -> dict:
         """Signo declarado -> primer infón validado que lo toca, lleve LR o no."""
-        from .bayes import emparejar_termino
+        from .bayes import construir_vocabulario, emparejar_infon
 
         indice = {s.nombre.lower(): s for s in skill.signos if s.efecto != "excluye"}
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         vistos: dict[str, tuple] = {}
         for infon in infones:
             if not infon.es_valido:
                 continue
-            clave = emparejar_termino(infon.termino, indice)
-            if clave is not None:
+            clave = emparejar_infon(infon, vocabulario)
+            if clave is not None and clave in indice:
                 vistos.setdefault(clave, (indice[clave], infon))
         return vistos
 

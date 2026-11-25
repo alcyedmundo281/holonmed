@@ -92,7 +92,7 @@ def exige_arista(identificador: str, concepto: str, clave: str) -> None:
         if str(arista.get("concepto")) == concepto and arista.get(clave):
             return
     pytest.skip(
-        f"en tu clon, la arista {concepto} de {identificador} no declara "
+        f"en tu clon de medsemiotics-db, la arista {concepto} de {identificador} no declara "
         f"«{clave}»: el conversor no puede emitirla, y eso lo decide el índice, "
         f"no este repositorio. Actualiza el clon."
     )

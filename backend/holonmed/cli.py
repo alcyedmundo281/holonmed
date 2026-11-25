@@ -305,6 +305,9 @@ def _lineas_sin_candidatas(resultado) -> list[str]:
         return []
 
     texto = _SIN_CANDIDATAS[causa]
+    detenido = bool(resultado.aviso_triaje)
+    if causa == "nada_validado" and detenido:
+        texto = "NO SE VALIDÓ NI UN HALLAZGO. La abducción no tuvo de qué partir."
     # La causa se fija al competir, sobre la LECTURA INICIAL. Con
     # `abduccion_decide` esa lectura es genérica y la segunda pasada, con el
     # protocolo del triaje, puede validar lo que la primera rechazó: decir
@@ -312,9 +315,10 @@ def _lineas_sin_candidatas(resultado) -> list[str]:
     # que sí tiene evidencia validada entrando a Bayes.
     n = len(resultado.infones_validados)
     if causa == "nada_validado" and n:
+        eleccion = "" if detenido else " y el protocolo lo eligió el triaje solo"
         texto = (
             "LA LECTURA INICIAL NO VALIDÓ NI UN HALLAZGO. La abducción no tuvo "
-            "de qué partir y el protocolo lo eligió el triaje solo; la segunda "
+            f"de qué partir{eleccion}; la segunda "
             f"pasada con ese protocolo sí validó {n} hallazgo(s), y son los que "
             "entran al cálculo."
         )
@@ -334,7 +338,9 @@ def _lineas_competencia(resultado) -> list[str]:
     # el activo puede ser ya la ganadora del grafo, y atribuirle al triaje la
     # elección de la ganadora le quitaría el error que se está midiendo.
     elegida = resultado.skill_triaje or resultado.skill_activa
-    if resultado.triaje_coincide is None:
+    if resultado.aviso_triaje:
+        lineas.append("  El triaje estaba detenido: no hay con qué comparar el grafo.")
+    elif resultado.triaje_coincide is None:
         lineas.append("  No hubo candidata admitida con la que comparar el triaje.")
     elif resultado.triaje_coincide:
         lineas.append(
@@ -381,6 +387,8 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     await ctx.cerrar()
 
     print(f"\nProtocolo activo: {resultado.skill_activa}")
+    if resultado.aviso_triaje:
+        print(f"AVISO: {resultado.aviso_triaje}")
     if resultado.resumen:
         print(f"Resumen: {resultado.resumen}")
     for senal in resultado.instrucciones_detectadas:

@@ -22,6 +22,10 @@ from holonmed.models import (
     TrayectoriaDeLaCreencia,
 )
 
+# Sin índice el triaje se detiene (ver `test_triaje_sin_indice.py`); estas
+# pruebas son sobre lo que viene después.
+pytestmark = pytest.mark.usefixtures("indice_minimo")
+
 # El protocolo genérico de las pruebas declara su corte de temperatura,
 # igual que el  real. Sin él, la pasada genérica no puede
 # volver concepto un «38.5 °C» —no tendría con qué— y la fixture dejaría

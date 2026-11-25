@@ -90,10 +90,11 @@ def test_skill_sin_modelo_bayesiano_no_inventa_uno():
     assert AntigenPresentingCell().calcular({}, {"name": "Triaje"}, []) is None
 
 
-def test_emparejamiento_por_termino_parcial():
-    """'Hiperlipasemia' debe casar con la clave 'Hiperlipasemia (>3x)'."""
+def test_un_termino_parcial_no_hereda_el_lr_del_umbral():
+    """«Hiperlipasemia» a secas no dice que pase de tres veces el límite. Quien
+    las une es el código declarado (ver test_emparejamiento.py), no las letras."""
     resultado = AntigenPresentingCell().calcular({}, SKILL, [infon("Hiperlipasemia")])
-    assert len(resultado.evidencia_utilizada) == 1
+    assert resultado.evidencia_utilizada == []
 
 
 def test_veredicto_por_umbrales():
