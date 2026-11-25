@@ -532,6 +532,17 @@ function pintarHallazgos(infones, texto) {
     el("p", { class: "nota" }, "«Validado» quiere decir que el texto sostiene el hallazgo y el vocabulario lo reconoce. No quiere decir que sea verdad.")], "ancho");
 }
 
+/* Una medida que no existe no es un cero: `Number(null)` daría 0.00 y presentaría
+   como medido lo que no se pudo medir. */
+const medida = (v) => (v === null || v === undefined ? "sin medida" : Number(v).toFixed(2));
+
+/* Sin cocientes no hay lectura ponderada: ahí `phi` vale 0 por construcción y la
+   que se puede leer es la categórica (el mismo criterio que `phi_legible`). */
+function lecturaPhi(a) {
+  const categorica = a.cobertura === null && a.phi_categorico !== null && a.phi_categorico !== undefined;
+  return categorica ? `Φ categórico = ${medida(a.phi_categorico)}` : `Φ = ${medida(a.phi)}`;
+}
+
 function pintarProbabilidad(dato) {
   const inf = dato.inferencia;
   const partes = [el("h3", {}, "Probabilidad, paso a paso")];
@@ -551,7 +562,8 @@ function pintarProbabilidad(dato) {
       partes.push(p("Protocolos que compitieron por explicar los hallazgos (solo medición; para calcular uno, elíjalo en «Protocolo»):"),
         el("div", { class: "tabla" }, el("table", {},
           el("tr", {}, el("th", {}, "Protocolo"), el("th", {}, "Puntuación"), el("th", {}, "Admitido")),
-          candidatas.map((c) => el("tr", {}, el("td", {}, c.skill), el("td", {}, Number(c.clave).toFixed(2)), el("td", {}, c.admitida ? "sí" : "no"))))));
+          candidatas.map((c) => el("tr", {}, el("td", {}, c.skill), el("td", {}, medida(c.clave)),
+            el("td", {}, c.vetada ? "no (vetado)" : c.admitida ? "sí" : "no"))))));
     }
     decir(partes, "ancho");
     return;
@@ -607,7 +619,7 @@ function pintarAcoplamiento(a) {
     el("details", {},
     el("summary", {}, "Para profundizar: ¿encaja la hipótesis con el caso? (Φ)"),
     p("Φ va de −1 a +1 y no es una probabilidad: mide cuánto concuerda lo registrado con lo que el protocolo esperaba."),
-    p(el("strong", {}, `${a.hipotesis}: Φ = ${Number(a.phi).toFixed(2)} · ${String(a.veredicto).replace(/_/g, " ")}`)),
+    p(el("strong", {}, `${a.hipotesis}: ${lecturaPhi(a)} · ${String(a.veredicto).replace(/_/g, " ")}`)),
     a.resto_no_simbolizado && a.resto_no_simbolizado.length
       ? p("Hallazgos que esta hipótesis no explica: ", a.resto_no_simbolizado.join(", "), ".") : null),
     el("div", { class: "fila" }, boton("Siguiente paso del recorrido", () => {

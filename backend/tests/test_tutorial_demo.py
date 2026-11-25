@@ -50,3 +50,12 @@ def test_la_pagina_no_interpreta_como_html_lo_que_escribe_el_modelo():
 def test_la_pagina_no_pide_nada_fuera_de_la_maquina():
     pagina = PAGINA.read_text(encoding="utf-8")
     assert "http://" not in pagina and "https://" not in pagina
+
+
+def test_una_medida_ausente_no_se_pinta_como_cero():
+    """`CandidataAbductiva.clave` puede ser None (vetada o sin medir) y
+    `Number(null)` es 0: la tabla presentaba como medido lo que no se midió."""
+    pagina = PAGINA.read_text(encoding="utf-8")
+    assert "Number(c.clave)" not in pagina
+    assert "medida(c.clave)" in pagina
+    assert '"sin medida"' in pagina
