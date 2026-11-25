@@ -5,9 +5,10 @@ import type { Problema } from '../lib/types';
  * Lista de problemas del paciente.
  *
  * Es la primera vista que mira un clínico al abrir una historia. Se
- * construye sólo con hallazgos validados y deduplicados por concepto; las
- * fechas de primera y última aparición son lo que distingue un problema
- * agudo de uno arrastrado, así que se muestran siempre.
+ * construye sólo con hallazgos validados y presentes, deduplicados por
+ * concepto y numerados por orden de primer registro. Las fechas dicen cuándo
+ * entraron al sistema, no cuándo empezó el cuadro, y no hay estado activo o
+ * resuelto porque ese dato no existe.
  */
 export function ProblemList({
   problemas,
@@ -30,11 +31,12 @@ export function ProblemList({
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
           <tr>
+            <th className="text-right font-medium pl-4 py-2">#</th>
             <th className="text-left font-medium px-4 py-2">Problema</th>
             <th className="text-left font-medium px-3 py-2">Código</th>
             <th className="text-right font-medium px-3 py-2">Veces</th>
-            <th className="text-left font-medium px-3 py-2">Primera</th>
-            <th className="text-left font-medium px-4 py-2">Última</th>
+            <th className="text-left font-medium px-3 py-2">Primer registro</th>
+            <th className="text-left font-medium px-4 py-2">Último registro</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -44,8 +46,16 @@ export function ProblemList({
               onClick={() => p.codigo && onExplorar?.(p)}
               className={`hover:bg-slate-50 ${p.codigo && onExplorar ? 'cursor-pointer' : ''}`}
             >
+              <td className="pl-4 py-2.5 text-right tabular-nums text-slate-500">
+                {p.numero}
+              </td>
               <td className="px-4 py-2.5">
                 <div className="font-medium text-slate-800">{p.termino}</div>
+                {p.derivado === 1 && (
+                  <div className="text-[11px] text-amber-700">
+                    Derivado por un criterio, no escrito en la nota
+                  </div>
+                )}
                 {p.linaje && (
                   <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                     <Layers size={10} aria-hidden />

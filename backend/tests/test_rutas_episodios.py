@@ -164,7 +164,14 @@ def test_el_fondo_no_lleva_fecha_ni_firma(cliente):
     _escribir(cliente, episodio, "base")
 
     cuerpo = cliente.get(f"/api/episodios/{episodio}/fondo").json()
-    assert set(cuerpo) == {"bloques", "sin_sintetizar", "al_dia", "impresion"}
+    assert set(cuerpo) == {
+        "bloques",
+        "negativos",
+        "texto",
+        "sin_sintetizar",
+        "al_dia",
+        "impresion",
+    }
     assert "firmado_por" not in cuerpo
     assert "fecha" not in cuerpo
 
@@ -202,10 +209,9 @@ def test_imprimir_nota_clinica_exige_firma_y_evento_y_actualiza_resumen_vivo(tmp
                 skill_activa="general_triage",
                 infones=[
                     Infon(
-                        texto_origen=texto,
+                        texto_origen="temperatura 38.5",
                         termino_propuesto="fiebre",
                         termino="Fiebre",
-                        procedencia="objetivo",
                         codigo="HM:0001",
                         sistema="holonmed",
                         estado=EstadoInfon.VALIDADO,
@@ -224,12 +230,12 @@ def test_imprimir_nota_clinica_exige_firma_y_evento_y_actualiza_resumen_vivo(tmp
 
     with TestClient(app) as c:
         episodio = _abrir(c)
-        assert _escribir(c, episodio, "base", "temperatura 38.5").status_code == 201
+        assert _escribir(c, episodio, "base", "O: temperatura 38.5").status_code == 201
 
         paciente = contexto.pacientes.obtener("p1")
         assert paciente is not None
-        assert "Problema: Fiebre" in paciente.resumen_vivo
-        assert "Objetivo: temperatura 38.5" in paciente.resumen_vivo
+        assert "#1 Fiebre" in paciente.resumen_vivo
+        assert "O: «temperatura 38.5»" in paciente.resumen_vivo
 
         sin_firma = c.post(f"/api/episodios/{episodio}/imprimir?firmante=%20")
         assert sin_firma.status_code == 422

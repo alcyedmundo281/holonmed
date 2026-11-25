@@ -371,6 +371,7 @@ def _lineas_competencia(resultado) -> list[str]:
 
 async def _tic(texto: str, paciente: str, skill: str) -> int:
     from .api.deps import AppContext
+    from .core.nota_soap import construir_nota
 
     ctx = AppContext()
     holon = ctx.pacientes.obtener_o_efimero(paciente)
@@ -378,11 +379,16 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     holon.phi_previo = ctx.tics.phi_por_hipotesis(paciente)
 
     resultado = await ctx.pipeline.ejecutar(texto, holon, skill_forzada=skill)
+    # Este comando no guarda el tic: sólo llevan número los problemas que ya
+    # estaban en la lista.
+    nota = construir_nota(resultado, ctx.tics.lista_problemas(paciente))
     await ctx.cerrar()
 
     print(f"\nProtocolo activo: {resultado.skill_activa}")
+    print(f"\n{nota.texto}")
+    print("\nDetalle y anexo, fuera de la nota")
     if resultado.resumen:
-        print(f"Resumen: {resultado.resumen}")
+        print(f"Resumen del modelo, sin validar: {resultado.resumen}")
 
     print(f"\nInfones ({len(resultado.infones)}):")
     for infon in resultado.infones:

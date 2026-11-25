@@ -24,6 +24,7 @@ from typing import Any
 from ..core.actualizacion import Acto, Actualizacion, medir
 from ..core.episodio import EstadoEpisodio, admite
 from ..core.holon import Documento, componer, conciliar
+from ..core.nota_soap import asignar_procedencia, procedencia_de
 from ..core.sintesis import formatear_fondo, sintetizar
 from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad, TipoNota
 
@@ -130,7 +131,7 @@ class Database:
         ("tic", "reapertura", "TEXT"),
         ("tic", "promocion", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
-        ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'objetivo'"),
+        ("infon", "procedencia", "TEXT NOT NULL DEFAULT 'sin_declarar'"),
         ("infon", "acto", "TEXT"),
         ("infon", "actualizado_por", "TEXT"),
         ("infon", "actualizado_en", "TEXT"),
@@ -644,16 +645,18 @@ class EpisodioRepo:
             filas = (
                 self._db.conexion()
                 .execute(
-                    """SELECT i.* FROM infon i JOIN tic t ON t.id = i.tic_id
+                    """SELECT i.*, t.texto_original
+                         FROM infon i JOIN tic t ON t.id = i.tic_id
                         WHERE t.episodio_id = ? AND i.estado = 'VALIDADO'
-                        ORDER BY i.timestamp""",
+                          AND COALESCE(i.acto, '') != 'rechazado'
+                        ORDER BY i.timestamp, i.id""",
                     (episodio_id,),
                 )
                 .fetchall()
             )
         except sqlite3.Error:
             return []
-        return [_fila_a_infon(fila) for fila in filas]
+        return [_fila_a_infon_declarado(fila) for fila in filas]
 
     def paciente_de(self, episodio_id: str) -> str | None:
         episodio = self.listar_uno(episodio_id)
@@ -682,10 +685,10 @@ class EpisodioRepo:
             problemas_antes: list[str] = []
             if ultimo_id > 0:
                 filas_ant = cx.execute(
-                    """SELECT termino
-                         FROM infon
-                        WHERE paciente_id = ? AND estado = 'VALIDADO' AND tic_id <= ?
-                        GROUP BY COALESCE(codigo, termino)""",
+                    f"""SELECT termino
+                          FROM infon
+                         WHERE paciente_id = ? AND {_ES_PROBLEMA} AND tic_id <= ?
+                         GROUP BY COALESCE(codigo, termino)""",
                     (paciente_id, ultimo_id),
                 ).fetchall()
                 problemas_antes = [f["termino"] for f in filas_ant]
@@ -770,6 +773,14 @@ class EpisodioRepo:
         return [dict(f) for f in filas]
 
 
+# Qué cuenta como problema. Vive en un solo sitio porque la lista y el «qué
+# había antes» de la impresión tienen que contar igual: si difirieran, la nota
+# anunciaría problemas resueltos que nunca existieron.
+_ES_PROBLEMA = (
+    "estado = 'VALIDADO' AND polaridad = 'presente' AND COALESCE(acto, '') != 'rechazado'"
+)
+
+
 class TicRepo:
     def __init__(self, db: Database, grafo: GraphRepo):
         self._db = db
@@ -798,6 +809,8 @@ class TicRepo:
                 logger.warning("Tic rechazado: %s", veredicto.motivo)
                 return None
             resultado.ordinal_clinica = veredicto.ordinal
+
+        asignar_procedencia(resultado.infones, resultado.texto_original)
 
         try:
             with self._db._escritura:
@@ -940,12 +953,14 @@ class TicRepo:
         try:
             cx = self._db.conexion()
             filas_inf = cx.execute(
-                """SELECT * FROM infon
-                    WHERE paciente_id = ? AND estado = 'VALIDADO'
-                    ORDER BY timestamp, id""",
+                """SELECT i.*, t.texto_original
+                     FROM infon i JOIN tic t ON t.id = i.tic_id
+                    WHERE i.paciente_id = ? AND i.estado = 'VALIDADO'
+                      AND COALESCE(i.acto, '') != 'rechazado'
+                    ORDER BY i.timestamp, i.id""",
                 (paciente_id,),
             ).fetchall()
-            infones = [_fila_a_infon(f) for f in filas_inf]
+            infones = [_fila_a_infon_declarado(f) for f in filas_inf]
             problemas = [p["termino"] for p in self.lista_problemas(paciente_id)]
             fondo = sintetizar(infones, problemas, hasta_tic=hasta_tic)
             texto = formatear_fondo(fondo)
@@ -1198,25 +1213,29 @@ class TicRepo:
         }
 
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
-        """Lista de problemas: conceptos validados, agrupados y fechados.
+        """Lista de problemas: hallazgos validados y presentes, numerados.
 
-        Es la vista que un clínico mira primero. Se deduplica por concepto
-        y se conserva la primera y la última vez que apareció, que es la
-        información que dice si algo es agudo o arrastrado.
+        Es la vista que un clínico mira primero. Una ausencia documentada no
+        es un problema, y lo que una persona rechazó tampoco. Se deduplica
+        por concepto y se numera por orden de primer registro. `primera` es
+        cuándo entró al sistema, no cuándo empezó el cuadro.
+
+        `derivado` es 1 si nadie lo escribió: sale de un criterio declarado.
         """
         filas = self._db.conexion().execute(
-            """SELECT termino, codigo, sistema, cie10, linaje,
-                      COUNT(*) AS apariciones,
-                      MIN(timestamp) AS primera,
-                      MAX(timestamp) AS ultima,
-                      MAX(confianza) AS confianza
-               FROM infon
-               WHERE paciente_id = ? AND estado = 'VALIDADO'
-               GROUP BY COALESCE(codigo, termino)
-               ORDER BY ultima DESC""",
+            f"""SELECT termino, codigo, sistema, cie10, linaje,
+                       COUNT(*) AS apariciones,
+                       MIN(timestamp) AS primera,
+                       MAX(timestamp) AS ultima,
+                       MAX(confianza) AS confianza,
+                       MIN(criterio IS NOT NULL) AS derivado
+                FROM infon
+                WHERE paciente_id = ? AND {_ES_PROBLEMA}
+                GROUP BY COALESCE(codigo, termino)
+                ORDER BY primera, MIN(id)""",
             (paciente_id,),
         )
-        return [dict(f) for f in filas]
+        return [{"numero": n, **dict(f)} for n, f in enumerate(filas, start=1)]
 
 
 class DocumentoRepo:
@@ -1343,8 +1362,10 @@ def _fila_a_infon(fila: sqlite3.Row) -> Infon:
         polaridad=Polaridad(fila["polaridad"] or "presente")
         if "polaridad" in fila.keys()
         else Polaridad.PRESENTE,
-        procedencia=(fila["procedencia"] if "procedencia" in fila.keys() else "objetivo")
-        or "objetivo",
+        procedencia=(
+            fila["procedencia"] if "procedencia" in fila.keys() else "sin_declarar"
+        )
+        or "sin_declarar",
         derivado_de=json.loads(derivado) if derivado else [],
         criterio=fila["criterio"] if "criterio" in fila.keys() else None,
         valor=fila["valor"] if "valor" in fila.keys() else None,
@@ -1361,6 +1382,18 @@ def _fila_a_infon(fila: sqlite3.Row) -> Infon:
         razon_auditoria=fila["razon_auditoria"],
         origen_skill=fila["origen_skill"],
     )
+
+
+def _fila_a_infon_declarado(fila: sqlite3.Row) -> Infon:
+    """Un infón con la procedencia que declara la narrativa de su tic.
+
+    Se relee en vez de creer la columna: lo escrito antes de que existiera
+    la declaración quedó como «objetivo» por defecto, sin que nadie lo
+    aseverara. La consulta tiene que traer `texto_original`.
+    """
+    infon = _fila_a_infon(fila)
+    infon.procedencia = procedencia_de(infon, fila["texto_original"] or "")
+    return infon
 
 
 def _nuevo_id(nombre: str) -> str:

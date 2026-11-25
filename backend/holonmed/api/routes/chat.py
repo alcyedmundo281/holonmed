@@ -16,6 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from ...core.nota_soap import construir_nota
 from ...llm import LLMUnavailable
 from ...models import ChatRequest, OrigenTic, ResultadoTic
 from ..deps import AppContext, get_context
@@ -122,6 +123,7 @@ async def chat(
         tic = await ctx.pipeline.ejecutar(req.mensaje, holon)
         tic.origen = OrigenTic.CONSULTA
         tic.tic_id = ctx.tics.guardar(tic)
+        tic.evolucion = construir_nota(tic, ctx.tics.lista_problemas(tic.paciente_id))
         return {"tipo": "tic", "datos": tic}
 
     return await _consulta_medica(ctx, holon, req.mensaje)

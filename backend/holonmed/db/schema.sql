@@ -265,7 +265,7 @@ CREATE TABLE IF NOT EXISTS infon (
     -- en el mismo párrafo. El defecto es 'objetivo' porque es lo que eran
     -- todos los infones escritos antes de que existiera la distinción: los
     -- producía el validador contra un protocolo, no el relato de nadie.
-    procedencia       TEXT NOT NULL DEFAULT 'objetivo',
+    procedencia       TEXT NOT NULL DEFAULT 'sin_declarar',
     -- Potencia y acto. `acto` NULL es el estado inicial correcto —el
     -- sistema lo propuso y nadie lo ha ratificado— y no un hueco que
     -- rellenar. `estado` de al lado es otra cosa: el veredicto del

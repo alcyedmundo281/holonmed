@@ -14,6 +14,7 @@ import { ConceptGraph } from './components/ConceptGraph';
 import { CouplingPanel } from './components/CouplingPanel';
 import { DoubtPanel } from './components/DoubtPanel';
 import { EvidenceText } from './components/EvidenceText';
+import { EvolutionNote } from './components/EvolutionNote';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
 import { InfonCard } from './components/InfonCard';
@@ -251,10 +252,25 @@ export default function App() {
                       />
                       {tic.resumen && (
                         <p className="text-sm text-slate-600 italic mt-3 pt-3 border-t border-slate-100">
+                          <span className="not-italic text-xs text-slate-400">
+                            Resumen del modelo, sin validar:{' '}
+                          </span>
                           {tic.resumen}
                         </p>
                       )}
                     </section>
+
+                    {tic.evolucion && (
+                      <EvolutionNote
+                        nota={tic.evolucion}
+                        fecha={tic.timestamp}
+                        origen={tic.origen}
+                      />
+                    )}
+
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">
+                      Anexo, fuera de la nota: cálculo del protocolo y detalle
+                    </h3>
 
                     {/* El orden es el de la lectura, y no es arbitrario.
                         Un veto retira el diagnóstico, así que va antes que
