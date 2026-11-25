@@ -50,9 +50,13 @@ jobs:
         run: mypy
 
       - name: Tests
-        # No requieren Ollama ni ninguna terminología externa: el pipeline
-        # se ejercita con dobles y el almacén con una base temporal.
-        run: pytest -q
+        # No requieren Ollama ni terminologías con licencia: el pipeline
+        # se ejercita con dobles y el almacén con una base temporal. Las que
+        # leen el índice clonado arriba se saltan donde no está; aquí no:
+        # con esta variable, ese salto rompe la build.
+        env:
+          HOLONMED_EXIGIR_INDICE: '1'
+        run: pytest -q -rs
 
       - name: El sistema arranca sin nada instalado
         # Comprueba la promesa de "clonar y usar": sin modelos, sin

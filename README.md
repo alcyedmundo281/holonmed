@@ -388,7 +388,22 @@ y la ejecución dentro de cada línea.
 cd backend && pytest -q && ruff check .
 ```
 
-Los tests no requieren Ollama ni ninguna terminología externa. Cubren sobre
+Los tests no requieren Ollama ni terminologías con licencia. Una parte sí lee
+[`medsemiotics-db`](https://github.com/alcyedmundo281/medsemiotics-db), el
+índice de fuentes, que vive en otro repositorio: sin él se saltan y `pytest -rs`
+dice por qué, así que un verde sin índice no los ha comprobado. Para
+ejecutarlos todos, clónalo junto a este repositorio, como hace CI:
+
+```bash
+git clone https://github.com/alcyedmundo281/medsemiotics-db.git ../medsemiotics-db
+```
+
+(desde la raíz de `holonmed`). `HOLONMED_MEDSEMIOTICS_DIR` sirve para apuntar a
+un clon en otro sitio, pero sólo lo leen el triaje y sus pruebas; las pruebas
+del conversor buscan el clon hermano. Con `HOLONMED_EXIGIR_INDICE=1`, como en
+CI, saltarse por falta de índice es un fallo.
+
+Cubren sobre
 todo las propiedades de seguridad: que la evidencia no validada no cuente,
 que las colisiones se bloqueen, que un LR mal configurado no produzca
 certeza del 100 %, que el grafo encuentre por ancestro y que un descarte no
