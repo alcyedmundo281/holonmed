@@ -362,6 +362,81 @@ que alguien corrija la errata en vez de convivir con ella.
 
 ---
 
+## El re-ranking propone, no certifica
+
+### El fallo
+
+Con texto sintético y `gemma-4-e4b-uncensored-hauhaucs-aggressive`, «Cáncer de
+páncreas» se normalizó a «Hallazgos de imagen compatibles con pancreatitis»
+(criterio de Atlanta, LR 9). Se juntaban dos cosas:
+
+- El re-ranking subía a 99 cualquier elección con similitud mayor que 40. Como
+  la recuperación ya descarta todo lo que no llega a 45, **la condición se
+  cumplía siempre**.
+- El auditor recibía el término *propuesto*, no el que se guardaba.
+
+### Qué se midió
+
+`python scripts/medir_normalizacion.py`, sin modelo, sobre el vocabulario
+semilla. Para los aciertos se quita un sinónimo y se consulta; para los errores
+se quita el concepto entero, así que todo candidato restante es otro concepto.
+Se supone que el re-ranking elige siempre lo mejor en el primer caso y lo peor
+en el segundo.
+
+De 609 sinónimos retirados, 339 conservan su concepto entre los candidatos. De
+929 consultas sin su concepto, a 703 se les ofrece alguno equivocado.
+
+| Condición para poder quedar VALIDADO | Sinónimos correctos que la cumplen | Consultas con algún erróneo que la cumple |
+|---|---|---|
+| anterior (> 40) | 339 (100.0%) | 703 (75.7%) |
+| similitud ≥ 60 | 226 (66.7%) | 464 (49.9%) |
+| similitud ≥ 70 | 140 (41.3%) | 210 (22.6%) |
+| similitud ≥ 75 | 94 (27.7%) | 129 (13.9%) |
+| similitud ≥ 80 | 53 (15.6%) | 49 (5.3%) |
+| **similitud ≥ 85** | 28 (8.3%) | 21 (2.3%) |
+| similitud ≥ 92 | 4 (1.2%) | 2 (0.2%) |
+| cada palabra cubierta (≥ 75) | 74 (21.8%) | 54 (5.8%) |
+| cada palabra cubierta (≥ 85) | 55 (16.2%) | 40 (4.3%) |
+| primera palabra cubierta (≥ 85) | 203 (59.9%) | 476 (51.2%) |
+
+**Ningún corte léxico separa los dos grupos.** Comparar palabra por palabra no
+mejora a la similitud entera. El caso observado puntúa 66.7.
+
+Auditar el término guardado se probó aparte, con seis pares erróneos y seis
+legítimos, una ejecución por modelo:
+
+| Auditor | Erróneos rechazados auditando lo propuesto | Erróneos rechazados auditando lo guardado | Legítimos aprobados auditando lo guardado |
+|---|---|---|---|
+| `gemma-4-e4b-uncensored-hauhaucs-aggressive` | 0 de 6 | 4 de 6 | 6 de 6 |
+| `medgemma-1.5-4b-it` | 1 de 6 | 3 de 6 | 6 de 6 |
+
+Los dos **siguen aprobando el caso observado** y el par rotación
+interna/externa. Seis pares no dan una tasa; dan que el auditor no basta.
+
+### Decisión
+
+1. Una elección del re-ranking con similitud menor que `threshold_validated`
+   conserva el concepto, pero **queda en ALERTA como máximo**. No se mueve
+   ningún umbral ni se añade un número nuevo: se le exige a este camino el que
+   ya se exigía para validar.
+2. El auditor recibe el término que se va a guardar.
+
+El coste: de los sinónimos **no declarados** que el motor sabe recuperar, 311 de
+339 pasan de poder validarse a pedir revisión. Los declarados en la semilla
+resuelven por vía exacta y no cambian. La salida es declarar el sinónimo, que es
+una decisión humana y versionada.
+
+### Lo que sigue abierto
+
+Por encima del umbral hay 23 pares erróneos que aún pueden validarse si el
+auditor los aprueba: rotación interna/externa (93.8), cuadrante inferior
+derecho/hipocondrio derecho (91.4), PCT/transaminasas (90.9), TC/ecografía
+abdominal (88.0). Dos llegan a 92, el corte del fallback difuso, al que el
+techo no alcanza porque no es una elección del re-ranking. Ese fallback corre
+también cuando el re-ranking contesta «ninguno».
+
+---
+
 ## Lo que hace falta
 
 Seguir ajustando el prompt mirando ejecuciones sueltas tiene rendimientos
