@@ -472,7 +472,7 @@ export interface ResultadoTic {
   todas_vetadas: string | null;
 
   /**
-   * Por qué el triaje se detuvo (falta el índice). Si viene relleno,
+   * Por qué el triaje se detuvo (falta el índice o hay una ficha rota). Si viene relleno,
    * `agrupaciones_triage` vacía no dice que ningún criterio se cumpla, sino
    * que no se pudo mirar. `null` si el triaje corrió.
    */

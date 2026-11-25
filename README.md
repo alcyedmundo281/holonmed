@@ -307,6 +307,11 @@ responden 503 y cada tic sale sin agrupaciones, con el motivo en
 `aviso_triaje`, y leído con `general_triage` salvo que se fuerce un protocolo.
 Una lista vacía se leería como «ningún criterio se cumple».
 
+Lo mismo si el índice está pero **una sola ficha** de `conceptos/` o
+`condiciones/` no se puede leer o está mal formada: se detiene todo el triaje, no
+sólo esa condición, hasta que se corrija. El motivo nombra las fichas (cinco como
+máximo) de la carpeta donde se detuvo la carga.
+
 ## Protocolos clínicos (*skills*)
 
 Un protocolo es un Markdown con frontmatter YAML. La prosa instruye al
