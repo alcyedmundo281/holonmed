@@ -27,6 +27,8 @@
 *.css       text eol=lf
 *.html      text eol=lf
 *.txt       text eol=lf
+# La excepcion: cmd.exe tropieza con las etiquetas de un .bat en LF.
+*.bat       text eol=crlf
 *.cff       text eol=lf
 *.Modelfile text eol=lf
 

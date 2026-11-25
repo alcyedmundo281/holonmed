@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .. import __version__
 from ..config import Settings, get_settings
+from ..core.estado_llm import diagnosticar_modelo
 from .deps import AppContext
 from .routes import (
     chat,
@@ -83,19 +84,24 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
     async def health():
         ctx: AppContext = app.state.context
         estado = ctx.estado()
-        modelos = await ctx.llm.modelos_disponibles()
-        # Que Ollama responda no basta: recién instalado no tiene ningún
-        # modelo, y decir "operativo" en ese estado manda al usuario a
-        # depurar el sitio equivocado cuando la primera consulta falle.
-        instalados = {m.split(":")[0] for m in modelos}
-        requeridos = {settings.model_clinical, settings.model_router}
-        faltantes = sorted(m for m in requeridos if m.split(":")[0] not in instalados)
+        # Que el servidor responda no basta: sin los modelos configurados,
+        # decir "operativo" manda al usuario a depurar el sitio equivocado
+        # cuando la primera consulta falle.
+        responde, modelos = await ctx.llm.inventario()
+        diagnostico = diagnosticar_modelo(
+            responde=responde,
+            modelos=modelos,
+            requeridos=[settings.model_clinical, settings.model_router],
+            backend=settings.llm_backend,
+        )
 
         estado["llm"] = {
+            "backend": settings.llm_backend,
+            "estado": diagnostico.estado,
             "host": settings.llm_host,
-            "disponible": await ctx.llm.disponible(),
-            "modelos": modelos,
-            "faltantes": faltantes,
+            "disponible": responde,
+            "modelos": modelos or [],
+            "faltantes": diagnostico.faltantes,
             "configurados": {
                 "clinico": settings.model_clinical,
                 "router": settings.model_router,
@@ -105,9 +111,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         # embebida, así que un fallo suyo es de disco, no de un servicio
         # ausente, y por eso no entra en este cálculo.
         estado["operativo"] = (
-            estado["llm"]["disponible"]
-            and not faltantes
-            and estado["vocabulario"]["disponible"]
+            diagnostico.estado == "conectado" and estado["vocabulario"]["disponible"]
         )
         return estado
 

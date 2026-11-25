@@ -17,6 +17,7 @@ import { EvidenceText } from './components/EvidenceText';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
 import { InfonCard } from './components/InfonCard';
+import { ModelIndicator } from './components/ModelIndicator';
 import { PatientList } from './components/PatientList';
 import { PlanOrders } from './components/PlanOrders';
 import { ProblemList } from './components/ProblemList';
@@ -24,9 +25,9 @@ import { SystemStatus } from './components/SystemStatus';
 import { TicComposer } from './components/TicComposer';
 import { VerdictPanel } from './components/VerdictPanel';
 import { api } from './lib/api';
+import { useEstadoSistema } from './lib/useEstadoSistema';
 import type {
   EntradaHistorial,
-  EstadoSistema,
   Grafo,
   Paciente,
   Problema,
@@ -45,7 +46,7 @@ const PESTANAS: { id: Vista; etiqueta: string; Icono: typeof Stethoscope }[] = [
 ];
 
 export default function App() {
-  const [estado, setEstado] = useState<EstadoSistema | null>(null);
+  const salud = useEstadoSistema();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [paciente, setPaciente] = useState<Paciente | null>(null);
@@ -77,7 +78,6 @@ export default function App() {
   useEffect(() => {
     // Ninguna de estas llamadas debe poder dejar la app en blanco: el
     // aviso de estado ya explica qué falta si algo no responde.
-    api.estado().then(setEstado).catch(() => setEstado(null));
     api.skills().then(setSkills).catch(() => setSkills([]));
     void cargarPacientes();
   }, [cargarPacientes]);
@@ -119,7 +119,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-100">
-      <SystemStatus estado={estado} />
+      <SystemStatus salud={salud} />
 
       <div className="flex flex-1 min-h-0">
         <aside className="w-[260px] shrink-0 border-r border-slate-700 bg-slate-800 flex flex-col">
@@ -128,6 +128,8 @@ export default function App() {
             <span className="font-bold text-slate-100 text-sm">HolonMed</span>
             <span className="text-[10px] text-slate-500 ml-auto font-mono">v{__APP_VERSION__}</span>
           </header>
+
+          <ModelIndicator salud={salud} />
 
           <PatientList
             pacientes={pacientes}

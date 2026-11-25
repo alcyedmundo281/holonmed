@@ -1,46 +1,58 @@
 import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { useState } from 'react';
-import type { EstadoSistema } from '../lib/types';
+import type { SaludDelSistema } from '../lib/useEstadoSistema';
 
 /**
  * Aviso de arranque cuando falta algo del entorno.
  *
  * Es deliberadamente explícito sobre qué falta y qué comando lo arregla:
- * el fallo más común al instalar esto es tener Ollama sin modelos o SNOMED
- * sin descargar, y un error genérico no ayudaría a resolverlo.
+ * el fallo más común al instalar esto es tener el servidor de modelos sin los
+ * modelos o SNOMED sin descargar, y un error genérico no ayudaría a resolverlo.
  */
-export function SystemStatus({ estado }: { estado: EstadoSistema | null }) {
-  const [cerrado, setCerrado] = useState(false);
+export function SystemStatus({ salud }: { salud: SaludDelSistema }) {
+  // Se recuerda QUÉ avisos se ocultaron: si cambian, el aviso vuelve a salir.
+  const [ocultado, setOcultado] = useState<string | null>(null);
 
-  if (!estado) {
+  if (salud.fase !== 'respondio') {
     return (
       <div className="bg-slate-800 border-b border-slate-700 px-4 py-2 text-xs text-slate-400">
-        Contactando con el servidor…
+        {salud.fase === 'comprobando'
+          ? 'Contactando con el servidor…'
+          : 'No se pudo contactar con el servidor de HolonMed. Se reintenta solo.'}
       </div>
     );
   }
+  const { estado } = salud;
 
   if (estado.operativo && estado.base_datos.conectada) {
     return null;
   }
-  if (cerrado) return null;
 
   const problemas: { texto: string; remedio: string; critico: boolean }[] = [];
 
-  if (!estado.llm.disponible) {
+  // `openai` es el protocolo de LM Studio y llama.cpp; los comandos son los de LM Studio.
+  const lmStudio = estado.llm.backend === 'openai';
+
+  if (estado.llm.estado === 'sin_conexion') {
     problemas.push({
-      texto: `Ollama no responde en ${estado.llm.host}`,
-      remedio: 'ollama serve',
+      texto: `El servidor de modelos no responde en ${estado.llm.host}`,
+      remedio: lmStudio ? 'lms server start' : 'ollama serve',
       critico: true,
     });
-  } else {
+  } else if (estado.llm.estado === 'falta_modelo') {
     for (const modelo of estado.llm.faltantes) {
       problemas.push({
         texto: `Falta el modelo ${modelo}`,
-        remedio: `ollama pull ${modelo}`,
+        remedio: lmStudio ? `lms load ${modelo}` : `ollama pull ${modelo}`,
         critico: true,
       });
     }
+  } else if (estado.llm.estado !== 'conectado') {
+    problemas.push({
+      texto: `No se pudo comprobar el modelo en ${estado.llm.host}`,
+      remedio: 'revisa que ese puerto sea el del servidor de modelos',
+      critico: true,
+    });
   }
 
   if (!estado.vocabulario.disponible) {
@@ -59,7 +71,8 @@ export function SystemStatus({ estado }: { estado: EstadoSistema | null }) {
     });
   }
 
-  if (problemas.length === 0) return null;
+  const firma = problemas.map((p) => p.texto).join('|');
+  if (problemas.length === 0 || ocultado === firma) return null;
 
   const hayCriticos = problemas.some((p) => p.critico);
 
@@ -92,7 +105,7 @@ export function SystemStatus({ estado }: { estado: EstadoSistema | null }) {
 
         <button
           type="button"
-          onClick={() => setCerrado(true)}
+          onClick={() => setOcultado(firma)}
           aria-label="Ocultar aviso"
           className="shrink-0 opacity-60 hover:opacity-100"
         >
