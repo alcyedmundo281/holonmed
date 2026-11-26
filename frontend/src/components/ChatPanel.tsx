@@ -35,7 +35,13 @@ interface Mensaje {
  * Se monta con `key={pacienteId}`: arrastrar una conversación, o una respuesta
  * en vuelo, de un paciente a otro es exactamente el error que no queremos.
  */
-export function ChatPanel({ pacienteId }: { pacienteId: string }) {
+export function ChatPanel({
+  pacienteId,
+  onTicGuardado,
+}: {
+  pacienteId: string;
+  onTicGuardado: (pacienteId: string) => void;
+}) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [entrada, setEntrada] = useState('');
   const [esperando, setEsperando] = useState(false);
@@ -91,7 +97,7 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
               {m.propuesta && <PropuestaRecetaCard propuesta={m.propuesta} />}
               {m.cita && <PropuestaCitaCard propuesta={m.cita} />}
               {m.alta && <PropuestaPacienteCard propuesta={m.alta} />}
-              {m.tic && <PropuestaTicCard propuesta={m.tic} />}
+              {m.tic && <PropuestaTicCard propuesta={m.tic} onGuardado={onTicGuardado} />}
 
               {m.accion && (
                 <div className="mt-2 pt-2 border-t border-slate-300/40">

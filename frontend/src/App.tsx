@@ -142,6 +142,13 @@ export default function App() {
     void refrescarPaciente(resultado.paciente_id);
   }
 
+  // El chat guarda un tic al confirmarlo, y la confirmación también puede
+  // llegar con otro paciente ya en pantalla.
+  function alGuardarTicDelChat(pacienteId: string) {
+    void cargarPacientes();
+    if (pacienteId === enPantalla.current) void refrescarPaciente(pacienteId);
+  }
+
   const validados = tic?.infones.filter((i) => i.estado === 'VALIDADO').length ?? 0;
   const alertas = tic?.infones.filter((i) => i.estado === 'ALERTA').length ?? 0;
   const descartados = tic?.infones.filter((i) => i.estado === 'RUIDO').length ?? 0;
@@ -183,7 +190,11 @@ export default function App() {
             <div className="h-[300px] border-t border-slate-700 shrink-0">
               {/* La `key` descarta conversación, propuestas y respuestas en
                   vuelo al cambiar de paciente. */}
-              <ChatPanel key={paciente.id} pacienteId={paciente.id} />
+              <ChatPanel
+                key={paciente.id}
+                pacienteId={paciente.id}
+                onTicGuardado={alGuardarTicDelChat}
+              />
             </div>
           )}
         </aside>
