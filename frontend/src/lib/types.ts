@@ -627,6 +627,8 @@ export interface Orden {
   estado: 'pendiente' | 'cumplida' | 'anulada';
 }
 
+export type EstadoModelo = 'conectado' | 'falta_modelo' | 'sin_conexion' | 'sin_comprobar';
+
 export interface EstadoSistema {
   operativo: boolean;
   base_datos: {
@@ -638,6 +640,9 @@ export interface EstadoSistema {
   vocabulario: { disponible: boolean; sistemas: Record<string, number> };
   skills: string[];
   llm: {
+    backend: 'ollama' | 'openai';
+    /** Lo decide el backend: aquí no se deduce de los demás campos. */
+    estado: EstadoModelo;
     host: string;
     disponible: boolean;
     modelos: string[];
