@@ -49,6 +49,9 @@ version = { attr = "holonmed.__version__" }
 [tool.setuptools.packages.find]
 include = ["holonmed*"]
 
+[tool.setuptools.package-data]
+holonmed = ["api/static/*.html"]
+
 [tool.ruff]
 line-length = 90
 target-version = "py310"
