@@ -1,12 +1,10 @@
-"""Agenda de citas con interpretación de fechas en lenguaje natural."""
+"""Agenda de citas. Las fechas se leen con la gramática de `core/cita.py`."""
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from ..core.cita import interpretar_fecha
 from ..db import CitaRepo
-
-logger = logging.getLogger(__name__)
 
 
 class SchedulingService:
@@ -14,11 +12,16 @@ class SchedulingService:
         self.repo = repo
 
     def agendar(self, paciente_id: str, fecha_texto: str, motivo: str) -> dict[str, Any]:
-        fecha = self._interpretar(fecha_texto)
+        """Escribe la cita que dice `fecha_texto`.
+
+        Lanza `PeticionInvalida`, sin escribir, si el texto no dice día y
+        hora o si la fecha ya pasó.
+        """
+        fecha = interpretar_fecha(fecha_texto, datetime.now())
         registro = {
             "paciente_id": paciente_id,
-            "fecha": fecha.isoformat() if fecha else fecha_texto,
-            "fecha_interpretada": fecha is not None,
+            "fecha": fecha.isoformat(),
+            "fecha_interpretada": True,
             "motivo": motivo,
             "estado": "agendada",
             "creada": datetime.now(timezone.utc).isoformat(),
@@ -28,7 +31,7 @@ class SchedulingService:
             "estado": "agendada" if cita_id else "no_persistida",
             "id": cita_id,
             "fecha": registro["fecha"],
-            "legible": fecha.strftime("%A %d/%m/%Y %H:%M") if fecha else fecha_texto,
+            "legible": fecha.strftime("%A %d/%m/%Y %H:%M"),
             "motivo": motivo,
         }
 
@@ -49,20 +52,6 @@ class SchedulingService:
                 "estado": "agendada",
                 "confirmada_por": confirmada_por,
             }
-        )
-
-    @staticmethod
-    def _interpretar(texto: str) -> datetime | None:
-        """ "el próximo martes" -> datetime. Devuelve None si no se entiende."""
-        try:
-            import dateparser
-        except ImportError:
-            logger.debug("dateparser no instalado; se guarda la fecha en crudo")
-            return None
-        return dateparser.parse(
-            texto,
-            languages=["es"],
-            settings={"PREFER_DATES_FROM": "future", "DATE_ORDER": "DMY"},
         )
 
     def listar(self, paciente_id: str | None = None):

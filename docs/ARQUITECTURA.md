@@ -343,6 +343,10 @@ la fecha debe decir día y hora en la gramática cerrada de `core/cita.py`.
 Confirmar un tic no ratifica sus infones, y se rechaza si la historia cambió
 desde que se calculó.
 
+`/api/citas` escribe sin confirmación, pero lee la fecha con la misma gramática.
+Responde 422, sin escribir, si la fecha no dice día y hora, ya pasó o falta el
+motivo, y 404 si el paciente no tiene ficha.
+
 Los tres primeros existían ya en el sistema original como un campo `type`
 en cada nota (`ClinicalHolon`, `LabResult`, `Prescription`) y se perdieron
 en la fusión. Recuperarlo destapó que **las recetas no se guardaban en
