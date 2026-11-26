@@ -15,6 +15,10 @@ se **proponen**: escribirlos exige la confirmación nombrada de
 `routes/recetas.py` o `routes/confirmaciones.py`. Enviar por WhatsApp
 devuelve un enlace que el profesional debe pulsar.
 
+La orden de cristalizar escrita al principio del mensaje no pasa por el router:
+la reconoce `core/orden_chat.py`. La respuesta libre que concluye sobre un caso
+o dice qué hacer no se enseña ni se guarda (`core/consulta_libre.py`).
+
 La intención y los campos salen de un modelo, así que ninguno basta para
 escribir: la intención sólo elige qué proponer, y un campo de la cita o del
 alta que no esté en el mensaje no se usa ni se completa.
@@ -28,8 +32,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from ...core.cita import PeticionInvalida, citado_del_mensaje, interpretar_fecha
+from ...core.consulta_libre import motivos_de_retencion
 from ...core.entrada_no_confiable import detectar_instrucciones
 from ...core.nota_soap import construir_nota
+from ...core.orden_chat import narrativa_de_la_orden
 from ...core.receta import ExtraccionInvalida, validar_extraccion
 from ...core.redaccion import MAX_CARACTERES, CorreccionRechazada, validar_salida
 from ...llm import LLMUnavailable
@@ -107,6 +113,11 @@ Responde sólo en JSON, con los saltos de línea escritos como \\n:
 async def chat(
     req: ChatRequest, ctx: AppContext = Depends(get_context)
 ) -> dict[str, Any]:
+    # Una orden explícita no depende de cómo la clasifique un modelo.
+    narrativa = narrativa_de_la_orden(req.mensaje)
+    if narrativa is not None:
+        return await _proponer_tic(ctx, req, narrativa)
+
     holon = ctx.pacientes.obtener_o_efimero(req.paciente_id)
 
     try:
@@ -160,7 +171,7 @@ async def chat(
         return _proponer_alta(ctx, req, clasificacion)
 
     if intencion == "cristalizar":
-        return await _proponer_tic(ctx, req)
+        return await _proponer_tic(ctx, req, req.mensaje)
 
     return await _consulta_medica(ctx, holon, req.mensaje)
 
@@ -299,7 +310,9 @@ def _proponer_alta(
     return {"tipo": "paciente_propuesto", "datos": propuesta}
 
 
-async def _proponer_tic(ctx: AppContext, req: ChatRequest) -> dict[str, Any]:
+async def _proponer_tic(
+    ctx: AppContext, req: ChatRequest, narrativa: str
+) -> dict[str, Any]:
     """Procesa la narrativa y enseña el tic. No lo guarda."""
     retenido = _retenido(
         req.mensaje,
@@ -309,6 +322,11 @@ async def _proponer_tic(ctx: AppContext, req: ChatRequest) -> dict[str, Any]:
     )
     if retenido:
         return retenido
+    if not narrativa:
+        return _error(
+            "Falta la narrativa. Escríbela después de la orden, por ejemplo "
+            "«Cristalizar: …». No se ha procesado ni registrado nada."
+        )
     holon = ctx.pacientes.obtener(req.paciente_id)
     if holon is None:
         return _sin_alta()
@@ -316,7 +334,7 @@ async def _proponer_tic(ctx: AppContext, req: ChatRequest) -> dict[str, Any]:
     # Antes del pipeline: lo que cambie mientras corre también invalida.
     historia = huella(holon)
     try:
-        tic = await ctx.pipeline.ejecutar(req.mensaje, holon)
+        tic = await ctx.pipeline.ejecutar(narrativa, holon)
     except LLMUnavailable as exc:
         return _error(str(exc))
     tic.origen = OrigenTic.CONSULTA
@@ -415,6 +433,9 @@ PACIENTE: {holon.nombre}
 
 Responde con precisión y en español. Si la pregunta requiere datos que no
 tienes, dilo en lugar de suponerlos. No inventes valores ni antecedentes.
+No des diagnósticos, probabilidades ni diagnósticos diferenciales sobre un
+caso, y no indiques pruebas, tratamiento ni próximos pasos. Informa; la
+valoración y la decisión son del profesional.
 
 CONSULTA: {mensaje}"""
 
@@ -426,6 +447,18 @@ CONSULTA: {mensaje}"""
         )
     except LLMUnavailable as exc:
         return {"tipo": "error", "mensaje": str(exc)}
+
+    # La petición del prompt no basta: la condición de rechazo vive en código.
+    motivos = motivos_de_retencion(respuesta)
+    if motivos:
+        # Sin el texto en el registro: puede citar al paciente.
+        logger.warning("Respuesta libre retenida: %s", ", ".join(motivos))
+        return _error(
+            f"No se muestra la respuesta del modelo porque contiene "
+            f"{' y '.join(motivos)}. HolonMed no emite diagnósticos ni "
+            "indicaciones de tratamiento. Para procesar una narrativa, escribe "
+            "«Cristalizar: …» o usa el panel de consulta. No se ha registrado nada."
+        )
 
     libre = RespuestaLibre(paciente_id=holon.paciente_id, texto=respuesta)
     ctx.respuestas_libres.guardar(libre)

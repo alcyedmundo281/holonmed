@@ -343,6 +343,17 @@ la fecha debe decir día y hora en la gramática cerrada de `core/cita.py`.
 Confirmar un tic no ratifica sus infones, y se rechaza si la historia cambió
 desde que se calculó.
 
+Un mensaje que empieza por la orden de cristalizar no pasa por el router:
+`core/orden_chat.py` la reconoce y propone el tic con lo que sigue. La cabecera
+(«Cristaliza esta nota:») sólo se recorta si termina en dos puntos y está hecha
+de palabras de una lista cerrada.
+
+La respuesta libre no pasa por la validación. Si contiene una conclusión
+diagnóstica o una indicación de qué hacer, `core/consulta_libre.py` la retiene
+entera: no se enseña, no se guarda y no se cita en el aviso ni en el registro.
+Es una lista cerrada de fórmulas, así que **una paráfrasis puede pasar** y una
+explicación general que use esas palabras se retiene también.
+
 `/api/citas` escribe sin confirmación, pero lee la fecha con la misma gramática.
 Responde 422, sin escribir, si la fecha no dice día y hora, ya pasó o falta el
 motivo, y 404 si el paciente no tiene ficha.
