@@ -37,7 +37,9 @@ export function PlanOrders({ pacienteId }: Props) {
   const [texto, setTexto] = useState('');
   const [propuestas, setPropuestas] = useState<OrdenPropuesta[]>([]);
   const [marcadas, setMarcadas] = useState<Set<number>>(new Set());
-  const [ordenes, setOrdenes] = useState<Orden[]>([]);
+  // `null`: no se sabe. Una lista vacía afirma que no hay órdenes.
+  const [ordenes, setOrdenes] = useState<Orden[] | null>(null);
+  const [fallaronOrdenes, setFallaronOrdenes] = useState(false);
   const [proponiendo, setProponiendo] = useState(false);
   const [firmando, setFirmando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,8 +48,10 @@ export function PlanOrders({ pacienteId }: Props) {
   const cargarOrdenes = useCallback(async () => {
     try {
       setOrdenes(await api.ordenes(pacienteId));
+      setFallaronOrdenes(false);
     } catch {
-      setOrdenes([]);
+      setOrdenes(null);
+      setFallaronOrdenes(true);
     }
   }, [pacienteId]);
 
@@ -343,9 +347,18 @@ export function PlanOrders({ pacienteId }: Props) {
 
       <section>
         <h3 className="text-sm font-semibold text-slate-700 mb-2">
-          Órdenes activas ({ordenes.length})
+          Órdenes activas{ordenes && ` (${ordenes.length})`}
         </h3>
-        {ordenes.length === 0 ? (
+        {!ordenes ? (
+          <p
+            role={fallaronOrdenes ? 'alert' : 'status'}
+            className="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-4"
+          >
+            {fallaronOrdenes
+              ? 'No se pudieron cargar las órdenes de este paciente. Esto no significa que no tenga ninguna.'
+              : 'Cargando órdenes…'}
+          </p>
+        ) : ordenes.length === 0 ? (
           <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-4">
             Este paciente no tiene ninguna orden. Sin orden no puede haber cargo:
             es la primera pieza de la cadena.

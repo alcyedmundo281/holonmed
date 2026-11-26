@@ -31,6 +31,9 @@ interface Mensaje {
  * Si la intención es enviar un WhatsApp, la respuesta es un enlace que una
  * persona debe abrir y confirmar. Receta, cita, alta de paciente y tic son
  * propuestas: no se escribe nada hasta que alguien las confirma con su nombre.
+ *
+ * Se monta con `key={pacienteId}`: arrastrar una conversación, o una respuesta
+ * en vuelo, de un paciente a otro es exactamente el error que no queremos.
  */
 export function ChatPanel({ pacienteId }: { pacienteId: string }) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
@@ -41,12 +44,6 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
-
-  // Al cambiar de paciente se limpia la conversación: arrastrar el contexto
-  // de un paciente a otro es exactamente el error que no queremos.
-  useEffect(() => {
-    setMensajes([]);
-  }, [pacienteId]);
 
   async function enviar() {
     const texto = entrada.trim();
