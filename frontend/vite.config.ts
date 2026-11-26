@@ -2,6 +2,9 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { version } from './package.json';
 
+// El lanzador la define si el backend no está en su puerto habitual.
+const API = process.env.HOLONMED_API_URL ?? 'http://127.0.0.1:8000';
+
 export default defineConfig({
   plugins: [react()],
   // La versión se inyecta desde package.json: escribirla también en el
@@ -12,8 +15,8 @@ export default defineConfig({
     proxy: {
       // Evita configurar CORS en desarrollo: el frontend llama a rutas
       // relativas y Vite las reenvía al backend.
-      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/health': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/api': { target: API, changeOrigin: true },
+      '/health': { target: API, changeOrigin: true },
     },
   },
 });

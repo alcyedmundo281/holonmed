@@ -218,9 +218,37 @@ def test_el_resumen_vivo_es_soap_y_no_convierte_la_negacion_en_problema(tics):
     assert "#1 Dolor epigástrico\n  S: «dolor epigástrico desde ayer»" in texto
     assert "#2 Hiperlipasemia" in texto
     assert "#3" not in texto
-    assert "Ictericia: ausente · «Sin ictericia» [O]" in texto
+    assert (
+        "Ausencias documentadas (no son problemas): Ictericia («Sin ictericia»)" in texto
+    )
     assert f"P: {SIN_PLAN}" in texto
     assert "Texto libre del modelo" not in texto
+
+
+def test_lo_rechazado_no_marca_un_problema_como_ausente(tics):
+    tics.guardar(_tic([_infon("Náuseas", "náuseas")]))
+    tics.guardar(
+        _tic(
+            [
+                _infon(
+                    "Náuseas",
+                    "sin náuseas",
+                    polaridad=Polaridad.AUSENTE,
+                    acto="rechazado",
+                )
+            ]
+        )
+    )
+
+    assert tics.lista_problemas("sintetico")[0]["consta_ausente"] is None
+
+
+def test_con_texto_dirigido_al_sistema_la_nota_no_tiene_problemas():
+    """El pipeline deja todo en ALERTA: a la vista y fuera de la nota."""
+    nota = construir_nota(_tic([_infon("Náuseas", "náuseas", estado=EstadoInfon.ALERTA)]))
+
+    assert nota.problemas == []
+    assert [f.estado for f in nota.fuera_de_la_nota] == ["ALERTA"]
 
 
 def test_un_registro_antiguo_no_se_lee_como_objetivo(tmp_path):

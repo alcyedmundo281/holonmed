@@ -170,24 +170,18 @@ async def holon_de_fondo(
                 "subjetivo": list(b.subjetivo),
                 "objetivo": list(b.objetivo),
                 "derivado": list(b.derivado),
+                "ausente": list(b.ausente),
                 "sin_clasificar": list(b.sin_clasificar),
                 "numero": b.numero,
             }
             for b in fondo.bloques
-        ],
-        "negativos": [
-            {
-                "termino": i.termino,
-                "cita": i.texto_origen,
-                "procedencia": i.procedencia,
-            }
-            for i in fondo.negativos
         ],
         # El mismo cuerpo que se imprimiría, sin fecha ni firma.
         "texto": formatear_fondo(fondo),
         # Lo que no cayó bajo ningún problema. No se descarta: lo que no
         # esté en el fondo no llegará nunca al médico.
         "sin_sintetizar": list(fondo.sin_sintetizar),
+        "negativos": list(fondo.negativos),
         "al_dia": fondo.al_dia,
         "impresion": {
             "imprime": decision.imprime,

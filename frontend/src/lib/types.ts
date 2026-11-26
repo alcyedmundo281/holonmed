@@ -376,6 +376,11 @@ export interface Promocion {
   traza: string[];
 }
 
+export interface SenalInstruccion {
+  categoria: string;
+  fragmento: string;
+}
+
 export interface ProblemaEvolucion {
   /** El de la lista de problemas. `null` si no está en ella. */
   numero: number | null;
@@ -432,6 +437,8 @@ export interface ResultadoTic {
    */
   skill_version: string | null;
   resumen: string;
+  /** Con una sola señal el tic no valida nada. Vacío no es «texto confiable». */
+  instrucciones_detectadas: SenalInstruccion[];
   evolucion: NotaEvolucion | null;
   infones: Infon[];
   clasificacion: ResultadoClasificacion | null;
@@ -502,6 +509,13 @@ export interface ResultadoTic {
    * Es un estado clínico propio y se muestra como tal.
    */
   todas_vetadas: string | null;
+
+  /**
+   * Por qué el triaje se detuvo (falta el índice o hay una ficha rota). Si viene relleno,
+   * `agrupaciones_triage` vacía no dice que ningún criterio se cumpla, sino
+   * que no se pudo mirar. `null` si el triaje corrió.
+   */
+  aviso_triaje: string | null;
 
   /**
    * Agrupaciones diagnósticas de la lista de problemas por criterios ontológicos de consenso (medsemiotics-db).
@@ -590,6 +604,8 @@ export interface Problema {
   primera: string;
   ultima: string;
   confianza: number;
+  /** Consta ausente en el último registro o después. No lo da por resuelto. */
+  consta_ausente: string | null;
 }
 
 export interface NodoGrafo {
@@ -647,6 +663,8 @@ export interface Orden {
   estado: 'pendiente' | 'cumplida' | 'anulada';
 }
 
+export type EstadoModelo = 'conectado' | 'falta_modelo' | 'sin_conexion' | 'sin_comprobar';
+
 export interface EstadoSistema {
   operativo: boolean;
   base_datos: {
@@ -658,6 +676,9 @@ export interface EstadoSistema {
   vocabulario: { disponible: boolean; sistemas: Record<string, number> };
   skills: string[];
   llm: {
+    backend: 'ollama' | 'openai';
+    /** Lo decide el backend: aquí no se deduce de los demás campos. */
+    estado: EstadoModelo;
     host: string;
     disponible: boolean;
     modelos: string[];
@@ -666,16 +687,68 @@ export interface EstadoSistema {
   };
 }
 
+export interface ItemReceta {
+  farmaco: string;
+  concentracion: string;
+  indicaciones: string;
+}
+
+/** Una receta redactada que todavía no existe en el registro. */
+export interface PropuestaReceta {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  items: ItemReceta[];
+  indicaciones_generales: string;
+}
+
+export interface RecetaEmitida {
+  url: string;
+  items: ItemReceta[];
+  tic_id: string;
+  confirmado_por: string;
+  aviso: string;
+}
+
+/** Una cita redactada que todavía no está en la agenda. */
+export interface PropuestaCita {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  texto_original: string;
+  fecha_texto: string;
+  fecha: string;
+  motivo: string;
+}
+
+/** Un alta redactada: el paciente todavía no existe. */
+export interface PropuestaPaciente {
+  propuesta_id: string;
+  texto_original: string;
+  nombre: string;
+}
+
+/** Un tic procesado que todavía no está en la historia. */
+export interface PropuestaTic {
+  propuesta_id: string;
+  paciente_id: string;
+  paciente_nombre: string;
+  huella_historia: string;
+  tic: ResultadoTic;
+}
+
 export type RespuestaChat =
   | { tipo: 'texto'; datos: { respuesta: string } }
-  | { tipo: 'tic'; datos: ResultadoTic }
-  | { tipo: 'receta'; datos: { url: string; items: unknown[]; aviso: string } }
-  | { tipo: 'agenda'; datos: { legible: string; motivo: string; estado: string } }
+  | { tipo: 'tic_propuesto'; datos: PropuestaTic }
+  | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
+  | { tipo: 'cita_propuesta'; datos: PropuestaCita }
+  | { tipo: 'paciente_propuesto'; datos: PropuestaPaciente }
   | {
       tipo: 'whatsapp';
       datos: { url: string; telefono: string; mensaje: string; aviso: string };
     }
-  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean; creado?: boolean }
+  | { tipo: 'paciente'; datos: Paciente | null; encontrado?: boolean }
   | { tipo: 'error'; mensaje: string };
 
 // Umbrales de presentación. Coinciden con el veredicto del backend.

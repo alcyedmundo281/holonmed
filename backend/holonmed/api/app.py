@@ -3,20 +3,26 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..config import Settings, get_settings
+from ..core.estado_llm import diagnosticar_modelo
+from ..core.triaje import IndiceNoDisponible
 from .deps import AppContext
 from .routes import (
     chat,
     clinical,
+    confirmaciones,
     documents,
     episodios,
     facturacion,
     graph,
     patients,
+    recetas,
+    tutorial,
 )
 
 logging.basicConfig(
@@ -71,31 +77,45 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
+    # 503 y no `[]`: la lista vacía se leería como «ningún criterio se cumple».
+    @app.exception_handler(IndiceNoDisponible)
+    async def triaje_detenido(request: Request, exc: IndiceNoDisponible) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
+
     app.include_router(clinical.router)
     app.include_router(episodios.router)
     app.include_router(chat.router)
+    app.include_router(recetas.router)
+    app.include_router(confirmaciones.router)
     app.include_router(patients.router)
     app.include_router(documents.router)
     app.include_router(graph.router)
     app.include_router(facturacion.router)
+    if settings.modo_demo:
+        app.include_router(tutorial.router)
 
     @app.get("/health", tags=["sistema"])
     async def health():
         ctx: AppContext = app.state.context
         estado = ctx.estado()
-        modelos = await ctx.llm.modelos_disponibles()
-        # Que Ollama responda no basta: recién instalado no tiene ningún
-        # modelo, y decir "operativo" en ese estado manda al usuario a
-        # depurar el sitio equivocado cuando la primera consulta falle.
-        instalados = {m.split(":")[0] for m in modelos}
-        requeridos = {settings.model_clinical, settings.model_router}
-        faltantes = sorted(m for m in requeridos if m.split(":")[0] not in instalados)
+        # Que el servidor responda no basta: sin los modelos configurados,
+        # decir "operativo" manda al usuario a depurar el sitio equivocado
+        # cuando la primera consulta falle.
+        responde, modelos = await ctx.llm.inventario()
+        diagnostico = diagnosticar_modelo(
+            responde=responde,
+            modelos=modelos,
+            requeridos=[settings.model_clinical, settings.model_router],
+            backend=settings.llm_backend,
+        )
 
         estado["llm"] = {
+            "backend": settings.llm_backend,
+            "estado": diagnostico.estado,
             "host": settings.llm_host,
-            "disponible": await ctx.llm.disponible(),
-            "modelos": modelos,
-            "faltantes": faltantes,
+            "disponible": responde,
+            "modelos": modelos or [],
+            "faltantes": diagnostico.faltantes,
             "configurados": {
                 "clinico": settings.model_clinical,
                 "router": settings.model_router,
@@ -105,9 +125,7 @@ def crear_app(settings: Settings | None = None) -> FastAPI:
         # embebida, así que un fallo suyo es de disco, no de un servicio
         # ausente, y por eso no entra en este cálculo.
         estado["operativo"] = (
-            estado["llm"]["disponible"]
-            and not faltantes
-            and estado["vocabulario"]["disponible"]
+            diagnostico.estado == "conectado" and estado["vocabulario"]["disponible"]
         )
         return estado
 

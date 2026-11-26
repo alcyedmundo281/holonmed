@@ -43,7 +43,11 @@ una puede ser rechazado:
 | **0 — Skill-hints** | ¿Lo codificó ya un humano? | Diccionario término→código del protocolo activo |
 | **1 — Recuperación** | ¿Existe el concepto? | FTS5 con BM25 acota; puntuado difuso ordena |
 | **2 — Re-ranking** | ¿Es *este* concepto? | El LLM audita candidatos y **puede responder "ninguno"** |
-| **3 — Auditoría lógica** | ¿Lo sostiene la evidencia? | Comparación numérica explícita contra el protocolo |
+| **3 — Auditoría lógica** | ¿Lo sostiene la evidencia? | Comparación numérica explícita contra el protocolo, sobre el término **que se va a guardar** |
+
+La capa 2 propone un concepto, no lo certifica: si su similitud léxica no
+alcanza el umbral de validación, el hallazgo queda en ALERTA aunque la
+capa 3 lo apruebe ([la medición](docs/VALIDACION.md)).
 
 El resultado no es un booleano sino un veredicto de tres estados:
 
@@ -195,6 +199,85 @@ vocabulario clínico base viene incluido.
 
 ---
 
+## Demostración: tutorial interactivo
+
+Un recorrido guiado, con casos sintéticos, en una página que sirve el propio
+backend. Es material educativo: no diagnostica ni prescribe (ver
+[DISCLAIMER.md](DISCLAIMER.md)). **Escriba solo texto inventado.** La página
+frena algunos identificadores evidentes, pero no es un anonimizador.
+
+### Qué requiere
+
+- Git y Python 3.10+. No hace falta Node ni compilar el frontend.
+- Internet **solo para clonar, instalar y descargar el modelo**. Git también
+  se usa al instalar: una dependencia se baja de GitHub.
+- [LM Studio](https://lmstudio.ai) con un modelo descargado, y su comando
+  `lms` (o encienda el servidor y cargue el modelo desde la aplicación). La
+  demo no usa los modelos de Ollama del arranque rápido.
+
+**Sin un modelo no hay tutorial:** el lanzador comprueba que el servidor local
+lo ofrezca y, si no, explica por qué y no arranca. Las pruebas automáticas
+([Desarrollo](#desarrollo)) no necesitan modelo. Las de triaje ontológico sí
+necesitan el repositorio público
+[medsemiotics-db](https://github.com/alcyedmundo281/medsemiotics-db): clónelo
+junto a la carpeta de HolonMed o indique su ruta en
+`HOLONMED_MEDSEMIOTICS_DIR`. El tutorial se probó sin él.
+
+### Arrancarla
+
+Los comandos son de PowerShell y parten de la raíz del repositorio clonado.
+
+```powershell
+cd backend
+```
+
+```powershell
+python -m venv .venv
+```
+
+```powershell
+.venv\Scripts\python -m pip install -e .
+```
+
+Vea qué modelos tiene, encienda el servidor y cargue uno. Sustituya
+`ID_DEL_MODELO` por su identificador:
+
+```powershell
+lms ls
+```
+
+```powershell
+lms server start --port 1234
+```
+
+```powershell
+lms load ID_DEL_MODELO
+```
+
+```powershell
+.venv\Scripts\python scripts\demo.py --modelo ID_DEL_MODELO --abrir
+```
+
+El tutorial queda en http://localhost:8765/tutorial. Se cierra con `Ctrl+C`.
+En macOS o Linux, use `.venv/bin/python` y `scripts/demo.py` (no se ha probado
+ahí).
+
+Sin `--modelo`, el lanzador pide `gemma-4-e4b-uncensored-hauhaucs-aggressive`,
+el modelo con el que se ensayó el guion. Con otro modelo, los hallazgos y las
+probabilidades pueden no coincidir con lo que el guion comenta; ensáyelo antes
+de mostrarlo. Cada envío puede tardar más de un minuto, según el equipo.
+
+En Windows, si usa ese modelo predeterminado y ya creó `backend\.venv`, basta
+con un doble clic en `demo-holonmed.bat`: enciende el servidor, carga el modelo
+y abre el navegador. Para otro modelo, siga los comandos de arriba, porque el
+`.bat` intenta cargar el predeterminado aunque se le pase `--modelo`.
+
+Cada arranque usa una base de datos temporal, que el lanzador borra al cerrarse
+con normalidad, y escucha solo en `127.0.0.1`. La ruta `/tutorial` no existe
+fuera de la demo.
+
+---
+
 ## Vocabulario clínico
 
 El repositorio incluye un **vocabulario semilla** de unos 110 conceptos
@@ -298,6 +381,20 @@ El proyecto usa nombres deliberados, y merece la pena entenderlos:
 
 ---
 
+### El triaje necesita el índice
+
+El triaje por criterios de consenso lee
+[`medsemiotics-db`](https://github.com/alcyedmundo281/medsemiotics-db). El
+sistema arranca sin él, pero **el triaje se detiene**: sus dos endpoints
+responden 503 y cada tic sale sin agrupaciones, con el motivo en
+`aviso_triaje`, y leído con `general_triage` salvo que se fuerce un protocolo.
+Una lista vacía se leería como «ningún criterio se cumple».
+
+Lo mismo si el índice está pero **una sola ficha** de `conceptos/` o
+`condiciones/` no se puede leer o está mal formada: se detiene todo el triaje, no
+sólo esa condición, hasta que se corrija. El motivo nombra las fichas (cinco como
+máximo) de la carpeta donde se detuvo la carga.
+
 ## Protocolos clínicos (*skills*)
 
 Un protocolo es un Markdown con frontmatter YAML. La prosa instruye al
@@ -388,7 +485,22 @@ y la ejecución dentro de cada línea.
 cd backend && pytest -q && ruff check .
 ```
 
-Los tests no requieren Ollama ni ninguna terminología externa. Cubren sobre
+Los tests no requieren Ollama ni terminologías con licencia. Una parte sí lee
+[`medsemiotics-db`](https://github.com/alcyedmundo281/medsemiotics-db), el
+índice de fuentes, que vive en otro repositorio: sin él se saltan y `pytest -rs`
+dice por qué, así que un verde sin índice no los ha comprobado. Para
+ejecutarlos todos, clónalo junto a este repositorio, como hace CI:
+
+```bash
+git clone https://github.com/alcyedmundo281/medsemiotics-db.git ../medsemiotics-db
+```
+
+(desde la raíz de `holonmed`). `HOLONMED_MEDSEMIOTICS_DIR` sirve para apuntar a
+un clon en otro sitio, pero sólo lo leen el triaje y sus pruebas; las pruebas
+del conversor buscan el clon hermano. Con `HOLONMED_EXIGIR_INDICE=1`, como en
+CI, saltarse por falta de índice es un fallo.
+
+Cubren sobre
 todo las propiedades de seguridad: que la evidencia no validada no cuente,
 que las colisiones se bloqueen, que un LR mal configurado no produzca
 certeza del 100 %, que el grafo encuentre por ancestro y que un descarte no

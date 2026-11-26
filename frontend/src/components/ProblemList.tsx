@@ -6,9 +6,10 @@ import type { Problema } from '../lib/types';
  *
  * Es la primera vista que mira un clínico al abrir una historia. Se
  * construye sólo con hallazgos validados y presentes, deduplicados por
- * concepto y numerados por orden de primer registro. Las fechas dicen cuándo
- * entraron al sistema, no cuándo empezó el cuadro, y no hay estado activo o
- * resuelto porque ese dato no existe.
+ * concepto y numerados por orden de primer registro; una ausencia posterior
+ * se avisa y no retira la fila. Las fechas dicen cuándo entraron al sistema,
+ * no cuándo empezó el cuadro, y no hay estado activo o resuelto porque ese
+ * dato no existe.
  */
 export function ProblemList({
   problemas,
@@ -54,6 +55,12 @@ export function ProblemList({
                 {p.derivado === 1 && (
                   <div className="text-[11px] text-amber-700">
                     Derivado por un criterio, no escrito en la nota
+                  </div>
+                )}
+                {p.consta_ausente && (
+                  <div className="text-[11px] text-amber-700 mt-0.5">
+                    Consta ausente el {fecha(p.consta_ausente)} · sigue en la
+                    lista: no se ha declarado resuelto
                   </div>
                 )}
                 {p.linaje && (

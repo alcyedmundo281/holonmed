@@ -110,6 +110,9 @@ CREATE INDEX IF NOT EXISTS idx_mapeo_destino ON mapeo(sistema_destino, codigo_de
 -- CLÍNICA
 -- =====================================================================
 
+-- `alta_confirmada_por` es el nombre declarado de quien aprobó un alta pedida
+-- por chat, y `cita.confirmada_por` el de una cita. NULL en las demás: nadie
+-- las confirmó por esa vía, y no se inventa quién.
 CREATE TABLE IF NOT EXISTS paciente (
     id           TEXT PRIMARY KEY,
     nombre       TEXT NOT NULL,
@@ -118,7 +121,8 @@ CREATE TABLE IF NOT EXISTS paciente (
     telefono     TEXT,
     antecedentes TEXT NOT NULL DEFAULT '',
     resumen_vivo TEXT NOT NULL DEFAULT 'Paciente nuevo sin antecedentes registrados.',
-    creado       TEXT NOT NULL
+    creado       TEXT NOT NULL,
+    alta_confirmada_por TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_paciente_nombre ON paciente(nombre);
@@ -214,6 +218,8 @@ CREATE TABLE IF NOT EXISTS tic (
     -- señal de qué protocolo falta por escribir.
     conceptos_no_cubiertos TEXT,
     aviso_competencia  TEXT,
+    -- Por qué el triaje se detuvo (falta el índice o hay una ficha rota). NULL si corrió.
+    aviso_triaje       TEXT,
 
     -- Lo que la duda abre cuando Φ dice que la creencia dejó de ser
     -- operable: de qué clase es el fallo, hacia dónde indagar, y qué
@@ -307,7 +313,8 @@ CREATE TABLE IF NOT EXISTS cita (
     interpretada INTEGER NOT NULL DEFAULT 0,
     motivo       TEXT NOT NULL DEFAULT '',
     estado       TEXT NOT NULL DEFAULT 'agendada',
-    creada       TEXT NOT NULL
+    creada       TEXT NOT NULL,
+    confirmada_por TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_cita_paciente ON cita(paciente_id, fecha);

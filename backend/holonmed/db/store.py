@@ -128,6 +128,7 @@ class Database:
         ("tic", "sin_candidatas", "TEXT"),
         ("tic", "conceptos_no_cubiertos", "TEXT"),
         ("tic", "aviso_competencia", "TEXT"),
+        ("tic", "aviso_triaje", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("tic", "promocion", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
@@ -148,6 +149,8 @@ class Database:
         ("infon", "valor", "REAL"),
         ("infon", "unidad", "TEXT"),
         ("infon", "poblacion", "TEXT"),
+        ("paciente", "alta_confirmada_por", "TEXT"),
+        ("cita", "confirmada_por", "TEXT"),
         (
             "paciente",
             "resumen_vivo",
@@ -297,13 +300,13 @@ class GraphRepo:
         return [f["id"] for f in filas]
 
     def cohorte(self, codigo: str, sistema: str) -> list[sqlite3.Row]:
-        """Pacientes con algún hallazgo validado bajo una rama del grafo."""
+        """Pacientes con algún hallazgo validado y presente bajo una rama."""
         aql = """
             SELECT p.id, p.nombre, COUNT(DISTINCT i.id) AS hallazgos,
                    MAX(i.timestamp) AS ultimo
             FROM infon i
             JOIN paciente p ON p.id = i.paciente_id
-            WHERE i.estado = 'VALIDADO'
+            WHERE i.estado = 'VALIDADO' AND i.polaridad = 'presente'
               AND i.concepto_id IN (
                   SELECT a.descendiente_id FROM ancestro a
                   JOIN concepto c ON c.id = a.ancestro_id
@@ -332,6 +335,7 @@ class GraphRepo:
                       COUNT(i.id) AS apariciones
                FROM infon i JOIN concepto c ON c.id = i.concepto_id
                WHERE i.paciente_id = ? AND i.estado = 'VALIDADO'
+                 AND i.polaridad = 'presente'
                GROUP BY c.id ORDER BY apariciones DESC LIMIT ?""",
             (paciente_id, limite),
         ).fetchall()
@@ -417,18 +421,27 @@ class PacienteRepo:
             "telefono": datos.get("telefono"),
             "antecedentes": datos.get("antecedentes", "") or "",
             "creado": _ahora(),
+            "alta_confirmada_por": datos.get("alta_confirmada_por"),
         }
         try:
             with self._db._escritura:
                 cx = self._db.conexion()
                 cx.execute(
-                    """INSERT INTO paciente (id, nombre, edad, sexo, telefono, antecedentes, creado)
-                       VALUES (:id, :nombre, :edad, :sexo, :telefono, :antecedentes, :creado)""",
+                    """INSERT INTO paciente (id, nombre, edad, sexo, telefono,
+                                             antecedentes, creado, alta_confirmada_por)
+                       VALUES (:id, :nombre, :edad, :sexo, :telefono,
+                               :antecedentes, :creado, :alta_confirmada_por)""",
                     registro,
                 )
                 cx.commit()
         except sqlite3.IntegrityError:
+            self._db.conexion().rollback()
             logger.warning("El paciente '%s' ya existe", pid)
+            return None
+        except sqlite3.Error as exc:
+            # Sin deshacer, un `commit` posterior escribiría el alta fallida.
+            self._db.conexion().rollback()
+            logger.error("Error creando el paciente: %s", exc)
             return None
         return registro
 
@@ -831,8 +844,9 @@ class TicRepo:
                                         ganadora_abductiva, triaje_coincide,
                                         triaje_en_candidatas, skill_triaje,
                                         sin_candidatas, conceptos_no_cubiertos,
-                                        aviso_competencia, reapertura, promocion)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                        aviso_competencia, aviso_triaje,
+                                        reapertura, promocion)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -868,6 +882,7 @@ class TicRepo:
                         if resultado.conceptos_no_cubiertos
                         else None,
                         resultado.aviso_competencia,
+                        resultado.aviso_triaje,
                         _json(resultado.reapertura),
                         _json(resultado.promocion),
                     ),
@@ -925,6 +940,7 @@ class TicRepo:
                     )
                 cx.commit()
         except sqlite3.Error as exc:
+            cx.rollback()
             logger.error("Error guardando el tic: %s", exc)
             return None
 
@@ -1038,12 +1054,18 @@ class TicRepo:
         contraria, y eso es inventar una tasa de error. Se devuelven en su
         propia clave para que el consumidor no pueda confundirlos con un
         cero, igual que `Historia.sin_ubicar`.
+
+        Con el triaje detenido `triaje_coincide` también es NULL, pero no
+        porque faltara competencia: esos tics van en `triaje_detenido`.
         """
         sql = """SELECT
                      SUM(CASE WHEN triaje_coincide = 1 THEN 1 ELSE 0 END) AS coinciden,
                      SUM(CASE WHEN triaje_coincide = 0 THEN 1 ELSE 0 END) AS discrepan,
-                     SUM(CASE WHEN triaje_coincide IS NULL THEN 1 ELSE 0 END)
+                     SUM(CASE WHEN triaje_coincide IS NULL
+                                   AND aviso_triaje IS NULL THEN 1 ELSE 0 END)
                          AS sin_competencia,
+                     SUM(CASE WHEN aviso_triaje IS NOT NULL THEN 1 ELSE 0 END)
+                         AS triaje_detenido,
                      SUM(CASE WHEN triaje_en_candidatas = 0 THEN 1 ELSE 0 END)
                          AS fuera_del_grafo,
                      COUNT(*) AS tics
@@ -1063,6 +1085,7 @@ class TicRepo:
             "coinciden": coinciden,
             "discrepan": discrepan,
             "sin_competencia": int(fila["sin_competencia"] or 0),
+            "triaje_detenido": int(fila["triaje_detenido"] or 0),
             # Subconjunto de `discrepan`, no una cuarta categoría: el tic
             # que el grafo no propuso siquiera discrepa además de eso. Se
             # cuenta aparte porque un prompt que elige entre lo que el
@@ -1215,24 +1238,53 @@ class TicRepo:
     def lista_problemas(self, paciente_id: str) -> list[dict[str, Any]]:
         """Lista de problemas: hallazgos validados y presentes, numerados.
 
-        Es la vista que un clínico mira primero. Una ausencia documentada no
-        es un problema, y lo que una persona rechazó tampoco. Se deduplica
-        por concepto y se numera por orden de primer registro. `primera` es
-        cuándo entró al sistema, no cuándo empezó el cuadro.
+        Es la vista que un clínico mira primero. Se deduplica por concepto y
+        se numera por orden de primer registro, así que el número no cambia
+        cuando el problema reaparece. `primera` es cuándo entró al sistema,
+        no cuándo empezó el cuadro. `derivado` es 1 si nadie lo escribió:
+        sale de un criterio declarado.
 
-        `derivado` es 1 si nadie lo escribió: sale de un criterio declarado.
+        LO NEGADO NO ES UN PROBLEMA. Un concepto entra sólo si alguna vez
+        constó presente, y las ausencias no cuentan como apariciones ni
+        mueven sus fechas. «Sin ictericia» está validado —es evidencia, y
+        resta en la inferencia— pero no abre «Ictericia». Lo que una persona
+        rechazó tampoco entra.
+
+        UNA AUSENCIA POSTERIOR NO RESUELVE NADA. Si el concepto constó
+        presente y después ausente, sigue en la lista: que una nota no lo
+        encuentre no es que alguien lo haya dado por resuelto (la fiebre
+        cede con el antipirético, un signo es intermitente). Esa ausencia
+        viaja en `consta_ausente` —la fecha de la última registrada en el
+        mismo tic que la última presencia o en uno posterior— para que la
+        vea quien sí puede decidir. Si vuelve a constar presente en un tic
+        posterior queda en `None`; el infón de la ausencia no se toca.
         """
         filas = self._db.conexion().execute(
-            f"""SELECT termino, codigo, sistema, cie10, linaje,
-                       COUNT(*) AS apariciones,
-                       MIN(timestamp) AS primera,
-                       MAX(timestamp) AS ultima,
-                       MAX(confianza) AS confianza,
-                       MIN(criterio IS NOT NULL) AS derivado
-                FROM infon
-                WHERE paciente_id = ? AND {_ES_PROBLEMA}
-                GROUP BY COALESCE(codigo, termino)
-                ORDER BY primera, MIN(id)""",
+            f"""WITH problema AS (
+                   SELECT COALESCE(codigo, termino) AS clave,
+                          paciente_id, termino, codigo, sistema, cie10, linaje,
+                          COUNT(*) AS apariciones,
+                          MIN(timestamp) AS primera,
+                          MAX(timestamp) AS ultima,
+                          MAX(confianza) AS confianza,
+                          MIN(criterio IS NOT NULL) AS derivado,
+                          MIN(id) AS primer_id,
+                          MAX(tic_id) AS ultimo_tic
+                     FROM infon
+                    WHERE paciente_id = ? AND {_ES_PROBLEMA}
+                    GROUP BY COALESCE(codigo, termino)
+               )
+               SELECT p.termino, p.codigo, p.sistema, p.cie10, p.linaje,
+                      p.apariciones, p.primera, p.ultima, p.confianza,
+                      p.derivado,
+                      (SELECT MAX(a.timestamp) FROM infon a
+                        WHERE a.paciente_id = p.paciente_id
+                          AND a.estado = 'VALIDADO' AND a.polaridad = 'ausente'
+                          AND COALESCE(a.acto, '') != 'rechazado'
+                          AND COALESCE(a.codigo, a.termino) = p.clave
+                          AND a.tic_id >= p.ultimo_tic) AS consta_ausente
+                 FROM problema p
+                ORDER BY p.primera, p.primer_id""",
             (paciente_id,),
         )
         return [{"numero": n, **dict(f)} for n, f in enumerate(filas, start=1)]
@@ -1318,8 +1370,9 @@ class CitaRepo:
                     (datos["paciente_id"], datos["paciente_id"], _ahora()),
                 )
                 cursor = cx.execute(
-                    """INSERT INTO cita (paciente_id, fecha, interpretada, motivo, estado, creada)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    """INSERT INTO cita (paciente_id, fecha, interpretada, motivo,
+                                         estado, creada, confirmada_por)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
                         datos["paciente_id"],
                         datos["fecha"],
@@ -1327,11 +1380,13 @@ class CitaRepo:
                         datos.get("motivo", ""),
                         datos.get("estado", "agendada"),
                         _ahora(),
+                        datos.get("confirmada_por"),
                     ),
                 )
                 cx.commit()
                 return str(cursor.lastrowid)
         except sqlite3.Error as exc:
+            self._db.conexion().rollback()
             logger.error("Error creando la cita: %s", exc)
             return None
 

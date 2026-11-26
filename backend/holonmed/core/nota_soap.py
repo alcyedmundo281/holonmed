@@ -117,6 +117,7 @@ def lineas_soap(
     objetivo: Sequence[str],
     sin_clasificar: Sequence[str],
     derivado: Sequence[str],
+    ausente: Sequence[str] = (),
 ) -> list[str]:
     """Las líneas de un problema. S, O, A y P salen siempre, con dato o sin él."""
     lineas = [f"  S: {_citas(subjetivo)}", f"  O: {_citas(objetivo)}"]
@@ -124,6 +125,10 @@ def lineas_soap(
         lineas.append(f"  Sin clasificar S/O: {_citas(sin_clasificar)}")
     if derivado:
         lineas.append(f"  Derivado, no escrito en la nota: {'; '.join(derivado)}")
+    # Un problema que después consta ausente sigue abierto: se dice, y nadie
+    # lo da por resuelto.
+    if ausente:
+        lineas.append(f"  Consta ausente: {'; '.join(ausente)}")
     lineas.append(f"  A: {SIN_VALORACION}")
     lineas.append(f"  P: {SIN_PLAN}")
     return lineas

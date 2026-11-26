@@ -18,6 +18,7 @@ import { EvolutionNote } from './components/EvolutionNote';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
 import { InfonCard } from './components/InfonCard';
+import { ModelIndicator } from './components/ModelIndicator';
 import { PatientList } from './components/PatientList';
 import { PlanOrders } from './components/PlanOrders';
 import { ProblemList } from './components/ProblemList';
@@ -25,9 +26,9 @@ import { SystemStatus } from './components/SystemStatus';
 import { TicComposer } from './components/TicComposer';
 import { VerdictPanel } from './components/VerdictPanel';
 import { api } from './lib/api';
+import { useEstadoSistema } from './lib/useEstadoSistema';
 import type {
   EntradaHistorial,
-  EstadoSistema,
   Grafo,
   Paciente,
   Problema,
@@ -46,7 +47,7 @@ const PESTANAS: { id: Vista; etiqueta: string; Icono: typeof Stethoscope }[] = [
 ];
 
 export default function App() {
-  const [estado, setEstado] = useState<EstadoSistema | null>(null);
+  const salud = useEstadoSistema();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
   const [paciente, setPaciente] = useState<Paciente | null>(null);
@@ -78,7 +79,6 @@ export default function App() {
   useEffect(() => {
     // Ninguna de estas llamadas debe poder dejar la app en blanco: el
     // aviso de estado ya explica qué falta si algo no responde.
-    api.estado().then(setEstado).catch(() => setEstado(null));
     api.skills().then(setSkills).catch(() => setSkills([]));
     void cargarPacientes();
   }, [cargarPacientes]);
@@ -120,7 +120,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-100">
-      <SystemStatus estado={estado} />
+      <SystemStatus salud={salud} />
 
       <div className="flex flex-1 min-h-0">
         <aside className="w-[260px] shrink-0 border-r border-slate-700 bg-slate-800 flex flex-col">
@@ -129,6 +129,8 @@ export default function App() {
             <span className="font-bold text-slate-100 text-sm">HolonMed</span>
             <span className="text-[10px] text-slate-500 ml-auto font-mono">v{__APP_VERSION__}</span>
           </header>
+
+          <ModelIndicator salud={salud} />
 
           <PatientList
             pacientes={pacientes}
@@ -240,6 +242,28 @@ export default function App() {
                       )}
                     </div>
 
+                    {tic.instrucciones_detectadas.length > 0 && (
+                      <section
+                        role="alert"
+                        className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 shadow-sm"
+                      >
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          La narrativa contiene texto dirigido al sistema
+                        </h3>
+                        <p className="text-sm text-amber-900">
+                          Ningún hallazgo queda validado y no se calcula inferencia.
+                          Revisa el texto original.
+                        </p>
+                        <ul className="text-xs text-amber-900 mt-2 list-disc pl-5">
+                          {tic.instrucciones_detectadas.map((s) => (
+                            <li key={`${s.categoria}:${s.fragmento}`}>
+                              {s.categoria}: «{s.fragmento}»
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+
                     <section className="bg-white border border-slate-200 rounded-lg p-4">
                       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
                         Narrativa y evidencia
@@ -252,9 +276,11 @@ export default function App() {
                       />
                       {tic.resumen && (
                         <p className="text-sm text-slate-600 italic mt-3 pt-3 border-t border-slate-100">
-                          <span className="not-italic text-xs text-slate-400">
-                            Resumen del modelo, sin validar:{' '}
-                          </span>
+                          {tic.instrucciones_detectadas.length === 0 && (
+                            <span className="not-italic text-xs text-slate-400">
+                              Resumen del modelo, sin validar:{' '}
+                            </span>
+                          )}
                           {tic.resumen}
                         </p>
                       )}
@@ -282,6 +308,15 @@ export default function App() {
                         nada»: es que todo lo que el grafo propone para
                         este paciente es imposible, y eso o pide ampliar
                         el ámbito o dice que los antecedentes están mal. */}
+                    {tic.aviso_triaje && (
+                      <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          Triaje detenido
+                        </h3>
+                        <p className="text-sm text-amber-900">{tic.aviso_triaje}</p>
+                      </section>
+                    )}
+
                     {tic.todas_vetadas && (
                       <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
                         <h3 className="font-semibold text-amber-900 text-sm mb-2">

@@ -12,6 +12,7 @@ dejarían de coincidir.
 # `entorno` se importa para que pytest la resuelva aquí; los parámetros de
 # los tests que la piden vuelven a ligar el nombre, y de ahí los F811. Es el
 # precio de reutilizar la fixture en vez de duplicarla.
+import pytest
 from test_pipeline import (  # noqa: F401
     TERMINO_SIN_HINT,
     IndexFalso,
@@ -21,6 +22,8 @@ from test_pipeline import (  # noqa: F401
 )
 
 from holonmed.models import HolonPaciente, ResultadoTic, SinCandidatas
+
+pytestmark = pytest.mark.usefixtures("indice_minimo")
 
 # --- La guarda del router: el tercer estado del eje del triaje -------------
 #

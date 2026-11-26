@@ -35,8 +35,10 @@ from .acoplamiento import MedidorDeAcoplamiento
 from .bayes import AntigenPresentingCell
 from .clasificacion import Clasificador
 from .duda import ReabridorDeIndagacion
+from .entrada_no_confiable import AVISO_RESUMEN, detectar_instrucciones
 from .promocion import EvaluadorDePromocion
 from .skills import Skill, SkillManager
+from .triaje import IndiceNoDisponible
 from .validator import OntologyValidator
 from .veredicto import EvaluadorDeVeredicto
 from .verifier import ClinicalVerifier
@@ -350,12 +352,25 @@ class CrystallizationPipeline:
         # sobre la lista de problemas del paciente (o texto). No se fía a
         # "inteligencia" (un prompt libre).
         problemas_paciente = list(holon.linea_tiempo) if holon.linea_tiempo else []
-        agrupaciones_triage = self.skills.triaje_agrupar(
-            problemas_paciente if problemas_paciente else texto
-        )
+        #
+        # Sin el índice, o con una ficha rota, el triaje se detiene: el tic sale sin agrupaciones,
+        # dice por qué, y no se elige protocolo —se lee con el genérico, salvo
+        # que quien llama fuerce uno—. El tic no se pierde: la extracción no
+        # depende del índice.
+        agrupaciones_triage = []
+        aviso_triaje = None
+        try:
+            agrupaciones_triage = self.skills.triaje_agrupar(
+                problemas_paciente if problemas_paciente else texto
+            )
+        except IndiceNoDisponible as exc:
+            aviso_triaje = str(exc)
+            logger.warning("%s", aviso_triaje)
 
         if skill_forzada:
             triaje = self.skills.cargar_o_defecto(skill_forzada)
+        elif aviso_triaje:
+            triaje = self.skills.cargar_o_defecto(None)
         else:
             try:
                 nombre = await self.skills.triaje(
@@ -370,9 +385,14 @@ class CrystallizationPipeline:
             texto_original=texto,
             skill_activa=triaje.nombre,
             skill_version=triaje.version,
-            skill_triaje=triaje.nombre,
+            # None con el triaje detenido: no eligió nada que registrar.
+            skill_triaje=None if aviso_triaje else triaje.nombre,
             agrupaciones_triage=agrupaciones_triage,
+            aviso_triaje=aviso_triaje,
         )
+        # Determinista y sobre el texto crudo: no depende de lo que ningún
+        # modelo haya entendido de él.
+        resultado.instrucciones_detectadas = detectar_instrucciones(texto)
 
         # --- ETAPA 2: LA EXTRACCIÓN -----------------------------------
         # El interruptor gobierna la FORMA del tic y no sólo quién vota.
@@ -393,6 +413,8 @@ class CrystallizationPipeline:
         resultado.resumen = resumen
         if not extraidos:
             logger.info("Sin hallazgos extraíbles en el tic")
+            if resultado.instrucciones_detectadas:
+                self._retener(resultado)
             return resultado
 
         hints_base = base.hints_snomed()
@@ -400,6 +422,16 @@ class CrystallizationPipeline:
             infon = await self._validar_hallazgo(crudo, texto, base, hints_base)
             if infon:
                 resultado.infones.append(infon)
+
+        # Con texto dirigido al sistema el tic termina aquí. El extractor y
+        # el auditor leyeron la narrativa entera, así que ninguno de sus
+        # veredictos sirve, y no se puede saber hasta dónde alcanzó la
+        # orden: la cita del hallazgo inducido no tiene por qué contenerla.
+        # Y nada de lo que sigue —competencia, clasificación, Bayes (que lee
+        # la narrativa cruda para el a priori)— debe correr sobre ella.
+        if resultado.instrucciones_detectadas:
+            self._retener(resultado)
+            return resultado
 
         # --- ETAPA 3: LA COMPETENCIA ABDUCTIVA, que ahora decide ------
         # Corre sobre el conjunto común y ANTES de la clasificación: la
@@ -532,6 +564,33 @@ class CrystallizationPipeline:
             logger.exception("Evaluador de promoción falló; el tic sigue en pie")
 
         return resultado
+
+    @staticmethod
+    def _retener(resultado: ResultadoTic) -> None:
+        """Fallo cerrado ante una narrativa con texto dirigido al sistema.
+
+        Los hallazgos no se borran: quedan en ALERTA, a la vista de quien
+        revisa y fuera de la línea de tiempo, que sólo carga VALIDADO. El
+        resumen del modelo se sustituye entero —es texto libre que nadie
+        valida y que se persiste— y el aviso no repite nada de la narrativa.
+        Las agrupaciones del triaje salen del mismo texto y se retiran.
+        """
+        categorias = ", ".join(
+            sorted({s.categoria for s in resultado.instrucciones_detectadas})
+        )
+        logger.warning(
+            "Texto dirigido al sistema en la narrativa (%s): el tic no valida nada",
+            categorias,
+        )
+        resultado.resumen = AVISO_RESUMEN
+        resultado.agrupaciones_triage = []
+        for infon in resultado.infones:
+            if infon.estado == EstadoInfon.VALIDADO:
+                infon.estado = EstadoInfon.ALERTA
+            infon.razon_auditoria = (
+                f"{infon.razon_auditoria}; retenido: texto dirigido al sistema "
+                f"en la narrativa ({categorias})"
+            )
 
     def _elegir_hipotesis(
         self,
@@ -695,8 +754,7 @@ class CrystallizationPipeline:
             resultado.sin_candidatas = SinCandidatas.NADA_VALIDADO
             logger.warning(
                 "La lectura inicial no validó ni un solo hallazgo: la abducción "
-                "no tuvo de qué partir, y el protocolo '%s' lo eligió el "
-                "triaje solo.",
+                "no tuvo de qué partir, y el tic corre con '%s' sin ella.",
                 resultado.skill_activa,
             )
             return
@@ -741,8 +799,12 @@ class CrystallizationPipeline:
         # que propuso. Esto dice que no propuso ésta en absoluto, que es
         # otra cosa: el prompt eligió fuera de lo que el paciente sugiere.
         propuestas = {c.nombre for c in candidatas}
-        resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
-        if not resultado.triaje_en_candidatas:
+        # Con el triaje detenido no hay elección suya que comparar: registrarla
+        # metería el protocolo por defecto en la tasa que autoriza
+        # `abduccion_decide`.
+        if not resultado.aviso_triaje:
+            resultado.triaje_en_candidatas = resultado.skill_activa in propuestas
+        if resultado.triaje_en_candidatas is False:
             logger.warning(
                 "El triaje eligió '%s', que el grafo NO propuso. Propuso: %s. "
                 "No se cambia el protocolo: sólo se registra.",
@@ -804,20 +866,23 @@ class CrystallizationPipeline:
             return
 
         resultado.ganadora_abductiva = ganadora.skill
-        resultado.triaje_coincide = ganadora.skill == resultado.skill_activa
+        if not resultado.aviso_triaje:
+            resultado.triaje_coincide = ganadora.skill == resultado.skill_activa
         resultado.aviso_competencia = aviso
         if aviso:
             logger.warning("%s", aviso)
 
         logger.info(
             "Competencia abductiva: %d candidatas, gana '%s' (%s %.4f); "
-            "el triaje dijo '%s' — %s",
+            "protocolo en uso '%s' — %s",
             len(resultado.competencia),
             ganadora.skill,
             ganadora.lectura,
             ganadora.clave,
             resultado.skill_activa,
-            "coinciden" if resultado.triaje_coincide else "DISCREPAN",
+            {True: "coinciden", False: "DISCREPAN", None: "triaje detenido"}[
+                resultado.triaje_coincide
+            ],
         )
 
     @staticmethod
@@ -967,8 +1032,10 @@ class CrystallizationPipeline:
         es_logico = False
 
         if match.score >= self.settings.threshold_audit:
+            # Se audita lo que se va a guardar, no lo que propuso el
+            # extractor: que el texto sostenga «X» no dice nada de «Y».
             auditoria = await self.verificador.auditar(
-                termino,
+                match.termino,
                 texto_original,
                 skill.para_prompt(self.settings.formato_protocolo),
                 ausente=(polaridad is Polaridad.AUSENTE),
@@ -978,7 +1045,11 @@ class CrystallizationPipeline:
             certeza_logica = auditoria.certeza
 
         # Veredicto
-        if match.score >= self.settings.threshold_validated and es_logico:
+        if (
+            match.score >= self.settings.threshold_validated
+            and es_logico
+            and match.motivo_revision is None
+        ):
             estado = EstadoInfon.VALIDADO
             confianza = match.score * PESO_ONTOLOGICO + certeza_logica * PESO_LOGICO
         elif match.score >= self.settings.threshold_alert:
@@ -986,6 +1057,15 @@ class CrystallizationPipeline:
             # marcado, nunca se descarta en silencio ni se da por bueno.
             estado = EstadoInfon.ALERTA
             confianza = match.score
+            if match.motivo_revision:
+                # Un 99 junto a un concepto sin confirmar se leería como
+                # certeza; se muestra lo que de verdad casaban las cadenas.
+                if match.similitud_lexica is not None:
+                    confianza = match.similitud_lexica
+                razon = (
+                    f"{razon}; {match.motivo_revision}: se propuso «{termino}», "
+                    f"requiere revisión humana"
+                )
         else:
             estado = EstadoInfon.RUIDO
             confianza = match.score

@@ -84,6 +84,14 @@ export function CompetitionPanel({ tic }: { tic: ResultadoTic }) {
  * donde nadie compitió.
  */
 function Acuerdo({ tic }: { tic: ResultadoTic }) {
+  if (tic.aviso_triaje) {
+    return (
+      <p className="text-xs text-slate-500 italic mb-3">
+        El triaje estaba detenido: no hay con qué comparar el grafo.
+      </p>
+    );
+  }
+
   if (tic.triaje_coincide === null) {
     return (
       <p className="text-xs text-slate-500 italic mb-3">

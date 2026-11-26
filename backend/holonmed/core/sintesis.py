@@ -54,7 +54,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..models import Infon, Polaridad
-from .nota_soap import etiqueta_derivado, linea_negativo, lineas_soap
+from .nota_soap import etiqueta_derivado, lineas_soap
 
 
 class Motivo(str, Enum):
@@ -96,11 +96,18 @@ class Bloque:
     derivado: tuple[str, ...] = ()
     sin_clasificar: tuple[str, ...] = ()
     numero: int | None = None
+    # Lo que consta ausente va aparte: mezclado con lo demás, la cita o el
+    # término se leerían como afirmados.
+    ausente: tuple[str, ...] = ()
 
     @property
     def vacio(self) -> bool:
         return not (
-            self.subjetivo or self.objetivo or self.derivado or self.sin_clasificar
+            self.subjetivo
+            or self.objetivo
+            or self.derivado
+            or self.sin_clasificar
+            or self.ausente
         )
 
 
@@ -116,7 +123,8 @@ class HolonDeFondo:
     bloques: tuple[Bloque, ...] = ()
     hasta_tic: str | None = None
     sin_sintetizar: tuple[str, ...] = ()
-    negativos: tuple[Infon, ...] = ()
+    # Ausencias documentadas que no caen bajo ningún problema.
+    negativos: tuple[str, ...] = ()
 
     @property
     def problemas(self) -> tuple[str, ...]:
@@ -136,43 +144,49 @@ def sintetizar(
     """Organiza los infones por problema, en el orden de Weed.
 
     `problemas` llega en el orden de la lista, y de ahí sale el número de
-    cada uno. Una ausencia no cuelga de ningún problema: sale en
-    `negativos`, para que nunca se lea como que el problema está presente.
+    cada uno.
 
     Un infón que no cae bajo ningún problema **no se descarta**: sale en
     `sin_sintetizar`. Perderlo en silencio sería la peor forma del error
     aquí, porque el fondo es lo que alimenta la nota impresa y lo que no
     esté en el fondo no llegará nunca al médico.
+
+    Una ausencia nunca se escribe como un hallazgo: bajo su problema va en
+    `ausente` y sin problema en `negativos`, siempre con el término delante,
+    porque la cita sola puede no traer la negación. No retira el bloque:
+    que algo conste ausente no es que esté resuelto.
     """
     por_problema: dict[str, list[Infon]] = {problema: [] for problema in problemas}
     sueltos: list[str] = []
-    negativos: list[Infon] = []
+    negativos: list[str] = []
 
     for infon in infones:
-        if infon.polaridad is Polaridad.AUSENTE:
-            negativos.append(infon)
-            continue
         destino = _problema_de(infon, problemas)
         if destino is None:
-            sueltos.append(infon.termino)
+            if infon.polaridad is Polaridad.AUSENTE:
+                negativos.append(_negado(infon))
+            else:
+                sueltos.append(infon.termino)
             continue
         por_problema[destino].append(infon)
 
     bloques = tuple(
         Bloque(
             problema=problema,
-            subjetivo=tuple(
-                i.texto_origen for i in suyos if i.procedencia == "subjetivo"
-            ),
-            objetivo=tuple(i.texto_origen for i in suyos if i.procedencia == "objetivo"),
+            subjetivo=_citas(suyos, "subjetivo"),
+            objetivo=_citas(suyos, "objetivo"),
             derivado=tuple(
-                etiqueta_derivado(i) for i in suyos if i.procedencia == "derivado"
+                etiqueta_derivado(i)
+                for i in suyos
+                if i.procedencia == "derivado" and i.polaridad is Polaridad.PRESENTE
             ),
             sin_clasificar=tuple(
                 i.texto_origen
                 for i in suyos
                 if i.procedencia not in ("subjetivo", "objetivo", "derivado")
+                and i.polaridad is Polaridad.PRESENTE
             ),
+            ausente=tuple(_negado(i) for i in suyos if i.polaridad is Polaridad.AUSENTE),
             numero=numero,
         )
         for numero, (problema, suyos) in enumerate(por_problema.items(), start=1)
@@ -184,6 +198,19 @@ def sintetizar(
         sin_sintetizar=tuple(sueltos),
         negativos=tuple(negativos),
     )
+
+
+def _citas(infones: Sequence[Infon], procedencia: str) -> tuple[str, ...]:
+    """Las citas de lo presente que aseveró esa procedencia."""
+    return tuple(
+        i.texto_origen
+        for i in infones
+        if i.procedencia == procedencia and i.polaridad is Polaridad.PRESENTE
+    )
+
+
+def _negado(infon: Infon) -> str:
+    return f"{infon.termino} («{infon.texto_origen}»)"
 
 
 def _problema_de(infon: Infon, problemas: Sequence[str]) -> str | None:
@@ -298,24 +325,22 @@ def formatear_fondo(fondo: HolonDeFondo) -> str:
         numero = f"#{bloque.numero} " if bloque.numero is not None else ""
         lineas = [f"{numero}{bloque.problema}"]
         lineas += lineas_soap(
-            bloque.subjetivo, bloque.objetivo, bloque.sin_clasificar, bloque.derivado
+            bloque.subjetivo,
+            bloque.objetivo,
+            bloque.sin_clasificar,
+            bloque.derivado,
+            bloque.ausente,
         )
         secciones.append("\n".join(lineas))
-
-    if fondo.negativos:
-        secciones.append(
-            "\n".join(
-                ["Negativos documentados (no son problemas)"]
-                + [
-                    linea_negativo(i.termino, i.texto_origen, i.procedencia)
-                    for i in fondo.negativos
-                ]
-            )
-        )
 
     if fondo.sin_sintetizar:
         secciones.append(
             "Sin sintetizar bajo un problema: " + ", ".join(fondo.sin_sintetizar)
+        )
+
+    if fondo.negativos:
+        secciones.append(
+            "Ausencias documentadas (no son problemas): " + "; ".join(fondo.negativos)
         )
 
     return "\n\n".join(secciones)
@@ -339,6 +364,7 @@ class NotaImpresa:
     la_pidio_el_paciente: bool
     bloques: tuple[Bloque, ...] = ()
     sin_sintetizar: tuple[str, ...] = ()
+    negativos: tuple[str, ...] = ()
 
 
 def imprimir(
@@ -385,4 +411,5 @@ def imprimir(
         la_pidio_el_paciente=decision.la_pidio_el_paciente,
         bloques=fondo.bloques,
         sin_sintetizar=fondo.sin_sintetizar,
+        negativos=fondo.negativos,
     )

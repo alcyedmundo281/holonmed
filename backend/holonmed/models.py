@@ -13,9 +13,10 @@ El vocabulario es deliberado y viene de la teoría que sostiene el sistema:
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Annotated, Any
+from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 def _now() -> str:
@@ -124,6 +125,15 @@ class EstadoInfon(str, Enum):
     VALIDADO = "VALIDADO"  # Ontología y lógica coinciden. Utilizable.
     ALERTA = "ALERTA"  # Acierto ontológico, duda lógica. Requiere ojo humano.
     RUIDO = "RUIDO"  # Descartado. Probable alucinación del modelo.
+
+
+class SenalInstruccion(BaseModel):
+    """Un trozo de la narrativa que le habla al sistema y no del paciente."""
+
+    categoria: str
+    fragmento: str = Field(
+        description="Coincidencia sobre el texto aplanado: sin acentos y en minúsculas"
+    )
 
 
 class Infon(BaseModel):
@@ -931,6 +941,10 @@ class ResultadoTic(BaseModel):
         ),
     )
     resumen: str = ""
+    # Texto imperativo dirigido al sistema, detectado sin modelo en
+    # `core/entrada_no_confiable.py`. Con una sola señal el tic no valida
+    # nada. Vacío NO significa que el texto sea confiable.
+    instrucciones_detectadas: list[SenalInstruccion] = Field(default_factory=list)
     # La nota de evolución se arma después de guardar, cuando la lista de
     # problemas ya puede numerar. `resumen` es texto libre del modelo y no
     # forma parte de ella.
@@ -1018,6 +1032,14 @@ class ResultadoTic(BaseModel):
     )
 
     # --- Triaje determinista por criterios ontológicos (medsemiotics-db) ---
+    aviso_triaje: str | None = Field(
+        default=None,
+        description=(
+            "Se rellena cuando el triaje se detuvo, con el motivo. Entonces "
+            "`agrupaciones_triage` vacía NO dice que ningún criterio se "
+            "cumpla, sino que no se pudo mirar. None si el triaje corrió."
+        ),
+    )
     agrupaciones_triage: list[AgrupacionDiagnostica] = Field(
         default_factory=list,
         description=(
@@ -1088,7 +1110,9 @@ class HolonPaciente(BaseModel):
         """
         fuentes = [
             self.antecedentes,
-            *(i.termino for i in self.linea_tiempo),
+            # Sólo lo presente: el término de una ausencia no lleva su «sin»
+            # y entraría como factor de riesgo afirmado.
+            *(i.termino for i in self.presentes()),
             texto_actual,
         ]
         contexto = "\n".join(f.strip() for f in fuentes if f and f.strip())
@@ -1117,6 +1141,85 @@ class ChatRequest(BaseModel):
     paciente_id: str = "default"
 
 
+class ItemReceta(BaseModel):
+    """Un fármaco tal como se enseña para aprobar y como se escribe."""
+
+    farmaco: str = Field(min_length=1)
+    concentracion: str = ""
+    indicaciones: str = ""
+
+
+class PropuestaReceta(BaseModel):
+    """Una receta redactada que todavía no existe en el registro."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    items: list[ItemReceta] = Field(min_length=1)
+    indicaciones_generales: str = ""
+
+
+class PropuestaCita(BaseModel):
+    """Una cita redactada que todavía no está en la agenda."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    texto_original: str = Field(description="El mensaje tal como lo envió la persona")
+    fecha_texto: str = Field(description="La fecha tal como está escrita en el mensaje")
+    fecha: str = Field(description="Lo que se escribirá, en ISO y hora local")
+    motivo: str = Field(min_length=1)
+
+
+class PropuestaPaciente(BaseModel):
+    """Un alta redactada: el paciente todavía no existe."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    texto_original: str
+    nombre: str = Field(min_length=1)
+
+
+class PropuestaTic(BaseModel):
+    """Un tic procesado que todavía no está en la historia."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    paciente_nombre: str
+    huella_historia: str = Field(
+        description="Resumen de la historia contra la que se calculó el tic"
+    )
+    tic: ResultadoTic
+
+
+class ConfirmarAlta(BaseModel):
+    """La aprobación. No admite contenido: sólo señala qué propuesta y quién."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    propuesta_id: str = Field(min_length=1)
+    confirmado_por: str = Field(description="Nombre declarado de quien aprueba")
+
+    @field_validator("confirmado_por")
+    @classmethod
+    def _con_nombre(cls, valor: str) -> str:
+        nombre = valor.strip()
+        if not any(c.isalpha() for c in nombre):
+            raise ValueError("La confirmación exige el nombre de quien aprueba")
+        return nombre
+
+
+class ConfirmarEnPaciente(ConfirmarAlta):
+    """La aprobación de algo que se escribe sobre un paciente."""
+
+    # Sin valor por defecto: la identidad del paciente no se presume.
+    paciente_id: str = Field(min_length=1)
+
+
+class ConfirmarReceta(ConfirmarEnPaciente):
+    """La aprobación de una receta."""
+
+
 class PacienteCreate(BaseModel):
     nombre: str = Field(min_length=1)
     edad: int | None = None
@@ -1127,5 +1230,8 @@ class PacienteCreate(BaseModel):
 
 class CitaCreate(BaseModel):
     paciente_id: str
-    fecha: str = Field(description="Fecha en lenguaje natural o ISO")
-    motivo: str = "Control"
+    fecha: str = Field(
+        description="Día y hora, en la gramática cerrada de `core/cita.py`"
+    )
+    # Sin valor por defecto: un motivo que nadie dijo no se escribe.
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
