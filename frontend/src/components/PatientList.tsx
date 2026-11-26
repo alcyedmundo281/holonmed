@@ -7,7 +7,7 @@ interface Props {
   pacientes: Paciente[];
   activo: string | null;
   onSeleccionar: (paciente: Paciente) => void;
-  onCreado: () => void;
+  onCreado: (paciente: Paciente) => void;
 }
 
 /**
@@ -89,9 +89,10 @@ export function PatientList({ pacientes, activo, onSeleccionar, onCreado }: Prop
       {creando && (
         <NuevoPaciente
           onCerrar={() => setCreando(false)}
-          onCreado={() => {
+          onCreado={(paciente) => {
             setCreando(false);
-            onCreado();
+            setFiltro('');
+            onCreado(paciente);
           }}
         />
       )}
@@ -104,7 +105,7 @@ function NuevoPaciente({
   onCreado,
 }: {
   onCerrar: () => void;
-  onCreado: () => void;
+  onCreado: (paciente: Paciente) => void;
 }) {
   const [nombre, setNombre] = useState('');
   const [edad, setEdad] = useState('');
@@ -118,13 +119,13 @@ function NuevoPaciente({
     setGuardando(true);
     setError(null);
     try {
-      await api.crearPaciente({
+      const paciente = await api.crearPaciente({
         nombre: nombre.trim(),
         edad: edad ? Number(edad) : null,
         sexo: sexo || null,
         antecedentes: antecedentes.trim(),
       });
-      onCreado();
+      onCreado(paciente);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error creando el paciente');
       setGuardando(false);

@@ -3,6 +3,7 @@ import type {
   Documento,
   Infon,
   EstadoSistema,
+  ExpedientePaciente,
   Grafo,
   Orden,
   OrdenPropuesta,
@@ -126,6 +127,9 @@ export const api = {
     }),
 
   pacientes: () => pedir<Paciente[]>('/api/pacientes'),
+
+  expediente: (pacienteId: string) =>
+    pedir<ExpedientePaciente>(`/api/pacientes/expediente.json?id=${q(pacienteId)}`),
 
   crearPaciente: (datos: {
     nombre: string;

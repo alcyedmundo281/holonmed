@@ -310,6 +310,41 @@ Cada arranque usa una base de datos temporal, que el lanzador borra al cerrarse
 con normalidad, y escucha solo en `127.0.0.1`. La ruta `/tutorial` no existe
 fuera de la demo.
 
+### Presentar la app React
+
+Instala las dependencias del frontend con `npm ci` desde `frontend/`. En
+Windows, ejecuta desde la raíz `\.\demo-holonmed.bat --react`. La app abre
+en `http://127.0.0.1:5173` y usa la API de la demo en el puerto 8765, con
+Gemma 4 en LM Studio (1234). Los casos sintéticos se guardan en una base
+SQLite separada del repositorio y de la base de trabajo. En Windows queda en
+`%LOCALAPPDATA%\HolonMed\demo-react\demo.db`. Usa `--react --temporal` para
+un ensayo desechable. Si ya cargaste el modelo,
+también puedes arrancarla desde `backend/` con
+`.venv\Scripts\python scripts\demo.py --react --abrir`.
+
+En **Consulta**, crea un paciente sintético, selecciona `acute_pancreatitis`
+y cristaliza este ejemplo. La selección explícita permite ensayar ese
+protocolo aunque el triaje automático elija `general_triage`.
+
+```text
+Paciente sintético de 45 años.
+S: Dolor epigástrico intenso irradiado en cinturón hacia la espalda desde hace 8 horas, con náuseas y vómitos. Antecedente de colelitiasis.
+O: Lipasa 900 U/L, amilasa 620 U/L. Afebril. Sin ictericia.
+```
+
+Abre **Ver hipótesis y LR** en el resultado. Cada alta abre una Consulta
+vacía para el nuevo paciente. Selecciona el caso anterior para recuperar su
+última consulta, sus problemas, su historia y su grafo, incluso tras reiniciar
+la demo persistente.
+
+La API sirve `/api/pacientes/indice.yaml` con los identificadores y la ruta
+relativa del expediente de cada paciente. Cada `/api/pacientes/expediente.json?id=…`
+se genera desde SQLite y contiene `paciente_id`, `consulta`, `problemas`,
+`historia` y `grafo`. `consulta` es `null` para una ficha sin consultas guardadas.
+Las consultas nuevas conservan además el borrador de evolución y los avisos
+del procesamiento. Los registros anteriores muestran los datos guardados en
+su momento.
+
 ---
 
 ## Vocabulario clínico

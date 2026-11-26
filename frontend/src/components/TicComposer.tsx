@@ -28,8 +28,10 @@ export function TicComposer({ pacienteId, skills, onResultado }: Props) {
     setProcesando(true);
     setError(null);
     try {
-      onResultado(await api.cristalizar(texto, pacienteId, skill || undefined));
-      setTexto('');
+      const resultado = await api.cristalizar(texto, pacienteId, skill || undefined);
+      onResultado(resultado);
+      if (resultado.tic_id) setTexto('');
+      else setError('No se pudo guardar el procesamiento. La narrativa sigue en el editor.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error desconocido');
     } finally {
@@ -81,7 +83,7 @@ export function TicComposer({ pacienteId, skills, onResultado }: Props) {
           <option value="">Protocolo: automático</option>
           {skills.map((s) => (
             <option key={s.nombre} value={s.nombre}>
-              {s.nombre}
+              {s.nombre}{!s.tiene_modelo_bayesiano && ' (sin cálculo bayesiano)'}
             </option>
           ))}
         </select>
@@ -134,7 +136,7 @@ export function TicComposer({ pacienteId, skills, onResultado }: Props) {
       {procesando && (
         <p className="text-xs text-slate-500 mt-2">
           Triaje, extracción, validación en tres capas e inferencia. Con modelos
-          locales puede tardar entre unos segundos y un minuto.
+          locales puede tardar más de un minuto.
         </p>
       )}
 

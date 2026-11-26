@@ -585,6 +585,29 @@ export interface EntradaHistorial {
   inferencia: InferenciaBayesiana | null;
 }
 
+export type ConsultaGuardada = Pick<
+  ResultadoTic,
+  | 'paciente_id' | 'timestamp' | 'origen' | 'skill_activa' | 'texto_original' | 'resumen'
+  | 'infones' | 'inferencia' | 'acoplamiento' | 'veredicto_declarado' | 'reapertura'
+  | 'competencia' | 'ganadora_abductiva' | 'triaje_coincide' | 'aviso_triaje'
+  | 'aviso_protocolo' | 'aviso_competencia'
+> & {
+  tic_id: string;
+  detalle: Pick<
+    ResultadoTic,
+    'evolucion' | 'instrucciones_detectadas' | 'todas_vetadas' | 'clasificacion' |
+    'agrupaciones_triage'
+  > | null;
+};
+
+export interface ExpedientePaciente {
+  paciente_id: string;
+  consulta: ConsultaGuardada | null;
+  problemas: Problema[];
+  historia: EntradaHistorial[];
+  grafo: Grafo;
+}
+
 export interface ResumenOrigen {
   origen: OrigenTic;
   tics: number;

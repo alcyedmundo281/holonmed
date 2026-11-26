@@ -1,17 +1,17 @@
-"""Arranca HolonMed en modo demostración, contra LM Studio y con base desechable.
+"""Arranca HolonMed en modo demostración, contra LM Studio y con base separada.
 
     python scripts/demo.py
     python scripts/demo.py --modelo <id> --puerto 8765
     python scripts/demo.py --abrir        # abre el navegador al estar listo
+    python scripts/demo.py --react --abrir # abre la app React con base persistente
 
 En Windows basta con `demo-holonmed.bat`, en la raíz del repositorio.
 
 Antes: arranca el servidor de LM Studio (puerto 1234) y carga el modelo
 (`lms server start`, `lms load <modelo>`).
 
-Cada arranque usa una base de datos temporal que se borra al salir: nada de lo
-que se escriba en la demostración sobrevive, y la demostración nunca ve la base
-de trabajo. Escucha sólo en 127.0.0.1.
+El tutorial usa una base temporal. React conserva los casos en una base de demo
+del usuario, o usa una temporal con --temporal. Escucha sólo en 127.0.0.1.
 """
 
 import argparse
@@ -23,6 +23,7 @@ import tempfile
 import threading
 import time
 import webbrowser
+from contextlib import nullcontext
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -30,11 +31,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 MODELO = "gemma-4-e4b-uncensored-hauhaucs-aggressive"
 
 
-def configurar(directorio: Path, modelo: str, lm_host: str) -> None:
+def directorio_react() -> Path:
+    if os.name == "nt":
+        return Path(os.environ["LOCALAPPDATA"]) / "HolonMed" / "demo-react"
+    datos = os.environ.get("XDG_DATA_HOME")
+    return (
+        (Path(datos) if datos else Path.home() / ".local" / "share")
+        / "holonmed"
+        / "demo-react"
+    )
+
+
+def configurar(directorio: Path, modelo: str, lm_host: str, *, tutorial: bool) -> None:
     """Fija el entorno de la demo. Pisa lo que diga `.env` a propósito."""
     os.environ.update(
         {
-            "HOLONMED_MODO_DEMO": "true",
+            "HOLONMED_MODO_DEMO": "true" if tutorial else "false",
             "HOLONMED_LLM_BACKEND": "openai",
             "HOLONMED_OPENAI_HOST": lm_host,
             "HOLONMED_MODEL_CLINICAL": modelo,
@@ -75,12 +87,15 @@ def main() -> int:
     parser.add_argument("--modelo", default=MODELO)
     parser.add_argument("--lm-host", default="http://127.0.0.1:1234")
     parser.add_argument("--puerto", type=int, default=8765)
+    parser.add_argument("--react", action="store_true", help="abre la app React")
+    parser.add_argument("--temporal", action="store_true", help="usa una base desechable")
+    parser.add_argument("--puerto-frontend", type=int, default=5173)
     parser.add_argument("--abrir", action="store_true")
     parser.add_argument("--sin-navegador", action="store_true")
     args = parser.parse_args()
     url = f"http://localhost:{args.puerto}/tutorial"
 
-    if puerto_ocupado(args.puerto):
+    if not args.react and puerto_ocupado(args.puerto):
         print(
             f"No arranco: el puerto {args.puerto} ya está en uso. Puede que la demo "
             f"ya esté abierta en {url}. Ciérrala o usa --puerto.",
@@ -88,10 +103,42 @@ def main() -> int:
         )
         return 1
 
-    with tempfile.TemporaryDirectory(
-        prefix="holonmed-demo-", ignore_cleanup_errors=True
-    ) as temporal:
-        configurar(Path(temporal), args.modelo, args.lm_host)
+    if args.react and not args.temporal:
+        try:
+            persistente = directorio_react()
+            if not persistente.is_absolute():
+                raise ValueError("se requiere un directorio de datos absoluto")
+            persistente.mkdir(parents=True, exist_ok=True)
+        except (KeyError, OSError, ValueError):
+            print(
+                "No se pudo preparar el almacenamiento local de la demo React.",
+                file=sys.stderr,
+            )
+            return 1
+        almacenamiento = nullcontext(str(persistente))
+    else:
+        almacenamiento = tempfile.TemporaryDirectory(
+            prefix="holonmed-demo-", ignore_cleanup_errors=True
+        )
+
+    with almacenamiento as datos:
+        configurar(Path(datos), args.modelo, args.lm_host, tutorial=not args.react)
+
+        if args.react:
+            from holonmed import lanzador
+
+            # El navegador debe pasar por el proxy de esta sesión, incluso si
+            # hay una URL de API de trabajo configurada en el entorno de Vite.
+            os.environ["VITE_API_URL"] = ""
+            opciones = [
+                "--puerto-backend",
+                str(args.puerto),
+                "--puerto-frontend",
+                str(args.puerto_frontend),
+            ]
+            if not args.abrir or args.sin_navegador:
+                opciones.append("--sin-navegador")
+            return lanzador.main(opciones)
 
         # Fallo cerrado: mejor no arrancar que descubrirlo delante del público.
         servidos = asyncio.run(modelos_servidos())

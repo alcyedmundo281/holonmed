@@ -1,6 +1,11 @@
 import { AlertTriangle, Ban, Swords } from 'lucide-react';
 import { cifra, porcentaje } from '../lib/phi';
-import type { CandidataAbductiva, ResultadoTic } from '../lib/types';
+import type { CandidataAbductiva, ConsultaGuardada } from '../lib/types';
+
+type Competencia = Pick<ConsultaGuardada,
+  'competencia' | 'aviso_competencia' | 'aviso_triaje' | 'skill_activa' |
+  'triaje_coincide' | 'ganadora_abductiva'
+>;
 
 /**
  * La competencia abductiva: contra qué compitió la hipótesis que se usó.
@@ -11,7 +16,7 @@ import type { CandidataAbductiva, ResultadoTic } from '../lib/types';
  * 0.25» *es* la traza de auditoría, y sin ella se enseña una conclusión
  * sin decir contra qué compitió.
  */
-export function CompetitionPanel({ tic }: { tic: ResultadoTic }) {
+export function CompetitionPanel({ tic }: { tic: Competencia }) {
   if (tic.competencia.length === 0) return null;
 
   // Se ordena por la clave —el coseno de la lectura que cada protocolo
@@ -83,7 +88,7 @@ export function CompetitionPanel({ tic }: { tic: ResultadoTic }) {
  * con la que comparar. Colapsarlo a falso contaría como desacuerdo un tic
  * donde nadie compitió.
  */
-function Acuerdo({ tic }: { tic: ResultadoTic }) {
+function Acuerdo({ tic }: { tic: Competencia }) {
   if (tic.aviso_triaje) {
     return (
       <p className="text-xs text-slate-500 italic mb-3">

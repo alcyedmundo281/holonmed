@@ -183,6 +183,10 @@ def arrancar(args: argparse.Namespace) -> None:
         )
         procesos.append(backend)
         salud = json.loads(_esperar(f"{api}/health", backend, "backend", 90))
+        if not salud["base_datos"]["conectada"]:
+            raise Falta(
+                "El backend no pudo abrir la base SQLite. Revisa el almacenamiento local."
+            )
         if not salud["operativo"]:
             raise Falta(
                 "El backend arrancó pero no está operativo: "

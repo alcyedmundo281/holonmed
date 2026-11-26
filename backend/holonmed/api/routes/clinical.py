@@ -34,10 +34,11 @@ async def cristalizar(
     resultado = await ctx.pipeline.ejecutar(req.texto, holon, skill_forzada=req.skill)
     resultado.origen = req.origen
     resultado.actor = req.actor
-    resultado.tic_id = ctx.tics.guardar(resultado)
-    resultado.evolucion = construir_nota(
-        resultado, ctx.tics.lista_problemas(resultado.paciente_id)
-    )
+    resultado.tic_id = ctx.tics.guardar(resultado, con_evolucion=True)
+    if resultado.evolucion is None:
+        resultado.evolucion = construir_nota(
+            resultado, ctx.tics.lista_problemas(resultado.paciente_id)
+        )
     return resultado
 
 
@@ -70,10 +71,11 @@ async def subir_laboratorio(
     resultado = await ctx.pipeline.ejecutar(texto, holon)
     resultado.origen = OrigenTic.LABORATORIO
     resultado.actor = actor
-    resultado.tic_id = ctx.tics.guardar(resultado)
-    resultado.evolucion = construir_nota(
-        resultado, ctx.tics.lista_problemas(resultado.paciente_id)
-    )
+    resultado.tic_id = ctx.tics.guardar(resultado, con_evolucion=True)
+    if resultado.evolucion is None:
+        resultado.evolucion = construir_nota(
+            resultado, ctx.tics.lista_problemas(resultado.paciente_id)
+        )
     ctx.documentos.registrar(
         paciente_id,
         tipo="informe_laboratorio",

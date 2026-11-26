@@ -28,23 +28,18 @@ import { VerdictPanel } from './components/VerdictPanel';
 import { api } from './lib/api';
 import { useEstadoSistema } from './lib/useEstadoSistema';
 import type {
-  EntradaHistorial,
-  Grafo,
+  ExpedientePaciente,
   Paciente,
-  Problema,
   ResultadoTic,
   Skill,
 } from './lib/types';
 
 type Vista = 'consulta' | 'plan' | 'problemas' | 'historia' | 'grafo';
 
-// Los datos derivados llevan el paciente del que son. `null` es una carga que
-// falló, que no es lo mismo que una historia vacía.
+// El resultado de la carga pertenece a un paciente incluso si falló.
 interface DatosPaciente {
   pacienteId: string;
-  problemas: Problema[] | null;
-  historial: EntradaHistorial[] | null;
-  grafo: Grafo | null;
+  expediente: ExpedientePaciente | null;
 }
 
 const PESTANAS: { id: Vista; etiqueta: string; Icono: typeof Stethoscope }[] = [
@@ -62,20 +57,25 @@ export default function App() {
   const [paciente, setPaciente] = useState<Paciente | null>(null);
 
   const [vista, setVista] = useState<Vista>('consulta');
-  const [tic, setTic] = useState<ResultadoTic | null>(null);
+  const [resultadoTic, setTic] = useState<ResultadoTic | null>(null);
   const [seleccionado, setSeleccionado] = useState<number | null>(null);
 
   const [datos, setDatos] = useState<DatosPaciente | null>(null);
   const [chatAbierto, setChatAbierto] = useState(false);
 
+  const datosDelPaciente = datos?.pacienteId === paciente?.id ? datos : null;
+  const propios = datosDelPaciente?.expediente;
+  const ticEnVivo = resultadoTic?.paciente_id === paciente?.id ? resultadoTic : null;
+  const tic = ticEnVivo ?? propios?.consulta;
+  const detalle = ticEnVivo ?? propios?.consulta?.detalle;
+
   // Un veto retira la hipótesis, así que todo lo que se diga después sobre
   // ella sobra. Se calcula aquí para que la vista no tenga que preguntarlo
   // dos veces.
   const vetada = Boolean(tic?.veredicto_declarado?.veto);
+  const tieneInferencia = Boolean(tic?.inferencia && !vetada);
+  const protocoloActivo = skills.find((skill) => skill.nombre === tic?.skill_activa);
 
-  // Lo cargado para otro paciente no se pinta: mientras no llegue lo del que
-  // está en pantalla, no hay datos.
-  const propios = datos && datos.pacienteId === paciente?.id ? datos : null;
   const problemas = propios?.problemas ?? [];
 
   // Quién está en pantalla cuando llega una respuesta, que puede no ser quien
@@ -107,18 +107,12 @@ export default function App() {
   // al terminar un tic, que son los dos momentos en que pueden variar.
   const refrescarPaciente = useCallback(async (id: string) => {
     const carga = ++ultimaCarga.current;
-    const [p, h, g] = await Promise.allSettled([
-      api.problemas(id),
-      api.historial(id),
-      api.grafoPaciente(id),
-    ]);
+    const expediente = await api.expediente(id).catch(() => null);
     // Si después se pidió otra carga, esta respuesta se descarta entera.
-    if (carga !== ultimaCarga.current) return;
+    if (carga !== ultimaCarga.current || enPantalla.current !== id) return;
     setDatos({
       pacienteId: id,
-      problemas: p.status === 'fulfilled' ? p.value : null,
-      historial: h.status === 'fulfilled' ? h.value : null,
-      grafo: g.status === 'fulfilled' ? g.value : null,
+      expediente: expediente?.paciente_id === id ? expediente : null,
     });
   }, []);
 
@@ -128,10 +122,17 @@ export default function App() {
 
   function seleccionarPaciente(p: Paciente) {
     // Copia nueva: volver a pulsar el mismo paciente también recarga.
+    ++ultimaCarga.current;
     setPaciente({ ...p });
+    setDatos(null);
     setTic(null); // no arrastrar resultados de un paciente a otro
     setSeleccionado(null);
+  }
+
+  function alCrearPaciente(creado: Paciente) {
+    seleccionarPaciente(creado);
     setVista('consulta');
+    void cargarPacientes();
   }
 
   function alTerminarTic(resultado: ResultadoTic) {
@@ -172,7 +173,7 @@ export default function App() {
             pacientes={pacientes}
             activo={paciente?.id ?? null}
             onSeleccionar={seleccionarPaciente}
-            onCreado={cargarPacientes}
+            onCreado={alCrearPaciente}
           />
 
           <button
@@ -273,6 +274,8 @@ export default function App() {
                   onResultado={alTerminarTic}
                 />
 
+                {!ticEnVivo && datosDelPaciente && !propios && <CargaFallida que="el expediente" />}
+
                 {tic && (
                   <>
                     <div className="flex flex-wrap items-baseline gap-2 text-xs text-slate-500">
@@ -280,13 +283,20 @@ export default function App() {
                         Protocolo: <code className="text-slate-700">{tic.skill_activa}</code>
                       </span>
                       {tic.tic_id ? (
-                        <span className="font-mono">· tic {tic.tic_id}</span>
+                        <span className="font-mono">
+                          · {ticEnVivo ? 'tic' : 'última consulta guardada · tic'} {tic.tic_id}
+                        </span>
                       ) : (
                         <span className="text-amber-600">· no persistido</span>
                       )}
+                      {tieneInferencia && (
+                        <a href="#inferencia-abductiva" className="font-medium text-indigo-700 underline">
+                          Ver hipótesis y LR
+                        </a>
+                      )}
                     </div>
 
-                    {tic.instrucciones_detectadas.length > 0 && (
+                    {detalle && detalle.instrucciones_detectadas.length > 0 && (
                       <section
                         role="alert"
                         className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 shadow-sm"
@@ -299,7 +309,7 @@ export default function App() {
                           Revisa el texto original.
                         </p>
                         <ul className="text-xs text-amber-900 mt-2 list-disc pl-5">
-                          {tic.instrucciones_detectadas.map((s) => (
+                          {detalle.instrucciones_detectadas.map((s) => (
                             <li key={`${s.categoria}:${s.fragmento}`}>
                               {s.categoria}: «{s.fragmento}»
                             </li>
@@ -320,7 +330,7 @@ export default function App() {
                       />
                       {tic.resumen && (
                         <p className="text-sm text-slate-600 italic mt-3 pt-3 border-t border-slate-100">
-                          {tic.instrucciones_detectadas.length === 0 && (
+                          {!detalle?.instrucciones_detectadas.length && (
                             <span className="not-italic text-xs text-slate-400">
                               Resumen del modelo, sin validar:{' '}
                             </span>
@@ -330,9 +340,9 @@ export default function App() {
                       )}
                     </section>
 
-                    {tic.evolucion && (
+                    {detalle?.evolucion && (
                       <EvolutionNote
-                        nota={tic.evolucion}
+                        nota={detalle.evolucion}
                         fecha={tic.timestamp}
                         origen={tic.origen}
                       />
@@ -370,12 +380,26 @@ export default function App() {
                       Anexo, fuera de la nota: cálculo del protocolo y detalle
                     </h3>
 
-                    {tic.todas_vetadas && (
+                    {detalle && !vetada && !tic.inferencia && !detalle.todas_vetadas &&
+                      !tic.aviso_protocolo && detalle.instrucciones_detectadas.length === 0 && (
+                        <section className="border border-slate-200 rounded-lg bg-white p-4 text-sm text-slate-600">
+                          <h4 className="font-semibold text-slate-800 mb-1">Inferencia no calculada</h4>
+                          <p>
+                            {protocoloActivo?.tiene_modelo_bayesiano === false
+                              ? 'El protocolo activo carece de modelo bayesiano. Puedes seleccionar un protocolo con cálculo bayesiano para volver a procesar la narrativa.'
+                              : tic.infones.length === 0
+                                ? 'La extracción terminó sin hallazgos para evaluar.'
+                                : 'El procesamiento no produjo una estimación para el protocolo activo.'}
+                          </p>
+                        </section>
+                      )}
+
+                    {detalle?.todas_vetadas && (
                       <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
                         <h3 className="font-semibold text-amber-900 text-sm mb-2">
                           Ninguna hipótesis en pie
                         </h3>
-                        <p className="text-sm text-amber-900">{tic.todas_vetadas}</p>
+                        <p className="text-sm text-amber-900">{detalle.todas_vetadas}</p>
                       </section>
                     )}
 
@@ -394,7 +418,7 @@ export default function App() {
                     {!vetada && (
                       <>
                         {tic.inferencia && (
-                          <InferencePanel inferencia={tic.inferencia} />
+                          <InferencePanel inferencia={tic.inferencia} id="inferencia-abductiva" />
                         )}
 
                         {tic.acoplamiento && (
@@ -433,26 +457,18 @@ export default function App() {
               </div>
             ) : vista === 'plan' ? (
               <PlanOrders pacienteId={paciente.id} />
-            ) : !propios ? (
+            ) : !datosDelPaciente ? (
               <p role="status" className="text-sm text-slate-500 text-center mt-12">
-                Cargando los datos de este paciente…
+                {vista === 'grafo' ? 'Cargando el grafo del paciente…' : 'Cargando los datos de este paciente…'}
               </p>
+            ) : !propios ? (
+              <CargaFallida que="el expediente" />
             ) : vista === 'problemas' ? (
-              propios.problemas ? (
-                <ProblemList problemas={propios.problemas} />
-              ) : (
-                <CargaFallida que="la lista de problemas" />
-              )
+              <ProblemList problemas={propios.problemas} />
             ) : vista === 'historia' ? (
-              propios.historial ? (
-                <HistoryTimeline historial={propios.historial} />
-              ) : (
-                <CargaFallida que="la historia" />
-              )
-            ) : propios.grafo ? (
-              <ConceptGraph grafo={propios.grafo} />
+              <HistoryTimeline historial={propios.historia} />
             ) : (
-              <CargaFallida que="el grafo" />
+              <ConceptGraph grafo={propios.grafo} pacienteNombre={paciente.nombre} />
             )}
           </div>
 
