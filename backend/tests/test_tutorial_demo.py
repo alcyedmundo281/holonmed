@@ -2,12 +2,14 @@
 
 import re
 
+import pytest
 from fastapi.testclient import TestClient
 
 from holonmed.api.app import crear_app
 from holonmed.api.routes.tutorial import PAGINA
 from holonmed.config import Settings
 from holonmed.core.entrada_no_confiable import detectar_instrucciones
+from holonmed.core.nota_soap import declarar_procedencia
 
 
 def _cliente(modo_demo: bool) -> TestClient:
@@ -76,3 +78,34 @@ def test_solo_el_caso_trampa_del_guion_dispara_el_detector_y_la_pagina_lo_dice()
     for nombre, texto in casos.items():
         assert bool(detectar_instrucciones(texto)) is (nombre == "trampa"), nombre
     assert "instrucciones_detectadas" in pagina
+
+
+def _casos() -> dict[str, str]:
+    pagina = PAGINA.read_text(encoding="utf-8")
+    bloque = pagina[pagina.index("const CASOS = {") : pagina.index("const PASOS")]
+    crudos = re.findall(r'(\w+): \{\s*protocolo: "[^"]+",\s*texto: "([^"]+)"', bloque)
+    return {nombre: texto.replace("\\n", "\n") for nombre, texto in crudos}
+
+
+def test_la_respuesta_se_ve_como_lista_de_problemas_y_nota():
+    pagina = PAGINA.read_text(encoding="utf-8")
+    assert "Lista de problemas" in pagina
+    assert 'el("pre", {}, nota.texto)' in pagina
+    # En las dos salidas con hallazgos, también cuando el tic queda retenido.
+    assert pagina.count("pintarNota(dato.evolucion);") == 2
+
+
+@pytest.mark.parametrize(
+    ("caso", "referido", "comprobado"),
+    [
+        ("completo", "náuseas y vómitos", "Lipasa 900 U/L"),
+        ("negativas", "No ha vomitado", "Lipasa 40 U/L"),
+        ("calcio", "Dolor epigástrico desde ayer", "Calcio total 7.8 mg/dL"),
+    ],
+)
+def test_los_casos_del_guion_declaran_s_y_o(caso, referido, comprobado):
+    """Sin las marcas, la nota del recorrido saldría entera «sin clasificar»."""
+    texto = _casos()[caso]
+
+    assert declarar_procedencia(texto, referido) == "subjetivo"
+    assert declarar_procedencia(texto, comprobado) == "objetivo"

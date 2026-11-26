@@ -176,15 +176,15 @@ const boton = (texto, accion, clase = "") =>
 const CASOS = {
   completo: {
     protocolo: "acute_pancreatitis",
-    texto: "Paciente sintético de 45 años. Dolor epigástrico intenso irradiado en cinturón hacia la espalda desde hace 8 horas, con náuseas y vómitos. Antecedente de colelitiasis. Lipasa 900 U/L, amilasa 620 U/L. Afebril. Sin ictericia.",
+    texto: "Paciente sintético de 45 años.\nS: Dolor epigástrico intenso irradiado en cinturón hacia la espalda desde hace 8 horas, con náuseas y vómitos. Antecedente de colelitiasis.\nO: Lipasa 900 U/L, amilasa 620 U/L. Afebril. Sin ictericia.",
   },
   negativas: {
     protocolo: "acute_pancreatitis",
-    texto: "Paciente sintético de 52 años. Dolor epigástrico desde hace 6 horas, con náuseas. No ha vomitado. Lipasa 40 U/L, amilasa 55 U/L. Afebril.",
+    texto: "Paciente sintético de 52 años.\nS: Dolor epigástrico desde hace 6 horas, con náuseas. No ha vomitado.\nO: Lipasa 40 U/L, amilasa 55 U/L. Afebril.",
   },
   calcio: {
     protocolo: "acute_pancreatitis",
-    texto: "Paciente sintético de 58 años. Dolor epigástrico desde ayer. Calcio total 7.8 mg/dL con albúmina 2.2 g/dL. No hay calcio iónico.",
+    texto: "Paciente sintético de 58 años.\nS: Dolor epigástrico desde ayer.\nO: Calcio total 7.8 mg/dL con albúmina 2.2 g/dL. No hay calcio iónico.",
   },
   trampa: {
     protocolo: "acute_pancreatitis",
@@ -257,6 +257,7 @@ const PASOS = [
       el("h3", {}, "Ahora usted"),
       p("Escriba abajo un caso inventado, o pida al público que dicte uno. Pruebe negaciones, abreviaturas o información irrelevante."),
       p("Con «Automático» el modelo hace el triaje; si elige un protocolo, se usa ese. Solo hay probabilidad cuando el protocolo declara un modelo."),
+      p("Para la nota de evolución, empiece una línea con «S:» (lo que cuenta el paciente) y otra con «O:» (lo comprobado). El sistema no lo deduce: lo que usted no marque sale «sin clasificar»."),
       el("p", { class: "nota" }, "No incluya nombres, cédulas, teléfonos, correos ni historias clínicas reales."),
     ]);
     $("texto").focus();
@@ -465,6 +466,28 @@ $("redactor").addEventListener("submit", (e) => {
 
 /* -------------------------------------------------------------- resultado */
 
+/* La respuesta en forma de nota. El texto lo arma el servidor, el mismo en todas
+   las vistas: aquí no se rehace ni se completa. */
+function pintarNota(nota) {
+  if (!nota) return;
+  const lista = nota.problemas.length
+    ? el("div", { class: "tabla" }, el("table", {},
+        el("tr", {}, el("th", {}, "#"), el("th", {}, "Problema"), el("th", {}, "Código")),
+        nota.problemas.map((x) => el("tr", {},
+          el("td", {}, x.numero === null ? "sin número" : x.numero),
+          el("td", {}, x.termino, x.derivado.length ? " (derivado por un criterio)" : ""),
+          el("td", {}, x.codigo || "sin código")))))
+    : p("Ningún hallazgo validado y presente: la lista queda vacía.");
+  decir([
+    el("h3", {}, "Lista de problemas"),
+    lista,
+    el("p", { class: "nota" }, "Cada hallazgo validado y presente es un problema; el sistema no los agrupa. En esta demostración cada envío es un caso nuevo, así que la lista no arrastra los anteriores."),
+    el("h3", {}, "Nota de evolución (SOAP por problema)"),
+    el("pre", {}, nota.texto),
+    el("p", { class: "nota" }, "Es un borrador sin firma. Análisis y Plan quedan en blanco: los escribe el profesional. S y O solo se llenan con lo que el texto marca como «S:» u «O:»."),
+  ], "ancho");
+}
+
 function pintarResultado(dato, texto) {
   const infones = dato.infones || [];
   if (!infones.length && !(dato.instrucciones_detectadas || []).length) {
@@ -484,9 +507,11 @@ function pintarResultado(dato, texto) {
         irA(pendiente ? pendiente.id : "libre");
       })),
     ], "ancho");
+    pintarNota(dato.evolucion);
     pintarHallazgos(infones, texto);
     return;
   }
+  pintarNota(dato.evolucion);
   pintarHallazgos(infones, texto);
   pintarProbabilidad(dato);
   pintarClasificacion(dato.clasificacion);
