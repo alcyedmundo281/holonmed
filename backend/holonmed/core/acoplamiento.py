@@ -231,7 +231,13 @@ class MedidorDeAcoplamiento:
         que la hipótesis no toca al paciente; None dice que no hay con qué
         preguntarlo. Confundirlas sería inventar una medida.
         """
-        dimensiones = self._dimensiones_declaradas(skill)
+        if skill.errores_inclusion:
+            logger.error(
+                "Sin Φ para '%s': inclusión entre signos mal declarada", skill.nombre
+            )
+            return None
+        quedan, traza_inclusion = self._unificados(skill, infones)
+        dimensiones = self._vigentes(skill, self._dimensiones_declaradas(skill), quedan)
         # El protocolo puede no declarar un solo likelihood ratio y aun así
         # ser medible: es el caso de casi todos los criterios publicados,
         # que declaran categorías. Salir aquí dejaba `phi_categorico`
@@ -300,7 +306,8 @@ class MedidorDeAcoplamiento:
             indagacion=self._indagacion(componentes),
             anclaje_detalle=detalle_anclaje,
             traza=(
-                traza_tramos
+                traza_inclusion
+                + traza_tramos
                 + traza_geom
                 + traza_fact
                 + traza_anc
@@ -308,6 +315,45 @@ class MedidorDeAcoplamiento:
                 + traza_fact_cat
             ),
         )
+
+    # --- Signos incluidos unos en otros -------------------------------
+
+    @staticmethod
+    def _unificados(
+        skill: "Skill", infones: Sequence[Infon]
+    ) -> tuple[list[tuple[str, Infon]], list[str]]:
+        """Los pares (signo, infón) válidos tras aplicar las inclusiones.
+
+        De aquí leen el vector ponderado, el categórico y el anclaje, para que
+        ninguno vea una observación que los otros descartaron.
+        """
+        from .bayes import construir_vocabulario, emparejar_infon
+        from .inclusion import filtrar_incluidos
+
+        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
+        pares = [
+            (clave, infon)
+            for infon in infones
+            if infon.es_valido
+            and (clave := emparejar_infon(infon, vocabulario)) is not None
+        ]
+        return filtrar_incluidos(pares, skill.inclusiones)
+
+    @staticmethod
+    def _vigentes(
+        skill: "Skill",
+        dimensiones: list[dict[str, Any]],
+        quedan: Sequence[tuple[str, Infon]],
+    ) -> list[dict[str, Any]]:
+        """Las dimensiones ponderadas que forman el espacio de este caso."""
+        from .inclusion import dimensiones_vigentes
+
+        vigentes = dimensiones_vigentes(
+            [d["clave"] for d in dimensiones],
+            {clave for clave, _ in quedan},
+            skill.inclusiones,
+        )
+        return [d for d in dimensiones if d["clave"] in vigentes]
 
     # --- El vector categórico -----------------------------------------
 
@@ -405,21 +451,24 @@ class MedidorDeAcoplamiento:
         cerraría o no según el caso. Es el mismo motivo por el que
         `emparejar_infon` es una sola función compartida con Bayes.
         """
-        from .bayes import construir_vocabulario, emparejar_infon
+        from .inclusion import dimensiones_vigentes
 
-        dimensiones = [s for s in skill.signos if s.efecto != "excluye"]
-        if not dimensiones:
+        declaradas = [s for s in skill.signos if s.efecto != "excluye"]
+        if not declaradas:
             return [], {}
 
+        quedan, _ = MedidorDeAcoplamiento._unificados(skill, infones)
+        vigentes = dimensiones_vigentes(
+            [s.nombre.lower() for s in declaradas],
+            {clave for clave, _ in quedan},
+            skill.inclusiones,
+        )
+        dimensiones = [s for s in declaradas if s.nombre.lower() in vigentes]
         indice = {s.nombre.lower(): s for s in dimensiones}
-        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         contribuciones: dict[str, int] = {}
 
-        for infon in infones:
-            if not infon.es_valido:
-                continue
-            clave = emparejar_infon(infon, vocabulario)
-            if clave is None or clave not in indice or clave in contribuciones:
+        for clave, infon in quedan:
+            if clave not in indice or clave in contribuciones:
                 continue
             signo = indice[clave]
             if signo.tramos:
@@ -630,20 +679,14 @@ class MedidorDeAcoplamiento:
         distinto, la identidad Σeᵢ = ln(odds posterior / odds previo) dejaría
         de cumplirse y Φ ya no estaría leyendo el mismo vector que Bayes.
         """
-        from .bayes import construir_vocabulario, elegir_por_signo, emparejar_infon
+        from .bayes import elegir_por_signo
 
         indice = {d["clave"] for d in dimensiones}
-        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
-        pares: list[tuple[str, Infon]] = []
-
-        for infon in infones:
-            if not infon.es_valido:
-                continue  # Sólo evidencia auditada entra en el vector.
-            clave = emparejar_infon(infon, vocabulario)
-            if clave is not None and clave in indice:
-                pares.append((clave, infon))
-
-        return elegir_por_signo(pares)
+        # `_unificados` sólo deja pasar evidencia auditada.
+        quedan, _ = MedidorDeAcoplamiento._unificados(skill, infones)
+        return elegir_por_signo(
+            (clave, infon) for clave, infon in quedan if clave in indice
+        )
 
     @staticmethod
     def _resto_no_simbolizado(
@@ -1045,16 +1088,11 @@ class MedidorDeAcoplamiento:
     @staticmethod
     def _emparejar_signos(skill: "Skill", infones: Sequence[Infon]) -> dict:
         """Signo declarado -> primer infón validado que lo toca, lleve LR o no."""
-        from .bayes import construir_vocabulario, emparejar_infon
-
         indice = {s.nombre.lower(): s for s in skill.signos if s.efecto != "excluye"}
-        vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         vistos: dict[str, tuple] = {}
-        for infon in infones:
-            if not infon.es_valido:
-                continue
-            clave = emparejar_infon(infon, vocabulario)
-            if clave is not None and clave in indice:
+        quedan, _ = MedidorDeAcoplamiento._unificados(skill, infones)
+        for clave, infon in quedan:
+            if clave in indice:
                 vistos.setdefault(clave, (indice[clave], infon))
         return vistos
 

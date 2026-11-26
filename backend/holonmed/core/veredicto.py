@@ -84,8 +84,18 @@ def _emparejador(skill: "Skill", presentes: Sequence[Infon]):
 
     vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
 
+    # Lo que incluye a un signo presente también consta: unificar deja fuera
+    # el signo amplio, no lo niega.
+    implicados: set[str] = set()
+    for infon in presentes:
+        clave = emparejar_infon(infon, vocabulario)
+        if clave is not None:
+            implicados |= skill.inclusiones.get(clave, frozenset())
+
     def consta(termino: str) -> bool:
         exigido = termino.lower()
+        if exigido in implicados:
+            return True
         con_exigido = {**vocabulario, exigido: vocabulario.get(exigido, {})}
         return any(emparejar_infon(i, con_exigido) == exigido for i in presentes)
 
@@ -105,6 +115,12 @@ class EvaluadorDeVeredicto:
         distintas. Un veredicto sin nivel dice que el criterio no se
         cumple; None dice que no hay criterio que aplicar.
         """
+        if skill.errores_inclusion:
+            logger.error(
+                "Sin veredicto para '%s': inclusión entre signos mal declarada",
+                skill.nombre,
+            )
+            return None
         hipotesis = str(skill.condicion.get("nombre") or skill.titulo)
         # `evidencia` no decide nada, así que no cuenta como efecto declarado:
         # un protocolo que sólo la usa sigue sin criterio que aplicar.
@@ -114,8 +130,8 @@ class EvaluadorDeVeredicto:
         if not declara_efectos and not skill.balance.declarado:
             return None
 
-        observados = self._observar(skill, infones)
         traza: list[str] = []
+        observados = self._observar(skill, infones, traza)
 
         # --- NIVEL 1: los vetos ---------------------------------------
         veto = self._buscar_exclusion(observados, hipotesis)
@@ -207,7 +223,7 @@ class EvaluadorDeVeredicto:
 
     @staticmethod
     def _observar(
-        skill: "Skill", infones: Sequence[Infon]
+        skill: "Skill", infones: Sequence[Infon], traza: list[str]
     ) -> list[tuple["Signo", Infon]]:
         """Empareja infones validados con los signos que el protocolo declara.
 
@@ -217,17 +233,24 @@ class EvaluadorDeVeredicto:
         diagnóstico ni satisface un criterio.
         """
         from .bayes import construir_vocabulario, emparejar_infon
+        from .inclusion import filtrar_incluidos
 
         indice = {s.nombre.lower(): s for s in skill.signos}
         vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         salida: list[tuple[Signo, Infon]] = []
         vistos: set[str] = set()
 
-        for infon in infones:
-            if not infon.es_valido:
-                continue
-            clave = emparejar_infon(infon, vocabulario)
-            if clave is None or clave in vistos:
+        pares = [
+            (clave, infon)
+            for infon in infones
+            if infon.es_valido
+            and (clave := emparejar_infon(infon, vocabulario)) is not None
+        ]
+        quedan, motivos = filtrar_incluidos(pares, skill.inclusiones)
+        traza.extend(motivos)
+
+        for clave, infon in quedan:
+            if clave in vistos:
                 continue
             vistos.add(clave)  # un signo cuenta una vez, no dos
             salida.append((indice[clave], infon))

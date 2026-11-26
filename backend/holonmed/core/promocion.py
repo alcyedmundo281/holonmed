@@ -107,9 +107,18 @@ class EvaluadorDePromocion:
         regla = skill.promocion
         if not regla.declarada:
             return None
+        if skill.errores_inclusion:
+            logger.error(
+                "Sin promoción para '%s': inclusión entre signos mal declarada",
+                skill.nombre,
+            )
+            return None
 
         hipotesis = str(skill.condicion.get("nombre") or skill.titulo)
-        observados, sensibles_negativas = self._clasificar_observados(skill, infones)
+        traza_inclusion: list[str] = []
+        observados, sensibles_negativas = self._clasificar_observados(
+            skill, infones, traza_inclusion
+        )
 
         cumplidos: dict[str, list[str]] = {}
         faltan: dict[str, int] = {}
@@ -181,6 +190,8 @@ class EvaluadorDePromocion:
             propuestas,
         )
 
+        traza.extend(traza_inclusion)
+
         return Veredicto(
             hipotesis=hipotesis,
             promueve=promueve,
@@ -202,7 +213,7 @@ class EvaluadorDePromocion:
 
     @staticmethod
     def _clasificar_observados(
-        skill: Skill, infones: Sequence[Infon]
+        skill: Skill, infones: Sequence[Infon], traza: list[str] | None = None
     ) -> tuple[list[tuple[str, str]], list[str]]:
         """Separa lo que consta a favor de las pruebas sensibles que constan en contra.
 
@@ -217,6 +228,7 @@ class EvaluadorDePromocion:
         la misma regla que Φ y el veredicto declarado.
         """
         from .bayes import construir_vocabulario, emparejar_infon
+        from .inclusion import filtrar_incluidos
 
         vocabulario = construir_vocabulario((s.nombre, s.codigos) for s in skill.signos)
         # Sólo `apoya`: la tupla cuenta lo que el protocolo declara que apoya.
@@ -227,11 +239,19 @@ class EvaluadorDePromocion:
         vistos_favor: set[str] = set()
         vistos_contra: set[str] = set()
 
-        for infon in infones:
-            if not infon.es_valido or infon.abre_problema:
-                continue
-            clave = emparejar_infon(infon, vocabulario)
-            if clave is None or clave not in indice:
+        pares = [
+            (clave, infon)
+            for infon in infones
+            if infon.es_valido
+            and not infon.abre_problema
+            and (clave := emparejar_infon(infon, vocabulario)) is not None
+        ]
+        quedan, motivos = filtrar_incluidos(pares, skill.inclusiones)
+        if traza is not None:
+            traza.extend(motivos)
+
+        for clave, infon in quedan:
+            if clave not in indice:
                 continue
             signo: Signo = indice[clave]
             observada = "presente" if infon.polaridad is Polaridad.PRESENTE else "ausente"
@@ -268,6 +288,7 @@ class EvaluadorDePromocion:
         denuncia.
         """
         from .bayes import construir_vocabulario, emparejar_infon
+        from .inclusion import dimensiones_vigentes
 
         especificas = [
             s
@@ -293,9 +314,23 @@ class EvaluadorDePromocion:
             "para completar la tupla de promoción."
         )
 
+        # Un signo que incluye a uno ya medido, o está incluido en él, es la
+        # misma observación. De un par sin medir se pide sólo el amplio.
+        incluye = skill.inclusiones
+        pendientes = [
+            clave
+            for clave in (s.nombre.lower() for s in especificas)
+            if clave not in ya_medidas
+            and not any(
+                m in incluye.get(clave, ()) or clave in incluye.get(m, ())
+                for m in ya_medidas
+            )
+        ]
+        pedibles = dimensiones_vigentes(pendientes, (), incluye)
+
         propuestas: list[PropuestaPromocion] = []
         for signo in especificas:
-            if signo.nombre.lower() in ya_medidas:
+            if signo.nombre.lower() not in pedibles:
                 continue
             pref = signo.codigo_preferido()
             sistema, codigo = pref if pref else (None, None)

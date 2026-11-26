@@ -128,6 +128,7 @@ class Database:
         ("tic", "conceptos_no_cubiertos", "TEXT"),
         ("tic", "aviso_competencia", "TEXT"),
         ("tic", "aviso_triaje", "TEXT"),
+        ("tic", "aviso_protocolo", "TEXT"),
         ("tic", "reapertura", "TEXT"),
         ("tic", "promocion", "TEXT"),
         ("infon", "polaridad", "TEXT NOT NULL DEFAULT 'presente'"),
@@ -833,8 +834,8 @@ class TicRepo:
                                         triaje_en_candidatas, skill_triaje,
                                         sin_candidatas, conceptos_no_cubiertos,
                                         aviso_competencia, aviso_triaje,
-                                        reapertura, promocion)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                        aviso_protocolo, reapertura, promocion)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         resultado.paciente_id,
                         resultado.timestamp,
@@ -871,6 +872,7 @@ class TicRepo:
                         else None,
                         resultado.aviso_competencia,
                         resultado.aviso_triaje,
+                        resultado.aviso_protocolo,
                         _json(resultado.reapertura),
                         _json(resultado.promocion),
                     ),

@@ -745,6 +745,9 @@ class Skill:
         )
 
         self.signos = self._parsear_signos()
+        # Qué signo incluye a cuál, tal como lo declara el protocolo. Con un
+        # solo error los cuatro consumidores dejan de calcular con él.
+        self.inclusiones, self.errores_inclusion = self._parsear_inclusiones()
         self.laboratorio = self._parsear_laboratorio()
         self.bayes = self._parsear_bayes()
         self.balance = self._parsear_balance()
@@ -900,6 +903,17 @@ class Skill:
                 )
             )
         return salida
+
+    def _parsear_inclusiones(self) -> tuple[dict[str, frozenset[str]], list[str]]:
+        from .inclusion import declarar
+
+        # El mismo filtro que `_parsear_signos`, para que casen uno a uno.
+        crudos = [
+            s
+            for s in self.meta.get("signos") or []
+            if isinstance(s, dict) and (s.get("nombre") or s.get("analito"))
+        ]
+        return declarar(self.signos, crudos)
 
     def _parsear_campos(self) -> list[CampoOperativo]:
         salida = []
@@ -1272,6 +1286,8 @@ class Skill:
             "vocabulario": [
                 {"name": s.nombre, "codigos": s.codigos} for s in self.signos
             ],
+            "inclusiones": self.inclusiones,
+            "errores_inclusion": self.errores_inclusion,
             "modelo_bayesiano": {
                 "probabilidad_base": self.bayes.probabilidad_base,
                 "factores_riesgo_a_priori": self.bayes.factores_riesgo,
@@ -1389,6 +1405,8 @@ class Skill:
             # que el clasificador emita el DIAGNÓSTICO sin linaje ni mapeo
             # CIE-10, en silencio y con todos los criterios satisfechos.
             fallos.extend(self._problemas_acunados(index))
+
+        fallos.extend(self.errores_inclusion)
 
         # Lo recogido durante el parseo. Va al final para que un balance con una
         # clave desconocida se vea aunque no haya vocabulario cargado.

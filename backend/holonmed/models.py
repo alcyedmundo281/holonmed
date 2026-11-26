@@ -982,6 +982,16 @@ class ResultadoTic(BaseModel):
         ),
     )
 
+    aviso_protocolo: str | None = Field(
+        default=None,
+        description=(
+            "Se rellena cuando un protocolo de este tic declara mal una "
+            "inclusión entre signos. Con él no se calculan probabilidad, "
+            "veredicto, promoción ni Φ: su ausencia NO dice que no haya "
+            "evidencia ni exclusiones. None si todos están bien declarados."
+        ),
+    )
+
     # --- Triaje determinista por criterios ontológicos (medsemiotics-db) ---
     aviso_triaje: str | None = Field(
         default=None,

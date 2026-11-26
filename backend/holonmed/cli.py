@@ -389,6 +389,8 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     print(f"\nProtocolo activo: {resultado.skill_activa}")
     if resultado.aviso_triaje:
         print(f"AVISO: {resultado.aviso_triaje}")
+    if resultado.aviso_protocolo:
+        print(f"AVISO: {resultado.aviso_protocolo}")
     if resultado.resumen:
         print(f"Resumen: {resultado.resumen}")
     for senal in resultado.instrucciones_detectadas:

@@ -148,6 +148,25 @@ def _texto_del_modelo(crudo: dict, clave: str) -> str:
     return "" if valor is None else str(valor).strip()
 
 
+def _avisar_protocolo(resultado: ResultadoTic, skill: Skill) -> None:
+    """Dice qué protocolo no va a calcular nada y por qué.
+
+    Sin esto, un tic sin probabilidad ni veto se leería como que no hay
+    evidencia ni exclusiones.
+    """
+    if not skill.errores_inclusion:
+        return
+    aviso = (
+        f"Protocolo '{skill.nombre}': inclusión entre signos mal declarada. No se "
+        f"calculan con él probabilidad, veredicto, promoción ni Φ. "
+        f"{'; '.join(skill.errores_inclusion)}."
+    )
+    if aviso not in (resultado.aviso_protocolo or ""):
+        resultado.aviso_protocolo = " ".join(
+            filter(None, [resultado.aviso_protocolo, aviso])
+        )
+
+
 def _normalizar(texto: str) -> str:
     """Minúsculas y sin acentos, para comparar lo que dice el texto."""
     import unicodedata
@@ -450,6 +469,7 @@ class CrystallizationPipeline:
             return resultado
         resultado.skill_activa = skill.nombre
         resultado.skill_version = skill.version
+        _avisar_protocolo(resultado, skill)
         logger.info("Tic para %s — hipótesis: %s", holon.paciente_id, skill.nombre)
 
         # --- ETAPA 4: PASADA 2, la deducción sobre el texto -----------
@@ -818,6 +838,8 @@ class CrystallizationPipeline:
 
         for skill in candidatas:
             fila = CandidataAbductiva(skill=skill.nombre)
+            # Una candidata mal declarada no compite ni puede vetar: se dice.
+            _avisar_protocolo(resultado, skill)
 
             veredicto = None
             try:
