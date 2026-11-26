@@ -10,7 +10,7 @@ import type { Grafo, NodoGrafo } from '../lib/types';
  * fuerzas la escondería tras un ovillo que además se mueve. Menos de 500
  * líneas de dependencia y determinista entre recargas.
  */
-export function ConceptGraph({ grafo }: { grafo: Grafo }) {
+export function ConceptGraph({ grafo, pacienteNombre }: { grafo: Grafo; pacienteNombre: string }) {
   const [activo, setActivo] = useState<number | null>(null);
 
   const disposicion = useMemo(() => calcular(grafo), [grafo]);
@@ -18,24 +18,27 @@ export function ConceptGraph({ grafo }: { grafo: Grafo }) {
   if (grafo.nodos.length === 0) {
     return (
       <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-lg p-6 text-center">
-        Aún no hay conceptos validados para este paciente. El grafo se
-        construye a partir de los hallazgos que superan la validación.
+        {pacienteNombre} aún no tiene hallazgos validados para mostrar en el grafo.
       </p>
     );
   }
 
   const { nodos, ancho, alto } = disposicion;
   const posicion = new Map(nodos.map((n) => [n.id, n]));
+  const hallazgos = grafo.nodos.filter((nodo) => nodo.tipo === 'hallazgo').length;
 
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-3">
+      <p className="text-xs text-slate-600 px-1 pb-2">
+        {hallazgos === 1 ? '1 hallazgo validado' : `${hallazgos} hallazgos validados`} en el grafo
+      </p>
       <div className="overflow-x-auto">
         <svg
           viewBox={`0 0 ${ancho} ${alto}`}
           className="w-full"
           style={{ minWidth: Math.min(ancho, 900), height: alto }}
           role="img"
-          aria-label="Grafo de conceptos del paciente"
+          aria-label={`Grafo de ${pacienteNombre}`}
         >
           <g stroke="#cbd5e1" strokeWidth={1.5} fill="none">
             {grafo.aristas.map((a, i) => {

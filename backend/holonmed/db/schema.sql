@@ -256,6 +256,12 @@ CREATE TABLE IF NOT EXISTS documento (
 
 CREATE INDEX IF NOT EXISTS idx_documento_paciente ON documento(paciente_id, creado DESC);
 
+-- El detalle de la consulta se inserta en la misma transacción que su tic.
+CREATE TABLE IF NOT EXISTS tic_detalle_consulta (
+    tic_id  INTEGER PRIMARY KEY REFERENCES tic(id) ON DELETE CASCADE,
+    detalle TEXT NOT NULL
+);
+
 -- Se guardan TODOS los infones, incluidos los descartados: es lo que
 -- permite auditar después si el validador está rechazando de más.
 CREATE TABLE IF NOT EXISTS infon (

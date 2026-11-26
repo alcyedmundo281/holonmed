@@ -1,6 +1,7 @@
 import { Activity, FileText, Paperclip } from 'lucide-react';
 import { useState } from 'react';
 import type { EntradaHistorial, OrigenTic } from '../lib/types';
+import { InferencePanel } from './InferencePanel';
 import { ORIGENES, OrigenBadge, etiquetaOrigen } from './OrigenBadge';
 import { fechaHora } from './ProblemList';
 
@@ -12,13 +13,7 @@ import { fechaHora } from './ProblemList';
  * texto era pobre o el validador está rechazando de más, y en ambos casos
  * conviene mirar el tic concreto.
  */
-export function HistoryTimeline({
-  historial,
-  onAbrir,
-}: {
-  historial: EntradaHistorial[];
-  onAbrir?: (id: string) => void;
-}) {
+export function HistoryTimeline({ historial }: { historial: EntradaHistorial[] }) {
   const [filtro, setFiltro] = useState<OrigenTic | null>(null);
 
   // Se filtra en cliente: la lista de una historia individual cabe en
@@ -83,12 +78,7 @@ export function HistoryTimeline({
               className="absolute -left-[7px] w-3 h-3 rounded-full bg-indigo-500 ring-4 ring-white"
               aria-hidden
             />
-            <button
-              type="button"
-              onClick={() => onAbrir?.(entrada.id)}
-              className="w-full text-left bg-white border border-slate-200 rounded-lg p-3
-                         hover:border-indigo-300 transition-colors"
-            >
+            <div className="bg-white border border-slate-200 rounded-lg p-3">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <span className="flex items-center gap-2">
                   <OrigenBadge origen={entrada.origen} actor={entrada.actor} />
@@ -143,7 +133,17 @@ export function HistoryTimeline({
                   </span>
                 )}
               </div>
-            </button>
+              {entrada.inferencia && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs font-medium text-indigo-700">
+                    Ver hipótesis y LR
+                  </summary>
+                  <div className="mt-2">
+                    <InferencePanel inferencia={entrada.inferencia} />
+                  </div>
+                </details>
+              )}
+            </div>
           </li>
         );
       })}

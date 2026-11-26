@@ -9,7 +9,7 @@ import { UMBRAL_CONFIRMADA, UMBRAL_PROBABLE } from '../lib/types';
  * es la traza: de dónde salió la probabilidad previa y qué hallazgo movió
  * la aguja y cuánto. Un clínico puede discrepar de un paso concreto.
  */
-export function InferencePanel({ inferencia }: { inferencia: InferenciaBayesiana }) {
+export function InferencePanel({ inferencia, id }: { inferencia: InferenciaBayesiana; id?: string }) {
   const p = inferencia.probabilidad_porcentaje;
 
   const tono =
@@ -20,7 +20,7 @@ export function InferencePanel({ inferencia }: { inferencia: InferenciaBayesiana
         : { barra: 'bg-slate-400', texto: 'text-slate-600', etiqueta: 'Baja sospecha' };
 
   return (
-    <section className="border border-slate-200 rounded-lg bg-white p-4 mb-4 shadow-sm">
+    <section id={id} className="border border-slate-200 rounded-lg bg-white p-4 mb-4 shadow-sm">
       <header className="flex items-center gap-2 mb-3">
         <Activity size={16} className="text-indigo-600" aria-hidden />
         <h3 className="font-semibold text-slate-800 text-sm">Inferencia abductiva</h3>
@@ -50,7 +50,7 @@ export function InferencePanel({ inferencia }: { inferencia: InferenciaBayesiana
 
       <div className="space-y-3 text-xs">
         <div>
-          <h4 className="font-medium text-slate-700 mb-1">Probabilidad a priori</h4>
+          <h4 className="font-medium text-slate-700 mb-1">Traza del cálculo</h4>
           <ul className="space-y-0.5">
             {inferencia.traza_logica.map((paso, i) => (
               <li key={i} className="text-slate-600 pl-3 border-l-2 border-slate-200">
@@ -62,7 +62,7 @@ export function InferencePanel({ inferencia }: { inferencia: InferenciaBayesiana
 
         <div>
           <h4 className="font-medium text-slate-700 mb-1">
-            Evidencia aplicada
+            Cocientes de verosimilitud (LR) aplicados
             {inferencia.evidencia_utilizada.length === 0 && (
               <span className="font-normal text-slate-400"> — ninguna</span>
             )}
@@ -77,8 +77,8 @@ export function InferencePanel({ inferencia }: { inferencia: InferenciaBayesiana
             </ul>
           ) : (
             <p className="text-slate-500 pl-3">
-              Sólo la evidencia validada actualiza la probabilidad. Los hallazgos
-              en alerta o descartados se muestran, pero no cuentan.
+              Para actualizar la probabilidad, el protocolo requiere un hallazgo
+              validado con un LR aplicable.
             </p>
           )}
         </div>

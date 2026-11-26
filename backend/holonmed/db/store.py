@@ -24,9 +24,9 @@ from typing import Any
 from ..core.actualizacion import Acto, Actualizacion, medir
 from ..core.episodio import EstadoEpisodio, admite
 from ..core.holon import Documento, componer, conciliar
-from ..core.nota_soap import asignar_procedencia, procedencia_de
+from ..core.nota_soap import asignar_procedencia, construir_nota, procedencia_de
 from ..core.sintesis import formatear_fondo, sintetizar
-from ..models import EstadoInfon, HolonPaciente, Infon, Polaridad, TipoNota
+from ..models import EstadoInfon, HolonPaciente, Infon, OrigenTic, Polaridad, TipoNota
 
 logger = logging.getLogger(__name__)
 
@@ -456,6 +456,10 @@ class PacienteRepo:
         )
         return [dict(f) for f in filas]
 
+    def listar_ids(self) -> list[str]:
+        filas = self._db.conexion().execute("SELECT id FROM paciente ORDER BY id")
+        return [fila["id"] for fila in filas]
+
     def buscar(self, consulta: str) -> dict[str, Any] | None:
         fila = (
             self._db.conexion()
@@ -800,7 +804,7 @@ class TicRepo:
         self._db = db
         self._grafo = grafo
 
-    def guardar(self, resultado) -> str | None:
+    def guardar(self, resultado, *, con_evolucion: bool = False) -> str | None:
         cx = self._db.conexion()
 
         # Las reglas del episodio gobiernan la escritura, y sólo cuando hay
@@ -826,8 +830,9 @@ class TicRepo:
 
         asignar_procedencia(resultado.infones, resultado.texto_original)
 
+        evolucion = resultado.evolucion
         try:
-            with self._db._escritura:
+            with self._db._escritura, cx:
                 # El paciente puede ser efímero (nunca dado de alta); se crea
                 # al vuelo para no perder el tic por una clave foránea.
                 cx.execute(
@@ -940,11 +945,33 @@ class TicRepo:
                             infon.origen_skill,
                         ),
                     )
-                cx.commit()
+                if con_evolucion:
+                    evolucion = construir_nota(
+                        resultado, self.lista_problemas(resultado.paciente_id)
+                    )
+                if resultado.origen in {OrigenTic.CONSULTA, OrigenTic.LABORATORIO}:
+                    detalle = resultado.model_copy(update={"evolucion": evolucion})
+                    cx.execute(
+                        "INSERT INTO tic_detalle_consulta (tic_id, detalle) VALUES (?, ?)",
+                        (
+                            tic_id,
+                            detalle.model_dump_json(
+                                include={
+                                    "evolucion",
+                                    "instrucciones_detectadas",
+                                    "todas_vetadas",
+                                    "clasificacion",
+                                    "agrupaciones_triage",
+                                }
+                            ),
+                        ),
+                    )
         except sqlite3.Error as exc:
             cx.rollback()
             logger.error("Error guardando el tic: %s", exc)
             return None
+
+        resultado.evolucion = evolucion
 
         # El cierre transitivo se materializa fuera de la transacción: es
         # una optimización de consulta, no parte del dato clínico, y su
@@ -1039,6 +1066,48 @@ class TicRepo:
         registro["id"] = str(registro["id"])
         registro["infones"] = [dict(i) for i in infones]
         return registro
+
+    def ultima_consulta(self, paciente_id: str) -> dict[str, Any] | None:
+        """Recupera el último procesamiento de Consulta o de su carga de PDF."""
+        cx = self._db.conexion()
+        fila = cx.execute(
+            """SELECT t.*, d.detalle FROM tic t
+               LEFT JOIN tic_detalle_consulta d ON d.tic_id = t.id
+               WHERE t.paciente_id = ? AND t.origen IN (?, ?)
+               ORDER BY t.id DESC LIMIT 1""",
+            (paciente_id, OrigenTic.CONSULTA.value, OrigenTic.LABORATORIO.value),
+        ).fetchone()
+        if fila is None:
+            return None
+        registro = _desde_json(dict(fila))
+        infones = cx.execute(
+            "SELECT * FROM infon WHERE paciente_id = ? AND tic_id = ? ORDER BY id",
+            (paciente_id, fila["id"]),
+        )
+        return {
+            **registro,
+            "tic_id": str(fila["id"]),
+            "skill_activa": fila["skill"],
+            "veredicto_declarado": registro["veredicto"],
+            "competencia": registro["competencia"] or [],
+            "detalle": json.loads(fila["detalle"]) if fila["detalle"] else None,
+            "infones": [
+                _fila_a_infon(infon).model_copy(
+                    update={
+                        "concepto_id": infon["concepto_id"],
+                        "acto": infon["acto"],
+                        "actualizado_por": infon["actualizado_por"],
+                        "actualizado_en": infon["actualizado_en"],
+                        "correccion": json.loads(infon["correccion"])
+                        if infon["correccion"]
+                        else {},
+                        "abre_problema": bool(infon["abre_problema"]),
+                        "responde_a": infon["responde_a"],
+                    }
+                )
+                for infon in infones
+            ],
+        }
 
     def acuerdo_del_triaje(self, paciente_id: str | None = None) -> dict[str, Any]:
         """Cuántas veces el prompt de triaje eligió lo mismo que el grafo.
