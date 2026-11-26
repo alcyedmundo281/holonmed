@@ -58,7 +58,7 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
 const q = encodeURIComponent;
 
 export const api = {
-  estado: () => pedir<EstadoSistema>('/health'),
+  estado: (signal?: AbortSignal) => pedir<EstadoSistema>('/health', { signal }),
   skills: () => pedir<Skill[]>('/api/skills'),
 
   cristalizar: (texto: string, pacienteId: string, skill?: string) =>

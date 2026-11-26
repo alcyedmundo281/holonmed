@@ -26,7 +26,6 @@ dependencies = [
     "reportlab>=4.2",
     "pypdf>=5.1",
     "pyyaml>=6.0",
-    "dateparser>=1.2",
     # Fuente canónica de la aritmética de Φ. Se fija a una etiqueta: subir
     # de versión es una decisión explícita, con la suite como testigo.
     "ethosemiotics @ git+https://github.com/alcyedmundo281/ethosemiotics@v0.1.0",
@@ -49,6 +48,9 @@ version = { attr = "holonmed.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["holonmed*"]
+
+[tool.setuptools.package-data]
+holonmed = ["api/static/*.html"]
 
 [tool.ruff]
 line-length = 90
@@ -77,8 +79,8 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unreachable = true
 
-# `dateparser` y `reportlab` no publican tipos. Se silencia el import, no el
-# uso: lo que hacemos con ellos sigue comprobándose.
+# `reportlab` no publica tipos. Se silencia el import, no el uso: lo que
+# hacemos con él sigue comprobándose.
 [[tool.mypy.overrides]]
-module = ["dateparser.*", "reportlab.*"]
+module = ["reportlab.*"]
 ignore_missing_imports = true

@@ -34,7 +34,7 @@ flowchart TD
     H -->|no| R
     H -->|sí| J[Capa 3: auditoría lógica]
 
-    J --> K{score ≥ 85<br/>y lógica OK?}
+    J --> K{score ≥ 85, lógica OK<br/>y re-ranking con<br/>similitud léxica ≥ 85?}
     K -->|sí| V
     K -->|score ≥ 75| AL[ALERTA]
     K -->|resto| R
@@ -342,6 +342,10 @@ el motivo y el nombre del paciente tienen que estar escritos en el mensaje, y
 la fecha debe decir día y hora en la gramática cerrada de `core/cita.py`.
 Confirmar un tic no ratifica sus infones, y se rechaza si la historia cambió
 desde que se calculó.
+
+`/api/citas` escribe sin confirmación, pero lee la fecha con la misma gramática.
+Responde 422, sin escribir, si la fecha no dice día y hora, ya pasó o falta el
+motivo, y 404 si el paciente no tiene ficha.
 
 Los tres primeros existían ya en el sistema original como un campo `type`
 en cada nota (`ClinicalHolon`, `LabResult`, `Prescription`) y se perdieron

@@ -13,10 +13,10 @@ El vocabulario es deliberado y viene de la teoría que sostiene el sistema:
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Annotated, Any
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 def _now() -> str:
@@ -1071,7 +1071,9 @@ class HolonPaciente(BaseModel):
         """
         fuentes = [
             self.antecedentes,
-            *(i.termino for i in self.linea_tiempo),
+            # Sólo lo presente: el término de una ausencia no lleva su «sin»
+            # y entraría como factor de riesgo afirmado.
+            *(i.termino for i in self.presentes()),
             texto_actual,
         ]
         contexto = "\n".join(f.strip() for f in fuentes if f and f.strip())
@@ -1189,5 +1191,8 @@ class PacienteCreate(BaseModel):
 
 class CitaCreate(BaseModel):
     paciente_id: str
-    fecha: str = Field(description="Fecha en lenguaje natural o ISO")
-    motivo: str = "Control"
+    fecha: str = Field(
+        description="Día y hora, en la gramática cerrada de `core/cita.py`"
+    )
+    # Sin valor por defecto: un motivo que nadie dijo no se escribe.
+    motivo: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]

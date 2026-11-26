@@ -29,7 +29,9 @@ from ...llm import LLMUnavailable
 from ...models import (
     ChatRequest,
     HolonPaciente,
+    Infon,
     OrigenTic,
+    Polaridad,
     PropuestaCita,
     PropuestaPaciente,
     PropuestaReceta,
@@ -301,14 +303,29 @@ async def _proponer_receta(
     return {"tipo": "receta_propuesta", "datos": propuesta}
 
 
+def _contexto_de_hallazgos(infones: list[Infon]) -> str:
+    """Los hallazgos previos para el modelo, sin perder la polaridad.
+
+    El término de un infón no lleva la negación: en una sola lista,
+    «Sin ictericia» le llegaría como «Ictericia».
+    """
+    if not infones:
+        return "Sin hallazgos previos registrados."
+    lineas = []
+    for rotulo, polaridad in (
+        ("HALLAZGOS VALIDADOS PREVIOS", Polaridad.PRESENTE),
+        ("AUSENCIAS DOCUMENTADAS (constan como NO presentes)", Polaridad.AUSENTE),
+    ):
+        terminos = [i.termino for i in infones if i.polaridad is polaridad]
+        if terminos:
+            lineas.append(f"{rotulo}: " + "; ".join(terminos))
+    return "\n".join(lineas)
+
+
 async def _consulta_medica(ctx: AppContext, holon, mensaje: str) -> dict[str, Any]:
     """Consulta general, apoyada en el historial validado del paciente."""
     infones = ctx.tics.linea_tiempo(holon.paciente_id, limite=15)
-    contexto = (
-        "HALLAZGOS VALIDADOS PREVIOS: " + "; ".join(i.termino for i in infones)
-        if infones
-        else "Sin hallazgos previos registrados."
-    )
+    contexto = _contexto_de_hallazgos(infones)
 
     prompt = f"""Eres un asistente clínico. Respondes a un profesional sanitario.
 

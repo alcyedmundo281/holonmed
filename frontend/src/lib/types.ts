@@ -575,6 +575,8 @@ export interface Problema {
   primera: string;
   ultima: string;
   confianza: number;
+  /** Consta ausente en el último registro o después. No lo da por resuelto. */
+  consta_ausente: string | null;
 }
 
 export interface NodoGrafo {
@@ -632,6 +634,8 @@ export interface Orden {
   estado: 'pendiente' | 'cumplida' | 'anulada';
 }
 
+export type EstadoModelo = 'conectado' | 'falta_modelo' | 'sin_conexion' | 'sin_comprobar';
+
 export interface EstadoSistema {
   operativo: boolean;
   base_datos: {
@@ -643,6 +647,9 @@ export interface EstadoSistema {
   vocabulario: { disponible: boolean; sistemas: Record<string, number> };
   skills: string[];
   llm: {
+    backend: 'ollama' | 'openai';
+    /** Lo decide el backend: aquí no se deduce de los demás campos. */
+    estado: EstadoModelo;
     host: string;
     disponible: boolean;
     modelos: string[];

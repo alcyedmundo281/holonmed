@@ -94,23 +94,40 @@ class OllamaClient:
     def _ruta_modelos(self) -> str:
         return "/v1/models" if self._openai else "/api/tags"
 
+    async def inventario(self) -> tuple[bool, list[str] | None]:
+        """Una sola consulta: (¿responde?, modelos que ofrece).
+
+        La lista es `None` cuando no se pudo leer —el servidor no responde, o
+        contesta algo que no es un inventario—, para que nadie confunda «no sé
+        qué hay» con «no hay ninguno».
+        """
+        try:
+            res = await self._ensure_client().get(self._ruta_modelos, timeout=5.0)
+        except httpx.HTTPError:
+            return False, None
+        if res.status_code != 200:
+            return False, None
+
+        clave, campo = ("data", "id") if self._openai else ("models", "name")
+        try:
+            entradas = res.json()[clave]
+            if not isinstance(entradas, list):
+                return True, None
+            nombres = [entrada[campo] for entrada in entradas]
+        except (KeyError, TypeError, ValueError):
+            return True, None
+        if not all(isinstance(nombre, str) for nombre in nombres):
+            return True, None
+        return True, nombres
+
     async def disponible(self) -> bool:
         """¿Está el servidor de modelos arriba? Healthcheck, no el pipeline."""
-        try:
-            res = await self._ensure_client().get(self._ruta_modelos, timeout=5.0)
-            return res.status_code == 200
-        except httpx.HTTPError:
-            return False
+        responde, _ = await self.inventario()
+        return responde
 
     async def modelos_disponibles(self) -> list[str]:
-        try:
-            res = await self._ensure_client().get(self._ruta_modelos, timeout=5.0)
-            res.raise_for_status()
-            if self._openai:
-                return [m["id"] for m in res.json().get("data", [])]
-            return [m["name"] for m in res.json().get("models", [])]
-        except (httpx.HTTPError, KeyError, ValueError):
-            return []
+        _, modelos = await self.inventario()
+        return modelos or []
 
     async def generar(
         self,

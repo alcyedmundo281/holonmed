@@ -1,8 +1,9 @@
-"""Lo que se le exige a una cita o a un alta pedidas por chat.
+"""Lo que se le exige a una cita, y a un alta pedida por chat.
 
-Los campos que devuelve el router son texto de un modelo. Aquí se comprueba
-que estén **escritos en el mensaje** y que la fecha diga día y hora sin que
-nadie tenga que completarlos. Lo que falte o admita dos lecturas se rechaza.
+La fecha tiene que decir día y hora sin que nadie los complete, llegue por el
+chat o por `/api/citas`. Además, los campos que devuelve el router son texto de
+un modelo: aquí se comprueba que estén **escritos en el mensaje**. Lo que falte
+o admita dos lecturas se rechaza.
 
 La fecha no pasa por un intérprete de lenguaje libre: rellena lo que no se
 dijo (la hora la toma del reloj, y un «10» suelto se vuelve una fecha). La

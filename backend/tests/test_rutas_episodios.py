@@ -164,7 +164,13 @@ def test_el_fondo_no_lleva_fecha_ni_firma(cliente):
     _escribir(cliente, episodio, "base")
 
     cuerpo = cliente.get(f"/api/episodios/{episodio}/fondo").json()
-    assert set(cuerpo) == {"bloques", "sin_sintetizar", "al_dia", "impresion"}
+    assert set(cuerpo) == {
+        "bloques",
+        "sin_sintetizar",
+        "negativos",
+        "al_dia",
+        "impresion",
+    }
     assert "firmado_por" not in cuerpo
     assert "fecha" not in cuerpo
 

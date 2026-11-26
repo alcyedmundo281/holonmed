@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # Sirve el tutorial en `/tutorial`. Apagado por defecto: la página escribe
+    # tics y no debe quedar servida sobre la base de trabajo. Lo enciende
+    # `scripts/demo.py`, con una base desechable.
+    modo_demo: bool = False
 
     # --- Rutas -------------------------------------------------------
     skills_dir: Path = RAIZ / "skills"

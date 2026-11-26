@@ -5,7 +5,8 @@ import type { Problema } from '../lib/types';
  * Lista de problemas del paciente.
  *
  * Es la primera vista que mira un clínico al abrir una historia. Se
- * construye sólo con hallazgos validados y deduplicados por concepto; las
+ * construye sólo con hallazgos validados y presentes, deduplicados por
+ * concepto; una ausencia posterior se avisa y no retira la fila. Las
  * fechas de primera y última aparición son lo que distingue un problema
  * agudo de uno arrastrado, así que se muestran siempre.
  */
@@ -46,6 +47,12 @@ export function ProblemList({
             >
               <td className="px-4 py-2.5">
                 <div className="font-medium text-slate-800">{p.termino}</div>
+                {p.consta_ausente && (
+                  <div className="text-[11px] text-amber-700 mt-0.5">
+                    Consta ausente el {fecha(p.consta_ausente)} · sigue en la
+                    lista: no se ha declarado resuelto
+                  </div>
+                )}
                 {p.linaje && (
                   <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                     <Layers size={10} aria-hidden />

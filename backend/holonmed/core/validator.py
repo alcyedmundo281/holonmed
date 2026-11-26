@@ -79,6 +79,11 @@ class Match:
     cie10: str | None = None
     linaje: str | None = None
     metodo: str = "ninguno"
+    # Con texto, el concepto se conserva pero el hallazgo no puede quedar
+    # VALIDADO. `similitud_lexica` es lo que casaban las cadenas antes de
+    # que el re-ranking subiera el score.
+    motivo_revision: str | None = None
+    similitud_lexica: float | None = None
 
     @classmethod
     def ruido(cls, termino: str, motivo: str = "sin_match") -> "Match":
@@ -259,8 +264,8 @@ class OntologyValidator:
             logger.info("Selección del LLM bloqueada por %s", motivo)
             return None
 
-        # Un concepto confirmado por el auditor merece alta confianza aunque
-        # la similitud literal fuera baja (sinónimos lejanos, siglas).
+        # El score alto conserva el concepto aunque la similitud literal sea
+        # baja (sinónimos lejanos, siglas). No basta para validarlo: ver abajo.
         confirmado = Candidato(
             elegido.concepto_id,
             elegido.codigo,
@@ -268,7 +273,22 @@ class OntologyValidator:
             elegido.termino,
             99.0 if elegido.score > 40 else elegido.score,
         )
-        return self._construir(confirmado, "rerank_llm")
+        match = self._construir(confirmado, "rerank_llm")
+
+        # GUARDA DURA. La elección del modelo propone un concepto, no lo
+        # certifica. Para quedar VALIDADO las cadenas tienen que alcanzar por
+        # sí solas el mismo umbral que se le pide a cualquier otro camino.
+        # Sin esto, «Cáncer de páncreas» (66.7 contra el criterio de imagen
+        # de Atlanta) llegaba a 99 y quedaba VALIDADO con un LR de 9. Por
+        # encima del umbral sigue habiendo pares opuestos: la medición está
+        # en docs/VALIDACION.md.
+        if elegido.score < self.settings.threshold_validated:
+            match.similitud_lexica = elegido.score
+            match.motivo_revision = (
+                f"normalización sin respaldo léxico (similitud {elegido.score:.1f} "
+                f"< {self.settings.threshold_validated:g})"
+            )
+        return match
 
     def _construir(self, candidato: Candidato, metodo: str) -> Match:
         cie10, linaje = self.index.metadatos(candidato.concepto_id)

@@ -24,6 +24,15 @@ La primera clase es la que Weed midió: en una sala de urgencias, con un
 cuestionario de 32 preguntas y personal paramédico, los médicos se dejaban
 **5.2 problemas por paciente**. Esa cifra hoy no la produce nadie.
 
+UNA AUSENCIA NO ES UN PROBLEMA
+------------------------------
+La cifra de Weed cuenta problemas. Un «sin ictericia» validado que el
+clínico no ratificó no es un problema que se le haya escapado, así que las
+ausencias no entran en esa tasa: ni arriba ni abajo, porque dejar las
+ratificadas en el denominador la diluiría. Siguen en los libros —se
+revisaron, y en `tasa_sin_cobertura` miden al índice igual que lo
+presente—, y la que no se recogió tiene su propia situación.
+
 PENDIENTE NO ES PASADO POR ALTO
 --------------------------------
 Y ésta es la distinción que hace honesta la medida. Un hallazgo que nadie ha
@@ -45,10 +54,10 @@ libro, y la discrepancia, que es el producto entero, dejaría de existir.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
-from ..models import EstadoInfon, Infon
+from ..models import EstadoInfon, Infon, Polaridad
 
 
 class Situacion(str, Enum):
@@ -58,6 +67,7 @@ class Situacion(str, Enum):
     SOLO_HOLONMED = "solo_holonmed"
     SOLO_CLINICO = "solo_clinico"
     PENDIENTE = "pendiente"
+    AUSENCIA_SIN_RECOGER = "ausencia_sin_recoger"
 
 
 @dataclass(frozen=True)
@@ -71,6 +81,8 @@ class Asiento:
     termino: str
     situacion: Situacion
     motivo: str
+    # El término no lleva la negación: sin esto una ausencia se lee afirmada.
+    polaridad: Polaridad = Polaridad.PRESENTE
 
     @property
     def es_discrepancia(self) -> bool:
@@ -90,25 +102,36 @@ class Balance:
     solo_holonmed: int = 0
     solo_clinico: int = 0
     pendientes: int = 0
+    ausencias_sin_recoger: int = 0
+    # Todas las ausencias revisadas, en cualquier situación.
+    ausencias_conciliadas: int = 0
     por_termino: dict[str, int] = field(default_factory=dict)
 
     @property
     def conciliados(self) -> int:
         """Lo que el clínico ya revisó. El denominador de todas las tasas."""
-        return self.concuerdan + self.solo_holonmed + self.solo_clinico
+        return (
+            self.concuerdan
+            + self.solo_holonmed
+            + self.solo_clinico
+            + self.ausencias_sin_recoger
+        )
 
     @property
     def tasa_pasados_por_alto(self) -> float | None:
         """La cifra de Weed: qué fracción de lo revisado el clínico no anotó.
+
+        Sólo sobre hallazgos presentes: una ausencia no es un problema.
 
         `None` cuando nadie ha revisado nada. No es cero: cero diría que no
         se pasó nada por alto, y lo que pasa es que no hay con qué compararlo.
         Es la misma distinción que `acuerdo_del_triaje()` y que la tasa de
         corrección del ciclo 19.
         """
-        if not self.conciliados:
+        presentes = self.conciliados - self.ausencias_conciliadas
+        if not presentes:
             return None
-        return self.solo_holonmed / self.conciliados
+        return self.solo_holonmed / presentes
 
     @property
     def tasa_sin_cobertura(self) -> float | None:
@@ -137,6 +160,7 @@ def conciliar(tics: Mapping[str, Sequence[Infon]]) -> Balance:
     """
     asientos: list[Asiento] = []
     concuerdan = solo_holonmed = solo_clinico = pendientes = 0
+    ausencias_sin_recoger = ausencias_conciliadas = 0
     por_termino: dict[str, int] = {}
 
     for suyos in tics.values():
@@ -145,6 +169,8 @@ def conciliar(tics: Mapping[str, Sequence[Infon]]) -> Balance:
         for infon in suyos:
             lo_vio_holonmed = infon.estado is EstadoInfon.VALIDADO
             lo_hizo_suyo_el_clinico = infon.es_real
+            ausente = infon.polaridad is Polaridad.AUSENTE
+            previos = len(asientos)
 
             if lo_vio_holonmed and lo_hizo_suyo_el_clinico:
                 concuerdan += 1
@@ -153,6 +179,19 @@ def conciliar(tics: Mapping[str, Sequence[Infon]]) -> Balance:
                         infon.termino,
                         Situacion.CONCUERDA,
                         "Lo vio el sistema y lo ratificó una persona.",
+                    )
+                )
+            elif lo_vio_holonmed and revisado and ausente:
+                ausencias_sin_recoger += 1
+                asientos.append(
+                    Asiento(
+                        infon.termino,
+                        Situacion.AUSENCIA_SIN_RECOGER,
+                        (
+                            "El sistema validó que consta ausente y el clínico "
+                            "revisó esta nota sin recogerlo. No es un problema, "
+                            "así que no cuenta como pasado por alto."
+                        ),
                     )
                 )
             elif lo_vio_holonmed and revisado:
@@ -196,11 +235,18 @@ def conciliar(tics: Mapping[str, Sequence[Infon]]) -> Balance:
                     )
                 )
 
+            if len(asientos) > previos and ausente:
+                asientos[-1] = replace(asientos[-1], polaridad=Polaridad.AUSENTE)
+                if asientos[-1].situacion is not Situacion.PENDIENTE:
+                    ausencias_conciliadas += 1
+
     return Balance(
         asientos=tuple(asientos),
         concuerdan=concuerdan,
         solo_holonmed=solo_holonmed,
         solo_clinico=solo_clinico,
         pendientes=pendientes,
+        ausencias_sin_recoger=ausencias_sin_recoger,
+        ausencias_conciliadas=ausencias_conciliadas,
         por_termino=por_termino,
     )

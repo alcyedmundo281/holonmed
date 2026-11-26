@@ -170,6 +170,8 @@ async def partida_doble(
         "solo_holonmed": balance.solo_holonmed,
         "solo_clinico": balance.solo_clinico,
         "pendientes": balance.pendientes,
+        "ausencias_sin_recoger": balance.ausencias_sin_recoger,
+        "ausencias_conciliadas": balance.ausencias_conciliadas,
         "conciliados": balance.conciliados,
         # `None` y no 0: cero diría que no se pasó nada por alto, y lo que
         # pasa es que no hay con qué compararlo.
@@ -177,7 +179,12 @@ async def partida_doble(
         "tasa_sin_cobertura": balance.tasa_sin_cobertura,
         "por_termino": balance.por_termino,
         "discrepancias": [
-            {"termino": a.termino, "situacion": a.situacion.value, "motivo": a.motivo}
+            {
+                "termino": a.termino,
+                "polaridad": a.polaridad.value,
+                "situacion": a.situacion.value,
+                "motivo": a.motivo,
+            }
             for a in balance.asientos
             if a.es_discrepancia
         ],

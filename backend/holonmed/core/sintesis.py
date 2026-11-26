@@ -53,7 +53,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 
-from ..models import Infon
+from ..models import Infon, Polaridad
 
 
 class Motivo(str, Enum):
@@ -93,10 +93,13 @@ class Bloque:
     objetivo: tuple[str, ...] = ()
     derivado: tuple[str, ...] = ()
     siguiente: str = ""
+    # Lo que consta ausente va aparte: mezclado con lo demás, la cita o el
+    # término se leerían como afirmados.
+    ausente: tuple[str, ...] = ()
 
     @property
     def vacio(self) -> bool:
-        return not (self.subjetivo or self.objetivo or self.derivado)
+        return not (self.subjetivo or self.objetivo or self.derivado or self.ausente)
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,8 @@ class HolonDeFondo:
     bloques: tuple[Bloque, ...] = ()
     hasta_tic: str | None = None
     sin_sintetizar: tuple[str, ...] = ()
+    # Ausencias documentadas que no caen bajo ningún problema.
+    negativos: tuple[str, ...] = ()
 
     @property
     def problemas(self) -> tuple[str, ...]:
@@ -133,25 +138,37 @@ def sintetizar(
     `sin_sintetizar`. Perderlo en silencio sería la peor forma del error
     aquí, porque el fondo es lo que alimenta la nota impresa y lo que no
     esté en el fondo no llegará nunca al médico.
+
+    Una ausencia nunca se escribe como un hallazgo: bajo su problema va en
+    `ausente` y sin problema en `negativos`, siempre con el término delante,
+    porque la cita sola puede no traer la negación. No retira el bloque:
+    que algo conste ausente no es que esté resuelto.
     """
     por_problema: dict[str, list[Infon]] = {problema: [] for problema in problemas}
     sueltos: list[str] = []
+    negativos: list[str] = []
 
     for infon in infones:
         destino = _problema_de(infon, problemas)
         if destino is None:
-            sueltos.append(infon.termino)
+            if infon.polaridad is Polaridad.AUSENTE:
+                negativos.append(_negado(infon))
+            else:
+                sueltos.append(infon.termino)
             continue
         por_problema[destino].append(infon)
 
     bloques = tuple(
         Bloque(
             problema=problema,
-            subjetivo=tuple(
-                i.texto_origen for i in suyos if i.procedencia == "subjetivo"
+            subjetivo=_citas(suyos, "subjetivo"),
+            objetivo=_citas(suyos, "objetivo"),
+            derivado=tuple(
+                i.termino
+                for i in suyos
+                if i.procedencia == "derivado" and i.polaridad is Polaridad.PRESENTE
             ),
-            objetivo=tuple(i.texto_origen for i in suyos if i.procedencia == "objetivo"),
-            derivado=tuple(i.termino for i in suyos if i.procedencia == "derivado"),
+            ausente=tuple(_negado(i) for i in suyos if i.polaridad is Polaridad.AUSENTE),
         )
         for problema, suyos in por_problema.items()
     )
@@ -160,7 +177,21 @@ def sintetizar(
         bloques=bloques,
         hasta_tic=hasta_tic,
         sin_sintetizar=tuple(sueltos),
+        negativos=tuple(negativos),
     )
+
+
+def _citas(infones: Sequence[Infon], procedencia: str) -> tuple[str, ...]:
+    """Las citas de lo presente que aseveró esa procedencia."""
+    return tuple(
+        i.texto_origen
+        for i in infones
+        if i.procedencia == procedencia and i.polaridad is Polaridad.PRESENTE
+    )
+
+
+def _negado(infon: Infon) -> str:
+    return f"{infon.termino} («{infon.texto_origen}»)"
 
 
 def _problema_de(infon: Infon, problemas: Sequence[str]) -> str | None:
@@ -269,7 +300,7 @@ def formatear_fondo(fondo: HolonDeFondo) -> str:
     problema y en el orden de Weed (subjetivo, objetivo, derivado, siguiente),
     sin descartar los hallazgos que no cayeron bajo ningún problema.
     """
-    if not fondo.bloques and not fondo.sin_sintetizar:
+    if not (fondo.bloques or fondo.sin_sintetizar or fondo.negativos):
         return "Paciente nuevo sin antecedentes registrados."
 
     secciones: list[str] = []
@@ -281,6 +312,8 @@ def formatear_fondo(fondo: HolonDeFondo) -> str:
             lineas.append("  Objetivo: " + "; ".join(bloque.objetivo))
         if bloque.derivado:
             lineas.append("  Derivado: " + "; ".join(bloque.derivado))
+        if bloque.ausente:
+            lineas.append("  Consta ausente: " + "; ".join(bloque.ausente))
         if bloque.siguiente:
             lineas.append(f"  Siguiente: {bloque.siguiente}")
         secciones.append("\n".join(lineas))
@@ -288,6 +321,11 @@ def formatear_fondo(fondo: HolonDeFondo) -> str:
     if fondo.sin_sintetizar:
         secciones.append(
             "Sin sintetizar bajo un problema: " + ", ".join(fondo.sin_sintetizar)
+        )
+
+    if fondo.negativos:
+        secciones.append(
+            "Ausencias documentadas (no son problemas): " + "; ".join(fondo.negativos)
         )
 
     return "\n\n".join(secciones)
@@ -311,6 +349,7 @@ class NotaImpresa:
     la_pidio_el_paciente: bool
     bloques: tuple[Bloque, ...] = ()
     sin_sintetizar: tuple[str, ...] = ()
+    negativos: tuple[str, ...] = ()
 
 
 def imprimir(
@@ -357,4 +396,5 @@ def imprimir(
         la_pidio_el_paciente=decision.la_pidio_el_paciente,
         bloques=fondo.bloques,
         sin_sintetizar=fondo.sin_sintetizar,
+        negativos=fondo.negativos,
     )

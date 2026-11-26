@@ -6,7 +6,7 @@ haría inservible: una tasa inflada se ignora a la semana.
 """
 
 from holonmed.core.partida_doble import Situacion, conciliar
-from holonmed.models import EstadoInfon, Infon
+from holonmed.models import EstadoInfon, Infon, Polaridad
 
 
 def _infon(termino, estado=EstadoInfon.VALIDADO, acto=None):
@@ -131,4 +131,59 @@ def test_el_ruido_descartado_no_esta_en_ningun_libro():
     """Lo que el validador tiró y nadie ratificó no es una discrepancia."""
     balance = conciliar({"t1": [_infon("Alucinación", estado=EstadoInfon.RUIDO)]})
     assert balance.asientos == ()
+    assert balance.conciliados == 0
+
+
+def _ausente(termino, **kwargs):
+    return _infon(termino, **kwargs).model_copy(update={"polaridad": Polaridad.AUSENTE})
+
+
+def test_una_ausencia_sin_recoger_no_es_un_problema_pasado_por_alto():
+    balance = conciliar(
+        {"t1": [_infon("Fiebre", acto="aceptado"), _ausente("Ictericia")]}
+    )
+
+    assert balance.solo_holonmed == 0
+    assert balance.por_termino == {}
+    assert balance.tasa_pasados_por_alto == 0.0
+    # No desaparece ni se disfraza de pendiente: se revisó y consta.
+    assert balance.ausencias_sin_recoger == 1
+    assert balance.pendientes == 0
+    assert balance.conciliados == 2
+    asiento = balance.asientos[1]
+    assert asiento.situacion is Situacion.AUSENCIA_SIN_RECOGER
+    assert asiento.polaridad is Polaridad.AUSENTE
+    assert not asiento.es_discrepancia
+
+
+def test_las_ausencias_ratificadas_no_diluyen_la_tasa():
+    balance = conciliar(
+        {
+            "t1": [
+                _infon("Fiebre", acto="aceptado"),
+                _infon("Hipopotasemia"),
+                _ausente("Ictericia", acto="aceptado"),
+                _ausente("Ascitis", estado=EstadoInfon.ALERTA, acto="aceptado"),
+            ]
+        }
+    )
+
+    assert balance.tasa_pasados_por_alto == 0.5
+    assert balance.ausencias_conciliadas == 2
+    # Al índice la ausencia sí lo mide.
+    assert balance.tasa_sin_cobertura == 0.25
+
+
+def test_con_solo_ausencias_revisadas_no_hay_tasa_de_problemas():
+    balance = conciliar({"t1": [_ausente("Ictericia", acto="aceptado")]})
+
+    assert balance.tasa_pasados_por_alto is None
+    assert balance.tasa_sin_cobertura == 0.0
+
+
+def test_una_ausencia_sin_revisar_sigue_pendiente():
+    balance = conciliar({"t1": [_ausente("Ictericia")]})
+
+    assert balance.pendientes == 1
+    assert balance.ausencias_conciliadas == 0
     assert balance.conciliados == 0
