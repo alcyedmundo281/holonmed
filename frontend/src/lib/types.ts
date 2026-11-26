@@ -406,6 +406,8 @@ export interface HallazgoFueraDeNota {
 
 /** Borrador sin firma. No trae análisis ni plan: los escribe el profesional. */
 export interface NotaEvolucion {
+  /** Cambian cómo se lee la nota; se muestran siempre con ella. */
+  avisos: string[];
   problemas: ProblemaEvolucion[];
   negativos: NegativoDocumentado[];
   fuera_de_la_nota: HallazgoFueraDeNota[];
@@ -516,6 +518,13 @@ export interface ResultadoTic {
    * que no se pudo mirar. `null` si el triaje corrió.
    */
   aviso_triaje: string | null;
+
+  /**
+   * Un protocolo declara mal una inclusión entre signos y con él no se calculó
+   * nada. La falta de probabilidad o de veto NO dice que no los haya. `null`
+   * si todos están bien declarados.
+   */
+  aviso_protocolo: string | null;
 
   /**
    * Agrupaciones diagnósticas de la lista de problemas por criterios ontológicos de consenso (medsemiotics-db).
@@ -739,7 +748,7 @@ export interface PropuestaTic {
 }
 
 export type RespuestaChat =
-  | { tipo: 'texto'; datos: { respuesta: string } }
+  | { tipo: 'texto'; datos: { respuesta: string; respuesta_id: string } }
   | { tipo: 'tic_propuesto'; datos: PropuestaTic }
   | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
   | { tipo: 'cita_propuesta'; datos: PropuestaCita }

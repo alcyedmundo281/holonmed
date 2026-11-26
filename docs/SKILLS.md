@@ -98,6 +98,51 @@ Sobre los LR:
   procedencia es un número inventado con formato científico, y mueve la
   probabilidad que ve un clínico. Hay un test que lo comprueba.
 
+#### `incluido_en` — un signo que es un caso de otro
+
+**Parámetro de seguridad.** Si dos signos del protocolo son en parte la misma
+observación, sus dos LR no se pueden multiplicar. Se declara en el estrecho,
+con códigos de otros signos del mismo protocolo:
+
+```yaml
+  - nombre: Descenso del segmento ST
+    codigos: { holonmed: "HM:3015" }
+    incluido_en: ["HM:3016"]   # Signos de isquemia en el electrocardiograma
+```
+
+Nunca se infiere: ni de los nombres ni del `padre` del vocabulario, que agrupa
+por sistema. Bayes, el veredicto, la promoción y Φ aplican la misma regla
+(`core/inclusion.py`). Cuando constan los dos:
+
+| estrecho | amplio | cuenta |
+|---|---|---|
+| presente | presente | sólo el estrecho, aunque su LR sea el menor |
+| ausente | presente | sólo el amplio |
+| ausente | ausente | sólo el amplio |
+| presente | ausente | ninguno: contradicción, y se informa |
+
+- Si consta uno solo, cuenta ése. La relación es transitiva. Dos signos
+  estrechos presentes bajo el mismo amplio se cuentan los dos.
+- La contradicción no se resuelve por fecha: la que guarda el infón es la de
+  extracción, no la del examen.
+- En Φ el signo cubierto sale del caso de libro y del real. Un par sin medir es
+  una sola dimensión, la amplia, y la promoción sólo pide ésa.
+- El núcleo que exige el amplio se satisface con el estrecho presente.
+
+**Fallo cerrado.** La declaración es inválida si no es una lista de códigos, si
+cita un código que no es de un solo signo del protocolo, si forma un ciclo, si
+los dos signos difieren en `efecto`, `dispara_si` o `rol`, si el efecto no es
+`apoya` ni `evidencia` (una contradicción podría borrar un veto), si alguno
+tiene `tramos`, o si la clave está mal escrita (`incluida_en`). Con una sola
+inválida no se calculan probabilidad, veredicto, promoción ni Φ con ese
+protocolo; el tic lo dice en `aviso_protocolo` y `--validar` falla.
+
+**Lo que no cubre.** Un par que nadie declara se sigue multiplicando. El
+conversor copia `incluido_en` del concepto si el índice lo trae, avisa cuando
+una `agrupacion` con LR no tiene ninguno declarado y se niega a sobrescribir un
+protocolo si al regenerar se perdería una declaración. Tampoco trata la
+dependencia entre pruebas distintas, que no es inclusión.
+
 ### `laboratorio` — de números a conceptos
 
 ```yaml

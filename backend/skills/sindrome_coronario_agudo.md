@@ -8,7 +8,7 @@ descripcion: >-
   electrocardiograma, irradiación a ambos brazos o antecedentes
   cardiovasculares. También el dolor atípico en quien ya tiene enfermedad
   coronaria conocida.
-version: 1.0.0
+version: 1.1.0
 
 condicion:
   nombre: Síndrome coronario agudo
@@ -46,6 +46,8 @@ signos:
   - nombre: Descenso del segmento ST
     codigos: { holonmed: "HM:3015" }
     rol: prueba_especifica
+    # Es un caso de HM:3016. Con los dos en un trazado cuenta sólo uno.
+    incluido_en: ["HM:3016"]
     lr: 5.3
     fuente: >-
       Fanaroff AC et al. JAMA 2015;314:1955-65. PMID 26547467.
@@ -124,12 +126,12 @@ ROL: cardiólogo experto, basado en evidencia.
 1. Analiza los signos vitales, la exploración, el electrocardiograma y el
    texto libre.
 2. Extrae el hallazgo clínico, nunca la cifra suelta.
-3. **No cuentes dos veces el mismo electrocardiograma.** *Descenso del
+3. **Usa el término concreto del electrocardiograma.** *Descenso del
    segmento ST* es un hallazgo concreto dentro de *Signos de isquemia en
-   el electrocardiograma*, que es la categoría amplia. Cada uno tiene su
-   propio cociente: extraer los dos para un solo trazado multiplica una
-   evidencia que sólo se observó una vez. Si el ST está descendido, ése
-   es el término.
+   el electrocardiograma*, que es la categoría amplia. Si el ST está
+   descendido, ése es el término. Que los dos no se cuenten a la vez no
+   depende de esta instrucción: lo declara `incluido_en` y lo aplica el
+   código.
 4. **La irradiación cuenta cuando es a los dos brazos.** El cociente
    declarado es el del dolor irradiado a ambos, no a uno. «Dolor que baja
    por el brazo izquierdo» no sustenta *Dolor torácico irradiado a ambos

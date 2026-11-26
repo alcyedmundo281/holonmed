@@ -181,6 +181,16 @@ class AntigenPresentingCell:
         modelo = skill_json.get("modelo_bayesiano")
         if not isinstance(modelo, dict):
             return None  # La skill no declara modelo: no se inventa uno.
+        errores = skill_json.get("errores_inclusion")
+        if errores:
+            logger.error(
+                "Sin probabilidad para '%s': inclusión entre signos mal declarada: %s",
+                skill_json.get("name"),
+                "; ".join(errores),
+            )
+            return None
+        # Aquí y no arriba: `inclusion` reutiliza `elegir_por_signo`.
+        from .inclusion import unificar
 
         prob_base = _a_float(modelo.get("probabilidad_base"), 0.01)
         prob_base = min(max(prob_base, 1e-6), PROBABILIDAD_MAXIMA)
@@ -219,14 +229,16 @@ class AntigenPresentingCell:
             if not infon.es_valido:
                 continue
             clave = emparejar_infon(infon, vocabulario)
-            if clave is not None and clave in mapa_signos:
+            # También los signos sin cociente: pueden estar incluidos en uno
+            # que lo tiene, o incluirlo.
+            if clave is not None:
                 pares.append((clave, infon))
 
         # Un signo, una vez: dos menciones de la misma observación no son dos
         # pruebas independientes y su LR no se multiplica dos veces.
         elegidos = elegir_por_signo(pares)
         for clave, infon in pares:
-            if infon is elegidos[clave]:
+            if infon is elegidos[clave] or clave not in mapa_signos:
                 continue
             nombre_signo = mapa_signos[clave].nombre
             if infon.polaridad is not elegidos[clave].polaridad:
@@ -241,7 +253,12 @@ class AntigenPresentingCell:
                     f"cuenta UNA vez y se descarta '{infon.termino}'"
                 )
 
-        for etiqueta, infon in elegidos.items():
+        unificacion = unificar(elegidos, skill_json.get("inclusiones") or {})
+        traza.extend(dict.fromkeys(unificacion.descartados.values()))
+
+        for etiqueta, infon in unificacion.cuentan.items():
+            if etiqueta not in mapa_signos:
+                continue
             signo = mapa_signos[etiqueta]
 
             if signo.tramos:

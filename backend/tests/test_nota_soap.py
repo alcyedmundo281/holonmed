@@ -16,6 +16,8 @@ from holonmed.core.nota_soap import (
     construir_nota,
     declarar_procedencia,
 )
+from holonmed.core.pipeline import _avisar_protocolo
+from holonmed.core.skills import Skill
 from holonmed.db.store import Database, EpisodioRepo, GraphRepo, TicRepo
 from holonmed.models import (
     EstadoInfon,
@@ -273,3 +275,40 @@ def test_un_registro_antiguo_no_se_lee_como_objetivo(tmp_path):
     infones = episodios.infones_del_episodio(episodio)
 
     assert [i.procedencia for i in infones] == ["sin_declarar"]
+
+
+def test_un_protocolo_sin_calcular_no_se_presenta_sin_su_aviso():
+    """Con `incluido_en` mal declarado no hay probabilidad ni veto, y la nota
+    sola se leería como que no hay evidencia ni exclusiones."""
+    protocolo = Skill(
+        "sintetico",
+        """---
+titulo: Protocolo sintético
+condicion: { nombre: Condición sintética }
+signos:
+  - nombre: Signo sintético
+    codigos: { holonmed: "HM:1" }
+    rol: prueba_especifica
+    fuente: sintética
+    incluido_en: ["HM:9999"]
+---
+""",
+    )
+    resultado = _caso()
+    _avisar_protocolo(resultado, protocolo)
+
+    nota = construir_nota(resultado)
+
+    assert nota.avisos == [resultado.aviso_protocolo]
+    assert "HM:9999" in nota.avisos[0]
+    # Va antes del primer problema, no al pie.
+    assert nota.texto.index(f"AVISO: {nota.avisos[0]}") < nota.texto.index(
+        "Dolor epigástrico"
+    )
+
+
+def test_sin_aviso_de_protocolo_la_nota_no_anuncia_ninguno():
+    nota = construir_nota(_caso())
+
+    assert nota.avisos == []
+    assert "AVISO" not in nota.texto

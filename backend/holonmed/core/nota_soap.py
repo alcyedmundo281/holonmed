@@ -208,6 +208,9 @@ def construir_nota(
             destino.append(dato)
 
     nota = NotaEvolucion(
+        # Sin esto, un protocolo que no calculó nada se leería como un caso
+        # sin evidencia ni exclusiones.
+        avisos=[resultado.aviso_protocolo] if resultado.aviso_protocolo else [],
         problemas=sorted(
             problemas.values(), key=lambda p: (p.numero is None, p.numero or 0)
         ),
@@ -229,6 +232,7 @@ def _texto(nota: NotaEvolucion, resultado: ResultadoTic) -> str:
         f"EVOLUCIÓN: borrador sin firma · {_fecha_local(resultado.timestamp)} · "
         f"origen: {resultado.origen.value}"
     ]
+    secciones += [f"AVISO: {aviso}" for aviso in nota.avisos]
     for p in nota.problemas:
         numero = f"#{p.numero}" if p.numero is not None else "(sin número)"
         secciones.append(

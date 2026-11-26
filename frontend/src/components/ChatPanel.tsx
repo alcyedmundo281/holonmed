@@ -8,6 +8,7 @@ import type {
   PropuestaTic,
   RespuestaChat,
 } from '../lib/types';
+import { CorreccionRedaccion } from './CorreccionRedaccion';
 import {
   PropuestaCitaCard,
   PropuestaPacienteCard,
@@ -18,6 +19,8 @@ import { PropuestaRecetaCard } from './PropuestaRecetaCard';
 interface Mensaje {
   autor: 'usuario' | 'sistema';
   texto: string;
+  /** Sólo las respuestas libres del modelo se pueden corregir. */
+  respuestaId?: string;
   accion?: { etiqueta: string; url: string; aviso?: string };
   propuesta?: PropuestaReceta;
   cita?: PropuestaCita;
@@ -31,8 +34,17 @@ interface Mensaje {
  * Si la intención es enviar un WhatsApp, la respuesta es un enlace que una
  * persona debe abrir y confirmar. Receta, cita, alta de paciente y tic son
  * propuestas: no se escribe nada hasta que alguien las confirma con su nombre.
+ *
+ * Se monta con `key={pacienteId}`: arrastrar una conversación, o una respuesta
+ * en vuelo, de un paciente a otro es exactamente el error que no queremos.
  */
-export function ChatPanel({ pacienteId }: { pacienteId: string }) {
+export function ChatPanel({
+  pacienteId,
+  onTicGuardado,
+}: {
+  pacienteId: string;
+  onTicGuardado: (pacienteId: string) => void;
+}) {
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [entrada, setEntrada] = useState('');
   const [esperando, setEsperando] = useState(false);
@@ -41,12 +53,6 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
   useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensajes]);
-
-  // Al cambiar de paciente se limpia la conversación: arrastrar el contexto
-  // de un paciente a otro es exactamente el error que no queremos.
-  useEffect(() => {
-    setMensajes([]);
-  }, [pacienteId]);
 
   async function enviar() {
     const texto = entrada.trim();
@@ -91,10 +97,14 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
             >
               <p className="whitespace-pre-wrap break-words">{m.texto}</p>
 
+              {m.respuestaId && (
+                <CorreccionRedaccion respuestaId={m.respuestaId} pacienteId={pacienteId} />
+              )}
+
               {m.propuesta && <PropuestaRecetaCard propuesta={m.propuesta} />}
               {m.cita && <PropuestaCitaCard propuesta={m.cita} />}
               {m.alta && <PropuestaPacienteCard propuesta={m.alta} />}
-              {m.tic && <PropuestaTicCard propuesta={m.tic} />}
+              {m.tic && <PropuestaTicCard propuesta={m.tic} onGuardado={onTicGuardado} />}
 
               {m.accion && (
                 <div className="mt-2 pt-2 border-t border-slate-300/40">
@@ -152,7 +162,11 @@ export function ChatPanel({ pacienteId }: { pacienteId: string }) {
 function interpretar(r: RespuestaChat): Mensaje {
   switch (r.tipo) {
     case 'texto':
-      return { autor: 'sistema', texto: r.datos.respuesta };
+      return {
+        autor: 'sistema',
+        texto: r.datos.respuesta,
+        respuestaId: r.datos.respuesta_id,
+      };
 
     case 'receta_propuesta':
       return {

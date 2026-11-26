@@ -40,6 +40,16 @@ export function EvolutionNote({
         {fechaLegible(fecha)} · origen: {origen}
       </p>
 
+      {nota.avisos.map((aviso) => (
+        <p
+          key={aviso}
+          role="alert"
+          className="text-sm text-amber-900 bg-amber-50 border-2 border-amber-300 rounded p-2 mb-3"
+        >
+          {aviso}
+        </p>
+      ))}
+
       {nota.problemas.length === 0 && (
         <p className="text-sm text-slate-600">
           Sin problemas: ningún hallazgo validado y presente.

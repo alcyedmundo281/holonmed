@@ -890,6 +890,13 @@ class HallazgoFueraDeNota(BaseModel):
 class NotaEvolucion(BaseModel):
     """La evolución SOAP por problema de un tic. Un borrador sin firma."""
 
+    avisos: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Lo que cambia cómo se lee la nota. Va dentro de ella para que "
+            "ninguna vista la enseñe sin el aviso."
+        ),
+    )
     problemas: list[ProblemaEvolucion] = Field(default_factory=list)
     negativos: list[NegativoDocumentado] = Field(default_factory=list)
     fuera_de_la_nota: list[HallazgoFueraDeNota] = Field(default_factory=list)
@@ -1031,6 +1038,16 @@ class ResultadoTic(BaseModel):
         ),
     )
 
+    aviso_protocolo: str | None = Field(
+        default=None,
+        description=(
+            "Se rellena cuando un protocolo de este tic declara mal una "
+            "inclusión entre signos. Con él no se calculan probabilidad, "
+            "veredicto, promoción ni Φ: su ausencia NO dice que no haya "
+            "evidencia ni exclusiones. None si todos están bien declarados."
+        ),
+    )
+
     # --- Triaje determinista por criterios ontológicos (medsemiotics-db) ---
     aviso_triaje: str | None = Field(
         default=None,
@@ -1139,6 +1156,22 @@ class CrystallizeRequest(BaseModel):
 class ChatRequest(BaseModel):
     mensaje: str = Field(min_length=1)
     paciente_id: str = "default"
+
+
+class RespuestaLibre(BaseModel):
+    """Una respuesta libre del chat, guardada en memoria para poder corregirla."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    texto: str
+
+
+class PeticionCorreccion(BaseModel):
+    """Pide corregir una respuesta que el servidor ya dio, no un texto suelto."""
+
+    respuesta_id: str = Field(min_length=1)
+    paciente_id: str = Field(min_length=1)
+    instruccion: str = Field(default="", max_length=500)
 
 
 class ItemReceta(BaseModel):

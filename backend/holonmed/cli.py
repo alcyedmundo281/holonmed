@@ -391,7 +391,8 @@ async def _tic(texto: str, paciente: str, skill: str) -> int:
     await ctx.cerrar()
 
     print(f"\nProtocolo activo: {resultado.skill_activa}")
-    # Los avisos van antes que la nota: cambian cómo se lee.
+    # Los avisos van antes que la nota: cambian cómo se lee. El del protocolo
+    # lo lleva la propia nota, para que no se pueda copiar sin él.
     if resultado.aviso_triaje:
         print(f"AVISO: {resultado.aviso_triaje}")
     for senal in resultado.instrucciones_detectadas:

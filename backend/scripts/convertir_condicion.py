@@ -883,6 +883,68 @@ def _emitir_conflicto(
     )
 
 
+def _emitir_inclusion(
+    salida: Bloque,
+    concepto: dict,
+    entradas: list[tuple[dict, str]],
+    termino: str,
+    informe: Informe,
+) -> None:
+    """Traslada `incluido_en` del concepto, sin deducirlo de nada.
+
+    Es un parámetro de seguridad: sin él, dos signos que son la misma
+    observación multiplican sus dos cocientes. No se infiere de `padre`, que
+    agrupa por sistema, ni de los nombres. Sólo se citan los conceptos que
+    esta condición enlaza: holonmed rechaza una referencia a un signo ausente.
+    """
+    declarado = concepto.get("incluido_en")
+    if declarado is None:
+        return
+    if not isinstance(declarado, list) or not all(isinstance(c, str) for c in declarado):
+        informe.pendiente(
+            termino, f"`incluido_en` del concepto no es una lista: {declarado!r}"
+        )
+        return
+    enlazados = {str(arista.get("concepto") or "") for arista, _ in entradas}
+    presentes = [c for c in declarado if c in enlazados]
+    if presentes:
+        pares = ", ".join(f'"{c}"' for c in presentes)
+        salida.crudo(f"    incluido_en: [{pares}]")
+
+
+def _avisar_agrupaciones(condicion: dict, indice: Indice, informe: Informe) -> None:
+    """Una `agrupacion` con cociente puede abarcar a otro signo de la tabla.
+
+    El índice no dice a cuáles, así que no se emite nada: se pide mirarlo.
+    """
+    aristas = [
+        a
+        for a in (condicion.get("signos") or [])
+        + (condicion.get("signos_de_alarma") or [])
+    ]
+    codigos = [str(a.get("concepto") or "") for a in aristas]
+    declarados = {
+        c
+        for codigo in codigos
+        for c in (indice.concepto(codigo).get("incluido_en") or [])
+    }
+    for arista in aristas:
+        codigo = str(arista.get("concepto") or "")
+        concepto = indice.concepto(codigo)
+        if (
+            concepto.get("semantica") == "agrupacion"
+            and (arista.get("lr_positivo") or arista.get("lr_negativo"))
+            and len(set(codigos)) > 1
+            and codigo not in declarados
+        ):
+            informe.pendiente(
+                str(concepto.get("termino") or codigo),
+                f"es una agrupación con cociente y ningún concepto de la condición "
+                f"declara estar incluido en {codigo}. Si alguno lo está, añade "
+                f"`incluido_en` en el índice; sin eso los dos LR se multiplican",
+            )
+
+
 def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, list[str]]:
     """Traduce las aristas concepto→condición al bloque `signos`."""
     salida = Bloque()
@@ -904,6 +966,7 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
     entradas += [(a, "bandera_roja") for a in (condicion.get("signos_de_alarma") or [])]
 
     en_conflicto = _conceptos_en_conflicto(entradas)
+    _avisar_agrupaciones(condicion, indice, informe)
     resueltos: set[str] = set()
 
     for arista, efecto_por_defecto in entradas:
@@ -950,6 +1013,7 @@ def signos(condicion: dict, indice: Indice, informe: Informe) -> tuple[Bloque, l
         pares = ", ".join(f'{k}: "{v}"' for k, v in codigos.items())
         salida.crudo(f"    codigos: {{ {pares} }}")
         salida.campo("rol", rol, sangria=4)
+        _emitir_inclusion(salida, concepto, entradas, termino, informe)
 
         # `efecto` y `dispara_si`: el eje que dice qué papel juega el hallazgo
         # dentro de un criterio contado, ortogonal al rol. Ya vienen decididos
@@ -1924,6 +1988,7 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
     vocab_acumulado: list[dict] = []
     vistos_acumulado = set()
+    retenidos: list[str] = []
     for identificador in nuevas:
         condicion = indice.condiciones[identificador]
         informe = Informe()
@@ -1948,8 +2013,12 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
         nombre = nombre_por_defecto(identificador, indice)
         destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
+        perdidas = escribir_protocolo(destino, borrador.texto)
+        if perdidas:
+            # Se retiene sólo éste: los demás no dependen de él.
+            retenidos.append(destino.name)
+            print(_aviso_perdida(destino, perdidas) + "\n", file=sys.stderr)
+            continue
 
         print(
             f"=== {identificador} · {condicion.get('termino')} -> {destino.name} ===",
@@ -1976,7 +2045,7 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         )
 
     print(
-        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
+        f"\n{len(nuevas) - len(retenidos)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
         f"auto-completa: cada uno necesita prosa (rol, contexto fisiopatológico, "
         f"banderas rojas), fijar `probabilidad_base` y `factores_riesgo` si aplica, "
         f"pasar `holonmed skills --validar` y subirse como pull request — uno por "
@@ -1984,7 +2053,66 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         f"en `borradores/`, que el cargador no lee: súbelos un nivel para activarlos.",
         file=sys.stderr,
     )
+    if retenidos:
+        print(
+            f"\n{len(retenidos)} sin sobrescribir para no perder `incluido_en`: "
+            f"{', '.join(retenidos)}.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
+
+
+def _inclusiones_de(texto: str) -> set[tuple[str, str]]:
+    """Pares (signo estrecho, código amplio) que declara un protocolo."""
+    partes = texto.split("\n---", 1)
+    if not texto.startswith("---") or len(partes) < 2:
+        return set()
+    meta = yaml.safe_load(partes[0][3:]) or {}
+    pares: set[tuple[str, str]] = set()
+    for signo in meta.get("signos") or []:
+        if not isinstance(signo, dict):
+            continue
+        declarado = signo.get("incluido_en")
+        if isinstance(declarado, list):
+            propio = (signo.get("codigos") or {}).get("holonmed")
+            pares |= {(str(propio or signo.get("nombre")), str(c)) for c in declarado}
+    return pares
+
+
+def inclusiones_perdidas(anterior: str, nuevo: str) -> list[str]:
+    """Inclusiones declaradas en `anterior` que no sobreviven en `nuevo`."""
+    perdidas = _inclusiones_de(anterior) - _inclusiones_de(nuevo)
+    return sorted(f"{estrecho} en {amplio}" for estrecho, amplio in perdidas)
+
+
+def escribir_protocolo(destino: Path, texto: str) -> list[str]:
+    """La única escritura de un protocolo. Devuelve lo que la impide.
+
+    Con la lista vacía, escribió. Si al sobrescribir se perdería un
+    `incluido_en`, no toca el archivo. La comparten la conversión de una
+    condición y `--sync-all`: una protección en una sola de las dos deja la
+    otra borrando el parámetro en silencio.
+    """
+    if destino.exists():
+        perdidas = inclusiones_perdidas(destino.read_text(encoding="utf-8"), texto)
+        if perdidas:
+            return perdidas
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    # `newline` explícito: en Windows el traslado saldría con CRLF y el
+    # repositorio es LF entero. Un protocolo nuevo aparecería como
+    # archivo reescrito de arriba abajo en cuanto alguien lo tocara.
+    destino.write_text(texto, encoding="utf-8", newline="\n")
+    return []
+
+
+def _aviso_perdida(destino: Path, perdidas: list[str]) -> str:
+    return (
+        f"No se sobrescribe {destino}: se perdería `incluido_en` en "
+        f"{', '.join(perdidas)}.\n"
+        f"Sin él esos cocientes vuelven a multiplicarse. Decláralo en el "
+        f"índice antes de regenerar."
+    )
 
 
 def main() -> int:
@@ -2086,11 +2214,9 @@ def main() -> int:
                 f"  python scripts/convertir_condicion.py {identificador} "
                 f"--salida {destino.with_suffix('.nuevo.md')}"
             )
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        # `newline` explícito: en Windows el traslado saldría con CRLF y el
-        # repositorio es LF entero. Un protocolo nuevo aparecería como
-        # archivo reescrito de arriba abajo en cuanto alguien lo tocara.
-        destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
+        perdidas = escribir_protocolo(destino, borrador.texto)
+        if perdidas:
+            raise SystemExit(_aviso_perdida(destino, perdidas))
         print(f"Escrito: {destino}", file=sys.stderr)
 
     print(

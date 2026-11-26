@@ -58,7 +58,13 @@ export function PropuestaPacienteCard({ propuesta }: { propuesta: PropuestaPacie
   );
 }
 
-export function PropuestaTicCard({ propuesta }: { propuesta: PropuestaTic }) {
+export function PropuestaTicCard({
+  propuesta,
+  onGuardado,
+}: {
+  propuesta: PropuestaTic;
+  onGuardado: (pacienteId: string) => void;
+}) {
   const { tic } = propuesta;
   return (
     <div className={MARCO}>
@@ -99,9 +105,15 @@ export function PropuestaTicCard({ propuesta }: { propuesta: PropuestaTic }) {
       </details>
       <p>Confirmar guarda el procesamiento; no ratifica los hallazgos.</p>
       <ConfirmarConNombre
-        confirmar={(nombre) =>
-          api.confirmarTic(propuesta.propuesta_id, propuesta.paciente_id, nombre)
-        }
+        confirmar={async (nombre) => {
+          const guardado = await api.confirmarTic(
+            propuesta.propuesta_id,
+            propuesta.paciente_id,
+            nombre,
+          );
+          onGuardado(propuesta.paciente_id);
+          return guardado;
+        }}
         registrado={(r) => (
           <Registrado texto={`Guardado como tic ${r.tic_id}.`} por={r.confirmado_por} />
         )}

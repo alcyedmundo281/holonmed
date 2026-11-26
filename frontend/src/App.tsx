@@ -7,7 +7,7 @@ import {
   Network,
   Stethoscope,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChatPanel } from './components/ChatPanel';
 import { CompetitionPanel } from './components/CompetitionPanel';
 import { ConceptGraph } from './components/ConceptGraph';
@@ -38,6 +38,15 @@ import type {
 
 type Vista = 'consulta' | 'plan' | 'problemas' | 'historia' | 'grafo';
 
+// Los datos derivados llevan el paciente del que son. `null` es una carga que
+// falló, que no es lo mismo que una historia vacía.
+interface DatosPaciente {
+  pacienteId: string;
+  problemas: Problema[] | null;
+  historial: EntradaHistorial[] | null;
+  grafo: Grafo | null;
+}
+
 const PESTANAS: { id: Vista; etiqueta: string; Icono: typeof Stethoscope }[] = [
   { id: 'consulta', etiqueta: 'Consulta', Icono: Stethoscope },
   { id: 'plan', etiqueta: 'Plan', Icono: ClipboardCheck },
@@ -56,15 +65,26 @@ export default function App() {
   const [tic, setTic] = useState<ResultadoTic | null>(null);
   const [seleccionado, setSeleccionado] = useState<number | null>(null);
 
-  const [problemas, setProblemas] = useState<Problema[]>([]);
-  const [historial, setHistorial] = useState<EntradaHistorial[]>([]);
-  const [grafo, setGrafo] = useState<Grafo>({ nodos: [], aristas: [] });
+  const [datos, setDatos] = useState<DatosPaciente | null>(null);
   const [chatAbierto, setChatAbierto] = useState(false);
 
   // Un veto retira la hipótesis, así que todo lo que se diga después sobre
   // ella sobra. Se calcula aquí para que la vista no tenga que preguntarlo
   // dos veces.
   const vetada = Boolean(tic?.veredicto_declarado?.veto);
+
+  // Lo cargado para otro paciente no se pinta: mientras no llegue lo del que
+  // está en pantalla, no hay datos.
+  const propios = datos && datos.pacienteId === paciente?.id ? datos : null;
+  const problemas = propios?.problemas ?? [];
+
+  // Quién está en pantalla cuando llega una respuesta, que puede no ser quien
+  // la pidió.
+  const enPantalla = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    enPantalla.current = paciente?.id ?? null;
+  }, [paciente]);
+  const ultimaCarga = useRef(0);
 
   const cargarPacientes = useCallback(async () => {
     try {
@@ -86,14 +106,20 @@ export default function App() {
   // Los datos derivados del paciente se recargan al cambiar de paciente o
   // al terminar un tic, que son los dos momentos en que pueden variar.
   const refrescarPaciente = useCallback(async (id: string) => {
+    const carga = ++ultimaCarga.current;
     const [p, h, g] = await Promise.allSettled([
       api.problemas(id),
       api.historial(id),
       api.grafoPaciente(id),
     ]);
-    setProblemas(p.status === 'fulfilled' ? p.value : []);
-    setHistorial(h.status === 'fulfilled' ? h.value : []);
-    setGrafo(g.status === 'fulfilled' ? g.value : { nodos: [], aristas: [] });
+    // Si después se pidió otra carga, esta respuesta se descarta entera.
+    if (carga !== ultimaCarga.current) return;
+    setDatos({
+      pacienteId: id,
+      problemas: p.status === 'fulfilled' ? p.value : null,
+      historial: h.status === 'fulfilled' ? h.value : null,
+      grafo: g.status === 'fulfilled' ? g.value : null,
+    });
   }, []);
 
   useEffect(() => {
@@ -101,17 +127,27 @@ export default function App() {
   }, [paciente, refrescarPaciente]);
 
   function seleccionarPaciente(p: Paciente) {
-    setPaciente(p);
+    // Copia nueva: volver a pulsar el mismo paciente también recarga.
+    setPaciente({ ...p });
     setTic(null); // no arrastrar resultados de un paciente a otro
     setSeleccionado(null);
     setVista('consulta');
   }
 
   function alTerminarTic(resultado: ResultadoTic) {
+    void cargarPacientes();
+    // Un tic tarda; si entretanto se cambió de paciente, no se enseña aquí.
+    if (resultado.paciente_id !== enPantalla.current) return;
     setTic(resultado);
     setSeleccionado(null);
-    if (paciente) void refrescarPaciente(paciente.id);
+    void refrescarPaciente(resultado.paciente_id);
+  }
+
+  // El chat guarda un tic al confirmarlo, y la confirmación también puede
+  // llegar con otro paciente ya en pantalla.
+  function alGuardarTicDelChat(pacienteId: string) {
     void cargarPacientes();
+    if (pacienteId === enPantalla.current) void refrescarPaciente(pacienteId);
   }
 
   const validados = tic?.infones.filter((i) => i.estado === 'VALIDADO').length ?? 0;
@@ -153,7 +189,13 @@ export default function App() {
 
           {chatAbierto && paciente && (
             <div className="h-[300px] border-t border-slate-700 shrink-0">
-              <ChatPanel pacienteId={paciente.id} />
+              {/* La `key` descarta conversación, propuestas y respuestas en
+                  vuelo al cambiar de paciente. */}
+              <ChatPanel
+                key={paciente.id}
+                pacienteId={paciente.id}
+                onTicGuardado={alGuardarTicDelChat}
+              />
             </div>
           )}
         </aside>
@@ -216,7 +258,9 @@ export default function App() {
             </nav>
           </header>
 
-          <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          {/* La `key` por paciente desmonta todo lo de dentro al cambiar:
+              borradores, errores, filtros y peticiones de los paneles. */}
+          <div key={paciente?.id ?? ''} className="flex-1 overflow-y-auto p-6 min-h-0">
             {!paciente ? (
               <p className="text-sm text-slate-500 text-center mt-12">
                 Crea o selecciona un paciente para empezar.
@@ -294,10 +338,6 @@ export default function App() {
                       />
                     )}
 
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">
-                      Anexo, fuera de la nota: cálculo del protocolo y detalle
-                    </h3>
-
                     {/* El orden es el de la lectura, y no es arbitrario.
                         Un veto retira el diagnóstico, así que va antes que
                         cualquier número sobre él. Después los dos ejes que
@@ -316,6 +356,19 @@ export default function App() {
                         <p className="text-sm text-amber-900">{tic.aviso_triaje}</p>
                       </section>
                     )}
+
+                    {tic.aviso_protocolo && (
+                      <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          Protocolo sin calcular
+                        </h3>
+                        <p className="text-sm text-amber-900">{tic.aviso_protocolo}</p>
+                      </section>
+                    )}
+
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">
+                      Anexo, fuera de la nota: cálculo del protocolo y detalle
+                    </h3>
 
                     {tic.todas_vetadas && (
                       <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
@@ -380,12 +433,26 @@ export default function App() {
               </div>
             ) : vista === 'plan' ? (
               <PlanOrders pacienteId={paciente.id} />
+            ) : !propios ? (
+              <p role="status" className="text-sm text-slate-500 text-center mt-12">
+                Cargando los datos de este paciente…
+              </p>
             ) : vista === 'problemas' ? (
-              <ProblemList problemas={problemas} />
+              propios.problemas ? (
+                <ProblemList problemas={propios.problemas} />
+              ) : (
+                <CargaFallida que="la lista de problemas" />
+              )
             ) : vista === 'historia' ? (
-              <HistoryTimeline historial={historial} />
+              propios.historial ? (
+                <HistoryTimeline historial={propios.historial} />
+              ) : (
+                <CargaFallida que="la historia" />
+              )
+            ) : propios.grafo ? (
+              <ConceptGraph grafo={propios.grafo} />
             ) : (
-              <ConceptGraph grafo={grafo} />
+              <CargaFallida que="el grafo" />
             )}
           </div>
 
@@ -398,6 +465,18 @@ export default function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+function CargaFallida({ que }: { que: string }) {
+  return (
+    <p
+      role="alert"
+      className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-4"
+    >
+      No se pudo cargar {que} de este paciente. Esto no significa que no haya registros.
+      Vuelve a seleccionarlo en la lista para reintentarlo.
+    </p>
   );
 }
 
