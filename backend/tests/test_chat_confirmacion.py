@@ -16,6 +16,7 @@ from holonmed.api.deps import AppContext, get_context
 from holonmed.api.routes.chat import INTENCIONES
 from holonmed.config import Settings
 from holonmed.core.cita import PeticionInvalida, citado_del_mensaje, interpretar_fecha
+from holonmed.core.consulta_libre import CONCLUSION, INDICACION
 from holonmed.db.store import Database, PacienteRepo
 from holonmed.llm import LLMUnavailable
 from holonmed.models import EstadoInfon, Infon, ResultadoTic
@@ -373,7 +374,8 @@ def test_confirmar_el_tic_lo_guarda_sin_ratificar_nada(entorno):
     tic = ctx.tics.tic_completo(respuesta.json()["tic_id"])
     assert tic["actor"] == QUIEN
     assert tic["origen"] == "consulta"
-    assert tic["texto_original"] == NARRATIVA
+    # La orden no es parte de la narrativa.
+    assert tic["texto_original"] == "refiere cefalea desde ayer"
     assert tic["resumen"] == propuesta["tic"]["resumen"]
     (infon,) = _filas(ctx, "infon")
     assert infon["termino"] == "Cefalea"
@@ -587,3 +589,77 @@ def test_la_propuesta_de_tic_ensena_la_nota_sin_numerar_ni_firmar(entorno):
     assert problema["objetivo"] == []
     assert "borrador sin firma" in nota["texto"]
     assert "Cefalea referida." not in nota["texto"]
+
+
+# --- La orden de cristalizar y las conclusiones en la respuesta libre -------
+
+
+def test_la_orden_propone_el_tic_aunque_el_router_diga_otra_cosa(entorno):
+    _, ctx = entorno
+
+    res = _chat(
+        entorno,
+        {"intencion": "medica"},
+        "Cristaliza esta narrativa sintética: S: Refiere tos.",
+    )
+
+    assert res["tipo"] == "tic_propuesto"
+    assert res["datos"]["tic"]["texto_original"] == "S: Refiere tos."
+    assert ctx.pipeline.narrativas == ["S: Refiere tos."]
+    assert ctx.llm.prompts == [], "no se preguntó al router"
+    assert _filas(ctx, "tic") == []
+
+
+def test_la_orden_sin_narrativa_no_procesa_nada(entorno):
+    _, ctx = entorno
+
+    res = _chat(entorno, {"intencion": "medica"}, "Cristalizar:")
+
+    assert res["tipo"] == "error"
+    assert "Falta la narrativa" in res["mensaje"]
+    assert ctx.pipeline.narrativas == []
+
+
+# Lo que contestó un modelo local pequeño a una narrativa sintética que el
+# router tomó por consulta general, resumido.
+CONCLUYE = (
+    "Sugiere una alta probabilidad de pancreatitis aguda. "
+    "Se recomienda repetir el análisis y solicitar otros marcadores."
+)
+
+
+def _contesta(ctx, texto):
+    async def generar(prompt, **_):
+        ctx.llm.prompts.append(prompt)
+        return texto
+
+    ctx.llm.generar = generar
+
+
+def test_la_respuesta_retenida_no_se_ensena_ni_se_guarda(entorno, monkeypatch, caplog):
+    _, ctx = entorno
+    _contesta(ctx, CONCLUYE)
+    guardadas = []
+    monkeypatch.setattr(ctx.respuestas_libres, "guardar", guardadas.append)
+
+    res = _chat(entorno, {"intencion": "medica"}, "¿Qué tiene?")
+
+    assert res["tipo"] == "error"
+    assert "datos" not in res
+    assert CONCLUSION in res["mensaje"] and INDICACION in res["mensaje"]
+    # Ni al profesional ni al registro llega nada de lo que dijo el modelo.
+    for fuga in ("pancreatitis", "marcadores"):
+        assert fuga not in res["mensaje"].lower()
+        assert fuga not in caplog.text.lower()
+    assert guardadas == []
+
+
+def test_una_respuesta_informativa_sigue_llegando(entorno):
+    _, ctx = entorno
+    _contesta(ctx, "La amilasa es una enzima digestiva.")
+
+    res = _chat(entorno, {"intencion": "medica"}, "¿Qué es la amilasa?")
+
+    assert res["tipo"] == "texto"
+    assert res["datos"]["respuesta"] == "La amilasa es una enzima digestiva."
+    assert "No des diagnósticos" in ctx.llm.prompts[-1]
