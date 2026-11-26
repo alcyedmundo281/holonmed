@@ -39,7 +39,12 @@ from ..facturacion import (
     TarifarioRepo,
 )
 from ..llm import OllamaClient
-from ..models import PropuestaCita, PropuestaPaciente, PropuestaTic
+from ..models import (
+    PropuestaCita,
+    PropuestaPaciente,
+    PropuestaTic,
+    RespuestaLibre,
+)
 from ..services import PrescriptionService, SchedulingService
 from ..services.propuestas import Propuestas
 from ..services.propuestas_receta import PropuestasReceta
@@ -104,6 +109,7 @@ class AppContext:
         self.propuestas_cita: Propuestas[PropuestaCita] = Propuestas()
         self.propuestas_paciente: Propuestas[PropuestaPaciente] = Propuestas()
         self.propuestas_tic: Propuestas[PropuestaTic] = Propuestas()
+        self.respuestas_libres: Propuestas[RespuestaLibre] = Propuestas()
         self.agenda = SchedulingService(self.citas)
 
     def _preparar_vocabulario(self) -> None:

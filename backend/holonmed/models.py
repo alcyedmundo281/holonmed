@@ -1092,6 +1092,22 @@ class ChatRequest(BaseModel):
     paciente_id: str = "default"
 
 
+class RespuestaLibre(BaseModel):
+    """Una respuesta libre del chat, guardada en memoria para poder corregirla."""
+
+    propuesta_id: str = Field(default_factory=lambda: uuid4().hex)
+    paciente_id: str
+    texto: str
+
+
+class PeticionCorreccion(BaseModel):
+    """Pide corregir una respuesta que el servidor ya dio, no un texto suelto."""
+
+    respuesta_id: str = Field(min_length=1)
+    paciente_id: str = Field(min_length=1)
+    instruccion: str = Field(default="", max_length=500)
+
+
 class ItemReceta(BaseModel):
     """Un fármaco tal como se enseña para aprobar y como se escribe."""
 

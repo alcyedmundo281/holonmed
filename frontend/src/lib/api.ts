@@ -73,6 +73,20 @@ export const api = {
       body: JSON.stringify({ mensaje, paciente_id: pacienteId }),
     }),
 
+  // Sólo propone: el original no cambia y no se guarda nada.
+  corregirRedaccion: (respuestaId: string, pacienteId: string, instruccion: string) =>
+    pedir<{ respuesta_id: string; original: string; corregido: string }>(
+      '/api/chat/corregir-redaccion',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          respuesta_id: respuestaId,
+          paciente_id: pacienteId,
+          instruccion,
+        }),
+      },
+    ),
+
   // El chat sólo propone la receta; emitirla exige el nombre de quien aprueba.
   confirmarReceta: (propuestaId: string, pacienteId: string, confirmadoPor: string) =>
     pedir<RecetaEmitida>('/api/recetas/confirmar', {
