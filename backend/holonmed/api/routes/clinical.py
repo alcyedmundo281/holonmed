@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from ...core.nota_soap import construir_nota
 from ...core.partida_doble import conciliar
 from ...models import CrystallizeRequest, OrigenTic, ResultadoTic
 from ...services import LabExtractionError, extraer_texto_pdf
@@ -34,6 +35,9 @@ async def cristalizar(
     resultado.origen = req.origen
     resultado.actor = req.actor
     resultado.tic_id = ctx.tics.guardar(resultado)
+    resultado.evolucion = construir_nota(
+        resultado, ctx.tics.lista_problemas(resultado.paciente_id)
+    )
     return resultado
 
 
@@ -67,6 +71,9 @@ async def subir_laboratorio(
     resultado.origen = OrigenTic.LABORATORIO
     resultado.actor = actor
     resultado.tic_id = ctx.tics.guardar(resultado)
+    resultado.evolucion = construir_nota(
+        resultado, ctx.tics.lista_problemas(resultado.paciente_id)
+    )
     ctx.documentos.registrar(
         paciente_id,
         tipo="informe_laboratorio",

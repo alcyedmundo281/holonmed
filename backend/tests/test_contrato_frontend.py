@@ -60,6 +60,10 @@ MODELOS = {
     "PropuestaCita": m.PropuestaCita,
     "PropuestaPaciente": m.PropuestaPaciente,
     "PropuestaTic": m.PropuestaTic,
+    "NotaEvolucion": m.NotaEvolucion,
+    "ProblemaEvolucion": m.ProblemaEvolucion,
+    "NegativoDocumentado": m.NegativoDocumentado,
+    "HallazgoFueraDeNota": m.HallazgoFueraDeNota,
 }
 
 # Los enums que el frontend reproduce como uniones de literales.

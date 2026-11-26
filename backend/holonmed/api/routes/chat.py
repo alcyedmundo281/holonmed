@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ...core.cita import PeticionInvalida, citado_del_mensaje, interpretar_fecha
 from ...core.entrada_no_confiable import detectar_instrucciones
+from ...core.nota_soap import construir_nota
 from ...core.receta import ExtraccionInvalida, validar_extraccion
 from ...core.redaccion import MAX_CARACTERES, CorreccionRechazada, validar_salida
 from ...llm import LLMUnavailable
@@ -319,6 +320,9 @@ async def _proponer_tic(ctx: AppContext, req: ChatRequest) -> dict[str, Any]:
     except LLMUnavailable as exc:
         return _error(str(exc))
     tic.origen = OrigenTic.CONSULTA
+    # Todavía no está en la historia: sólo llevan número los problemas que ya
+    # estaban en la lista.
+    tic.evolucion = construir_nota(tic, ctx.tics.lista_problemas(holon.paciente_id))
 
     propuesta = PropuestaTic(
         paciente_id=holon.paciente_id,

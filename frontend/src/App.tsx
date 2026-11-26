@@ -14,6 +14,7 @@ import { ConceptGraph } from './components/ConceptGraph';
 import { CouplingPanel } from './components/CouplingPanel';
 import { DoubtPanel } from './components/DoubtPanel';
 import { EvidenceText } from './components/EvidenceText';
+import { EvolutionNote } from './components/EvolutionNote';
 import { HistoryTimeline } from './components/HistoryTimeline';
 import { InferencePanel } from './components/InferencePanel';
 import { InfonCard } from './components/InfonCard';
@@ -329,6 +330,14 @@ export default function App() {
                       )}
                     </section>
 
+                    {tic.evolucion && (
+                      <EvolutionNote
+                        nota={tic.evolucion}
+                        fecha={tic.timestamp}
+                        origen={tic.origen}
+                      />
+                    )}
+
                     {/* El orden es el de la lectura, y no es arbitrario.
                         Un veto retira el diagnóstico, así que va antes que
                         cualquier número sobre él. Después los dos ejes que
@@ -356,6 +365,10 @@ export default function App() {
                         <p className="text-sm text-amber-900">{tic.aviso_protocolo}</p>
                       </section>
                     )}
+
+                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2">
+                      Anexo, fuera de la nota: cálculo del protocolo y detalle
+                    </h3>
 
                     {tic.todas_vetadas && (
                       <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">

@@ -381,6 +381,39 @@ export interface SenalInstruccion {
   fragmento: string;
 }
 
+export interface ProblemaEvolucion {
+  /** El de la lista de problemas. `null` si no está en ella. */
+  numero: number | null;
+  termino: string;
+  codigo: string | null;
+  subjetivo: string[];
+  objetivo: string[];
+  sin_clasificar: string[];
+  derivado: string[];
+}
+
+export interface NegativoDocumentado {
+  termino: string;
+  cita: string;
+  procedencia: string;
+}
+
+export interface HallazgoFueraDeNota {
+  termino: string;
+  cita: string;
+  estado: string;
+}
+
+/** Borrador sin firma. No trae análisis ni plan: los escribe el profesional. */
+export interface NotaEvolucion {
+  /** Cambian cómo se lee la nota; se muestran siempre con ella. */
+  avisos: string[];
+  problemas: ProblemaEvolucion[];
+  negativos: NegativoDocumentado[];
+  fuera_de_la_nota: HallazgoFueraDeNota[];
+  texto: string;
+}
+
 export interface ResultadoTic {
   tic_id: string | null;
   timestamp: string;
@@ -408,6 +441,7 @@ export interface ResultadoTic {
   resumen: string;
   /** Con una sola señal el tic no valida nada. Vacío no es «texto confiable». */
   instrucciones_detectadas: SenalInstruccion[];
+  evolucion: NotaEvolucion | null;
   infones: Infon[];
   clasificacion: ResultadoClasificacion | null;
   inferencia: InferenciaBayesiana | null;
@@ -541,6 +575,7 @@ export interface EntradaHistorial {
   id: string;
   fecha: string;
   origen: OrigenTic;
+  tipo: string;
   actor: string | null;
   skill: string;
   resumen: string;
@@ -566,6 +601,9 @@ export interface Documento {
 }
 
 export interface Problema {
+  numero: number;
+  /** 1 si nadie lo escribió: sale de un criterio declarado. */
+  derivado: number;
   termino: string;
   codigo: string | null;
   sistema: string | null;

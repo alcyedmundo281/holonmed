@@ -98,7 +98,16 @@ export function HistoryTimeline({
               </div>
 
               {entrada.resumen && (
-                <p className="text-sm text-slate-800 mt-1.5">{entrada.resumen}</p>
+                <p className="text-sm text-slate-600 mt-1.5">
+                  {/* En una nota clínica es la razón de impresión, que
+                      escribe el sistema. En lo demás es texto del modelo. */}
+                  {entrada.tipo !== 'clinica' && (
+                    <span className="text-xs text-slate-400">
+                      Resumen del modelo, sin validar:{' '}
+                    </span>
+                  )}
+                  {entrada.resumen}
+                </p>
               )}
 
               <div className="flex items-center gap-3 mt-2 text-xs">

@@ -6,9 +6,10 @@ import type { Problema } from '../lib/types';
  *
  * Es la primera vista que mira un clínico al abrir una historia. Se
  * construye sólo con hallazgos validados y presentes, deduplicados por
- * concepto; una ausencia posterior se avisa y no retira la fila. Las
- * fechas de primera y última aparición son lo que distingue un problema
- * agudo de uno arrastrado, así que se muestran siempre.
+ * concepto y numerados por orden de primer registro; una ausencia posterior
+ * se avisa y no retira la fila. Las fechas dicen cuándo entraron al sistema,
+ * no cuándo empezó el cuadro, y no hay estado activo o resuelto porque ese
+ * dato no existe.
  */
 export function ProblemList({
   problemas,
@@ -31,11 +32,12 @@ export function ProblemList({
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500 uppercase tracking-wide">
           <tr>
+            <th className="text-right font-medium pl-4 py-2">#</th>
             <th className="text-left font-medium px-4 py-2">Problema</th>
             <th className="text-left font-medium px-3 py-2">Código</th>
             <th className="text-right font-medium px-3 py-2">Veces</th>
-            <th className="text-left font-medium px-3 py-2">Primera</th>
-            <th className="text-left font-medium px-4 py-2">Última</th>
+            <th className="text-left font-medium px-3 py-2">Primer registro</th>
+            <th className="text-left font-medium px-4 py-2">Último registro</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -45,8 +47,16 @@ export function ProblemList({
               onClick={() => p.codigo && onExplorar?.(p)}
               className={`hover:bg-slate-50 ${p.codigo && onExplorar ? 'cursor-pointer' : ''}`}
             >
+              <td className="pl-4 py-2.5 text-right tabular-nums text-slate-500">
+                {p.numero}
+              </td>
               <td className="px-4 py-2.5">
                 <div className="font-medium text-slate-800">{p.termino}</div>
+                {p.derivado === 1 && (
+                  <div className="text-[11px] text-amber-700">
+                    Derivado por un criterio, no escrito en la nota
+                  </div>
+                )}
                 {p.consta_ausente && (
                   <div className="text-[11px] text-amber-700 mt-0.5">
                     Consta ausente el {fecha(p.consta_ausente)} · sigue en la

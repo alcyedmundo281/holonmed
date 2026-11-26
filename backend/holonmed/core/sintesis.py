@@ -32,8 +32,8 @@ VA POR PROBLEMA
 Es la queja central de Weed. «Doing well» no significa nada en un paciente
 con artritis, insuficiencia cardíaca, azotemia, cadera rota e infección de
 oído: quien lo escribió quería decir que le mejoró lo suyo. Cada problema
-lleva su punto de vista del paciente, su dato objetivo y su siguiente paso,
-en ese orden —«sintomáticamente y objetivamente», empezando siempre por el
+lleva su punto de vista del paciente y su dato objetivo, y deja el análisis y
+el plan declarados vacíos para el profesional. Ese orden —«sintomáticamente y objetivamente», empezando siempre por el
 punto de vista del paciente—.
 
 Y el orden lo da la procedencia del ciclo 18, que ya sabe cuál es cuál. Sin
@@ -54,6 +54,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from ..models import Infon, Polaridad
+from .nota_soap import etiqueta_derivado, lineas_soap
 
 
 class Motivo(str, Enum):
@@ -81,25 +82,33 @@ CLINICOS = frozenset(
 
 @dataclass(frozen=True)
 class Bloque:
-    """Un problema, con lo que se sabe de él y hacia dónde va.
+    """Un problema, con lo que se sabe de él.
 
     El orden de los campos es el de Weed y no es estético: primero lo que el
-    paciente cuenta, después lo que alguien comprobó, y sólo entonces qué
-    sigue. Invertirlo hace que el dato objetivo tiña el relato.
+    paciente cuenta y después lo que alguien comprobó. Invertirlo hace que
+    el dato objetivo tiña el relato. No hay campo de análisis ni de plan:
+    los escribe el profesional.
     """
 
     problema: str
     subjetivo: tuple[str, ...] = ()
     objetivo: tuple[str, ...] = ()
     derivado: tuple[str, ...] = ()
-    siguiente: str = ""
+    sin_clasificar: tuple[str, ...] = ()
+    numero: int | None = None
     # Lo que consta ausente va aparte: mezclado con lo demás, la cita o el
     # término se leerían como afirmados.
     ausente: tuple[str, ...] = ()
 
     @property
     def vacio(self) -> bool:
-        return not (self.subjetivo or self.objetivo or self.derivado or self.ausente)
+        return not (
+            self.subjetivo
+            or self.objetivo
+            or self.derivado
+            or self.sin_clasificar
+            or self.ausente
+        )
 
 
 @dataclass(frozen=True)
@@ -134,6 +143,9 @@ def sintetizar(
 ) -> HolonDeFondo:
     """Organiza los infones por problema, en el orden de Weed.
 
+    `problemas` llega en el orden de la lista, y de ahí sale el número de
+    cada uno.
+
     Un infón que no cae bajo ningún problema **no se descarta**: sale en
     `sin_sintetizar`. Perderlo en silencio sería la peor forma del error
     aquí, porque el fondo es lo que alimenta la nota impresa y lo que no
@@ -164,13 +176,20 @@ def sintetizar(
             subjetivo=_citas(suyos, "subjetivo"),
             objetivo=_citas(suyos, "objetivo"),
             derivado=tuple(
-                i.termino
+                etiqueta_derivado(i)
                 for i in suyos
                 if i.procedencia == "derivado" and i.polaridad is Polaridad.PRESENTE
             ),
+            sin_clasificar=tuple(
+                i.texto_origen
+                for i in suyos
+                if i.procedencia not in ("subjetivo", "objetivo", "derivado")
+                and i.polaridad is Polaridad.PRESENTE
+            ),
             ausente=tuple(_negado(i) for i in suyos if i.polaridad is Polaridad.AUSENTE),
+            numero=numero,
         )
-        for problema, suyos in por_problema.items()
+        for numero, (problema, suyos) in enumerate(por_problema.items(), start=1)
     )
 
     return HolonDeFondo(
@@ -201,10 +220,9 @@ def _problema_de(infon: Infon, problemas: Sequence[str]) -> str | None:
     que lo nombra o del que es su padre en el grafo. No se adivina del
     texto, que es lo que el sistema entero existe para no hacer.
     """
-    candidatos = {infon.termino, infon.linaje_clinico}
-    for problema in problemas:
-        if problema in candidatos:
-            return problema
+    for candidato in (infon.termino, infon.linaje_clinico):
+        if candidato is not None and candidato in problemas:
+            return candidato
     return None
 
 
@@ -296,26 +314,23 @@ def _lista(nombres: Sequence[str]) -> str:
 def formatear_fondo(fondo: HolonDeFondo) -> str:
     """Convierte el `HolonDeFondo` en texto mantenido para `resumen_vivo`.
 
-    No lleva fecha ni firma: afirma el estado del paciente *ahora*, por
-    problema y en el orden de Weed (subjetivo, objetivo, derivado, siguiente),
-    sin descartar los hallazgos que no cayeron bajo ningún problema.
+    No lleva fecha ni firma: afirma el estado del paciente *ahora*, en SOAP
+    por problema, sin descartar los hallazgos que no cayeron bajo ninguno.
     """
     if not (fondo.bloques or fondo.sin_sintetizar or fondo.negativos):
         return "Paciente nuevo sin antecedentes registrados."
 
     secciones: list[str] = []
     for bloque in fondo.bloques:
-        lineas = [f"Problema: {bloque.problema}"]
-        if bloque.subjetivo:
-            lineas.append("  Subjetivo: " + "; ".join(bloque.subjetivo))
-        if bloque.objetivo:
-            lineas.append("  Objetivo: " + "; ".join(bloque.objetivo))
-        if bloque.derivado:
-            lineas.append("  Derivado: " + "; ".join(bloque.derivado))
-        if bloque.ausente:
-            lineas.append("  Consta ausente: " + "; ".join(bloque.ausente))
-        if bloque.siguiente:
-            lineas.append(f"  Siguiente: {bloque.siguiente}")
+        numero = f"#{bloque.numero} " if bloque.numero is not None else ""
+        lineas = [f"{numero}{bloque.problema}"]
+        lineas += lineas_soap(
+            bloque.subjetivo,
+            bloque.objetivo,
+            bloque.sin_clasificar,
+            bloque.derivado,
+            bloque.ausente,
+        )
         secciones.append("\n".join(lineas))
 
     if fondo.sin_sintetizar:

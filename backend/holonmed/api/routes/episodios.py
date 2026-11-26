@@ -32,7 +32,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ...core.base import cargar_todas, evaluar
-from ...core.sintesis import decidir, imprimir, sintetizar
+from ...core.nota_soap import construir_nota
+from ...core.sintesis import decidir, formatear_fondo, imprimir, sintetizar
 from ...models import OrigenTic, ResultadoTic, TipoNota
 from ..deps import AppContext, get_context
 
@@ -170,9 +171,13 @@ async def holon_de_fondo(
                 "objetivo": list(b.objetivo),
                 "derivado": list(b.derivado),
                 "ausente": list(b.ausente),
+                "sin_clasificar": list(b.sin_clasificar),
+                "numero": b.numero,
             }
             for b in fondo.bloques
         ],
+        # El mismo cuerpo que se imprimiría, sin fecha ni firma.
+        "texto": formatear_fondo(fondo),
         # Lo que no cayó bajo ningún problema. No se descarta: lo que no
         # esté en el fondo no llegará nunca al médico.
         "sin_sintetizar": list(fondo.sin_sintetizar),
@@ -313,11 +318,13 @@ async def escribir_documento(
         raise HTTPException(409, "El episodio no admitió el documento")
 
     resultado.tic_id = tic_id
+    evolucion = construir_nota(resultado, ctx.tics.lista_problemas(resultado.paciente_id))
     return {
         "tic_id": tic_id,
         "tipo": resultado.tipo.value,
         "ordinal_clinica": resultado.ordinal_clinica,
         "infones": len(resultado.infones),
+        "evolucion": evolucion.model_dump(),
     }
 
 

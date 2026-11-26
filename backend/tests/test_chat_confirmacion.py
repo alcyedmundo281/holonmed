@@ -575,3 +575,15 @@ def test_una_base_anterior_gana_las_columnas_de_quien_confirmo(tmp_path):
     assert "confirmada_por" in columnas["cita"]
     assert "alta_confirmada_por" in columnas["paciente"]
     nueva.cerrar()
+
+
+def test_la_propuesta_de_tic_ensena_la_nota_sin_numerar_ni_firmar(entorno):
+    """Lo que aún no está en la historia no recibe número de problema."""
+    nota = _proponer(entorno, "tic")["tic"]["evolucion"]
+
+    (problema,) = nota["problemas"]
+    assert problema["termino"] == "Cefalea"
+    assert problema["numero"] is None
+    assert problema["objetivo"] == []
+    assert "borrador sin firma" in nota["texto"]
+    assert "Cefalea referida." not in nota["texto"]

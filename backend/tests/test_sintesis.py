@@ -170,8 +170,8 @@ def test_imprimir_exige_firma_y_motivo_y_deja_constancia_del_disparo():
         problemas=["Dolor epigástrico"],
     )
     texto_fondo = formatear_fondo(fondo)
-    assert "Subjetivo: refiere dolor desde ayer" in texto_fondo
-    assert "Objetivo: lipasa 900" in texto_fondo
+    assert "S: «refiere dolor desde ayer»" in texto_fondo
+    assert "O: «lipasa 900»" in texto_fondo
     assert "Firmado por:" not in texto_fondo
 
     decision_ok = decidir(problemas_antes=[], problemas_ahora=["Dolor epigástrico"])

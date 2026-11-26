@@ -84,6 +84,11 @@ export function PropuestaTicCard({
           ))}
         </ul>
       )}
+      {tic.evolucion && (
+        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans">
+          {tic.evolucion.texto}
+        </pre>
+      )}
       {tic.veredicto_declarado?.veto && (
         <Dato nombre="Hipótesis retirada">{tic.veredicto_declarado.veto.motivo}</Dato>
       )}

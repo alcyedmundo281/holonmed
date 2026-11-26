@@ -183,7 +183,9 @@ def test_tras_imprimir_una_ausencia_no_se_anuncia_como_resuelta(contexto, client
     (bloque,) = fondo["bloques"]
     assert bloque["problema"] == "Fiebre"
     assert bloque["ausente"] == ["Fiebre («Sin fiebre»)"]
-    assert bloque["objetivo"] == ["Fiebre"]
+    # La narrativa no declara «O:», así que la cita queda sin clasificar.
+    assert bloque["sin_clasificar"] == ["Fiebre"]
+    assert bloque["objetivo"] == []
 
 
 def test_el_resumen_vivo_no_afirma_lo_negado(contexto):

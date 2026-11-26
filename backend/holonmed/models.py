@@ -151,13 +151,14 @@ class Infon(BaseModel):
     termino: str = Field(description="Término preferente tras la normalización")
     polaridad: Polaridad = Polaridad.PRESENTE
     procedencia: str = Field(
-        default="objetivo",
+        default="sin_declarar",
         description=(
             "Quién asevera este infón: 'subjetivo' lo expresó el paciente, "
             "'objetivo' lo observó el clínico o lo midió quien informa, "
             "'derivado' no lo aseveró nadie y se sigue de otros infones. "
             "Lo que clasifica es quién asevera, no el instrumento: una "
-            "glucemia que el paciente refiere es subjetiva."
+            "glucemia que el paciente refiere es subjetiva. 'sin_declarar' "
+            "es el defecto: nadie lo dijo, y no se supone."
         ),
     )
     codigo: str | None = None
@@ -851,6 +852,57 @@ class AgrupacionDiagnostica(BaseModel):
     explicacion: str = ""
 
 
+class ProblemaEvolucion(BaseModel):
+    """Un problema dentro de la nota de evolución.
+
+    No tiene campos de análisis ni de plan, a propósito: los escribe el
+    profesional y el sistema no tiene dónde ponerlos.
+    """
+
+    numero: int | None = Field(
+        default=None,
+        description="El de la lista de problemas. `None` si no está en ella.",
+    )
+    termino: str
+    codigo: str | None = None
+    subjetivo: list[str] = Field(default_factory=list)
+    objetivo: list[str] = Field(default_factory=list)
+    sin_clasificar: list[str] = Field(default_factory=list)
+    derivado: list[str] = Field(default_factory=list)
+
+
+class NegativoDocumentado(BaseModel):
+    """Una ausencia validada. Es dato de la nota, no un problema."""
+
+    termino: str
+    cita: str
+    procedencia: str = "sin_declarar"
+
+
+class HallazgoFueraDeNota(BaseModel):
+    """Lo que no entra en la nota y aun así tiene que verse."""
+
+    termino: str
+    cita: str
+    estado: str
+
+
+class NotaEvolucion(BaseModel):
+    """La evolución SOAP por problema de un tic. Un borrador sin firma."""
+
+    avisos: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Lo que cambia cómo se lee la nota. Va dentro de ella para que "
+            "ninguna vista la enseñe sin el aviso."
+        ),
+    )
+    problemas: list[ProblemaEvolucion] = Field(default_factory=list)
+    negativos: list[NegativoDocumentado] = Field(default_factory=list)
+    fuera_de_la_nota: list[HallazgoFueraDeNota] = Field(default_factory=list)
+    texto: str = ""
+
+
 class ResultadoTic(BaseModel):
     """Todo lo que produce un único ciclo de procesamiento (un *tic*)."""
 
@@ -900,6 +952,10 @@ class ResultadoTic(BaseModel):
     # `core/entrada_no_confiable.py`. Con una sola señal el tic no valida
     # nada. Vacío NO significa que el texto sea confiable.
     instrucciones_detectadas: list[SenalInstruccion] = Field(default_factory=list)
+    # La nota de evolución se arma después de guardar, cuando la lista de
+    # problemas ya puede numerar. `resumen` es texto libre del modelo y no
+    # forma parte de ella.
+    evolucion: NotaEvolucion | None = None
     infones: list[Infon] = Field(default_factory=list)
     # `Any` para no importar de core y crear un ciclo; en la práctica es
     # un ResultadoClasificacion.
