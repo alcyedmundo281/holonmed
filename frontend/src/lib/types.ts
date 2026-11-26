@@ -568,6 +568,8 @@ export interface Problema {
   primera: string;
   ultima: string;
   confianza: number;
+  /** Consta ausente en el último registro o después. No lo da por resuelto. */
+  consta_ausente: string | null;
 }
 
 export interface NodoGrafo {

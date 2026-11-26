@@ -1061,7 +1061,9 @@ class HolonPaciente(BaseModel):
         """
         fuentes = [
             self.antecedentes,
-            *(i.termino for i in self.linea_tiempo),
+            # Sólo lo presente: el término de una ausencia no lleva su «sin»
+            # y entraría como factor de riesgo afirmado.
+            *(i.termino for i in self.presentes()),
             texto_actual,
         ]
         contexto = "\n".join(f.strip() for f in fuentes if f and f.strip())
