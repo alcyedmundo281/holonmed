@@ -38,6 +38,12 @@ from holonmed.llm import LLMUnavailable
         ("No tiene fiebre\nTiene tos", "No tiene fiebre.\nTiene tos."),
         ("- dosis de 5-10 mg", "Dosis de 5-10 mg."),
         ("desde hace 2 dias", "Desde hace 2 días."),
+        ("No constan:\n- alergias\n- cirugias", "No constan:\n- Alergias.\n- Cirugías."),
+        # Fuera de la frase negada, la puntuación sigue siendo libre.
+        (
+            "No hay fiebre. refiere tos, usa jarabe",
+            "No hay fiebre. Refiere tos. Usa jarabe.",
+        ),
     ],
 )
 def test_se_admite_lo_que_no_puede_cambiar_un_hecho(original, corregido):
@@ -55,6 +61,23 @@ def test_se_admite_lo_que_no_puede_cambiar_un_hecho(original, corregido):
         ("Sin tos, con fiebre.", "Sin tos con fiebre.", "negación"),
         ("Sin dolor. Fiebre alta.", "Sin dolor, fiebre alta.", "negación"),
         ("Niega alergias, asma.", "Niega alergias. Asma.", "negación"),
+        ("Niega fiebre, tos, dolor.", "Niega fiebre, tos. Dolor.", "negación"),
+        ("Niega fiebre, tos. Dolor.", "Niega fiebre, tos, dolor.", "negación"),
+        ("Niega fiebre; tos; dolor.", "Niega fiebre; tos. Dolor.", "negación"),
+        ("Fiebre, tos, dolor: no.", "Fiebre. Tos, dolor: no.", "negación"),
+        (
+            "Niega fiebre (hoy). Dolor intenso.",
+            "Niega fiebre (hoy), dolor intenso.",
+            "negación",
+        ),
+        (
+            "Sin alergias, p. ej. penicilina, látex.",
+            "Sin alergias, p. ej. penicilina. Látex.",
+            "negación",
+        ),
+        ("Niega fiebre, tos,\ndolor.", "Niega fiebre, tos.\nDolor.", "negación"),
+        ("Niega:\n- fiebre\n- tos, dolor", "Niega:\n- fiebre\n- tos. Dolor", "negación"),
+        ("Niega:\n- fiebre\n- tos", "Niega: fiebre\n- tos", "negación"),
         # Cifras, dosis y unidades
         ("Amoxicilina 500 mg.", "Amoxicilina 50 mg.", "cifras"),
         ("Temperatura de 38,5.", "Temperatura de 385.", "cifras"),

@@ -14,7 +14,8 @@ en una lista cerrada de cambios que no pueden alterarlos.
 
 QUÉ SE PUEDE CAMBIAR
 
-- Puntuación, mayúsculas, espacios, saltos de línea y marcas de formato.
+- Puntuación, mayúsculas, espacios, saltos de línea y marcas de formato; en
+  una frase con negación, la puntuación no puede cambiar lo que queda dentro.
 - Añadir una tilde que faltaba. No quitarla ni moverla.
 - Añadir, quitar o ajustar «el», «la», «los», «las», «además», «asimismo» y
   «adicionalmente».
@@ -108,8 +109,11 @@ _PIEZA = re.compile(
     r"(?P<cifra>\d+(?:[.,:]\d+)*)|(?P<palabra>[^\W\d_]+)|(?P<salto>\n)|(?P<otro>\S)"
 )
 _CORTES = frozenset(".,;:!?()[]\n")
-# Los que terminan una frase. Los demás sólo separan dentro de ella.
-_CORTES_DE_FRASE = frozenset(".;!?\n")
+# Los que terminan una frase. Los demás sólo separan dentro de ella: el punto
+# y coma también, porque separa los elementos de una enumeración.
+_CORTES_DE_FRASE = frozenset(".!?\n")
+# Su punto no termina la frase. También cuenta cualquier letra suelta.
+_ABREVIATURAS = frozenset("ej etc aprox dr dra vs núm vit".split())
 
 
 class CorreccionRechazada(ValueError):
@@ -167,7 +171,8 @@ def _guion_con_sentido(texto: str, i: int) -> bool:
 @dataclass
 class _Clausula:
     fichas: list[_Ficha] = field(default_factory=list)
-    # "frase", "pausa" o "adversativa". El final del texto cierra la frase.
+    # "frase", "pausa", "adversativa", "abreviatura" o "lista" (dos puntos
+    # al final de un renglón). El final del texto cierra la frase.
     cierre: str = ""
 
 
@@ -176,6 +181,18 @@ def _cerrar(clausulas: list[_Clausula], cierre: str) -> None:
     if clausulas[-1].fichas:
         clausulas[-1].cierre = cierre
         clausulas.append(_Clausula())
+
+
+def _tipo_de_corte(texto: str, i: int) -> str:
+    if texto[i] == ".":
+        previa = re.search(r"(?<![^\W\d_])[^\W\d_]+$", texto[:i])
+        if previa:
+            palabra = previa.group(0).lower()
+            if len(palabra) == 1 or palabra in _ABREVIATURAS:
+                return "abreviatura"
+    if texto[i] == ":" and texto[i + 1 :].lstrip(" \t\r*_").startswith("\n"):
+        return "lista"
+    return "frase" if texto[i] in _CORTES_DE_FRASE else "pausa"
 
 
 def _trocear(texto: str) -> list[_Clausula]:
@@ -211,14 +228,26 @@ def _trocear(texto: str) -> list[_Clausula]:
             articulo, tras_cifra = "", False
         else:
             if token in _CORTES:
-                _cerrar(clausulas, "frase" if token in _CORTES_DE_FRASE else "pausa")
+                tipo = _tipo_de_corte(texto, pieza.start())
+                if clausulas[-1].fichas:
+                    _cerrar(clausulas, tipo)
+                elif (
+                    tipo == "frase"
+                    and token != "\n"
+                    and len(clausulas) > 1
+                    and clausulas[-2].cierre == "pausa"
+                ):
+                    # En «(hoy).» el punto termina la frase aunque llegue
+                    # después del paréntesis. Un salto de línea tras una coma
+                    # no: es el mismo renglón partido.
+                    clausulas[-2].cierre = "frase"
                 articulo, tras_cifra = "", False
             if _es_simbolo(texto, pieza.start(), token):
                 clave = "-" if token in _GUIONES else token
                 clausulas[-1].fichas.append(_Ficha(token, clave, True))
                 tras_cifra = False
     clausulas = [c for c in clausulas if c.fichas]
-    if clausulas and not clausulas[-1].cierre:
+    if clausulas:
         clausulas[-1].cierre = "frase"
     return clausulas
 
@@ -284,12 +313,37 @@ def _comparar_grafia(antes: _Ficha, despues: _Ficha) -> None:
         raise _rechazo(f"cambia la tilde de «{antes.texto}» y puede cambiar su sentido")
 
 
-def _negadas(clausulas: list[_Clausula]) -> list[tuple[str, ...]]:
-    return [
-        (*(f.clave for f in c.fichas), c.cierre)
-        for c in clausulas
-        if any(f.texto.lower() in _NEGACIONES for f in c.fichas)
-    ]
+def _frases(clausulas: list[_Clausula]) -> list[list[_Clausula]]:
+    frases: list[list[_Clausula]] = [[]]
+    for clausula in clausulas:
+        frases[-1].append(clausula)
+        if clausula.cierre in {"frase", "adversativa"}:
+            frases.append([])
+    return [f for f in frases if f]
+
+
+def _niega(clausula: _Clausula) -> bool:
+    return any(f.texto.lower() in _NEGACIONES for f in clausula.fichas)
+
+
+def _negadas(clausulas: list[_Clausula]) -> list[tuple[tuple[str, ...], ...]]:
+    """Cada frase con una negación, entera y con cómo se separan sus partes.
+
+    La negación alcanza a toda la enumeración: en «niega fiebre, tos, dolor»
+    un punto antes de «dolor» lo sacaría de lo negado. Si lo que se niega
+    anuncia una lista en renglones aparte, no se sabe dónde acaba y se
+    protege todo lo que sigue.
+    """
+    negadas = []
+    hasta_el_final = False
+    for frase in _frases(clausulas):
+        if hasta_el_final or any(map(_niega, frase)):
+            negadas.append(tuple((*(f.clave for f in c.fichas), c.cierre) for c in frase))
+        hasta_el_final = hasta_el_final or any(
+            c.cierre == "lista" and any(map(_niega, frase[: i + 1]))
+            for i, c in enumerate(frase)
+        )
+    return negadas
 
 
 def verificar_correccion(original: str, corregido: str) -> None:
