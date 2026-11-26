@@ -220,6 +220,8 @@ CREATE TABLE IF NOT EXISTS tic (
     aviso_competencia  TEXT,
     -- Por qué el triaje se detuvo (falta el índice o hay una ficha rota). NULL si corrió.
     aviso_triaje       TEXT,
+    -- Protocolos que no calcularon por declarar mal una inclusión entre signos.
+    aviso_protocolo    TEXT,
 
     -- Lo que la duda abre cuando Φ dice que la creencia dejó de ser
     -- operable: de qué clase es el fallo, hacia dónde indagar, y qué

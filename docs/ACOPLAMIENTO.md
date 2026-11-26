@@ -127,6 +127,11 @@ filtra los que le conciernen—, en este orden:
 Un término genérico **nunca** hereda lo que se declara de uno específico:
 «Dolor torácico» no es «Dolor torácico irradiado a ambos brazos».
 
+Después de emparejar se aplican las inclusiones que el protocolo declara
+(`incluido_en`, ver [SKILLS.md](SKILLS.md)): dos signos que son la misma
+observación cuentan una vez, y el cubierto sale de `h` y de `e` en las dos
+lecturas de Φ.
+
 **Dónde termina la identidad.** Es exacta, pero no incondicional, y decirlo
 importa: quien la dé por universal escribirá código que la rompa sin
 enterarse. Se cumple bajo dos condiciones.

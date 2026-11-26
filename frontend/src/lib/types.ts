@@ -486,6 +486,13 @@ export interface ResultadoTic {
   aviso_triaje: string | null;
 
   /**
+   * Un protocolo declara mal una inclusión entre signos y con él no se calculó
+   * nada. La falta de probabilidad o de veto NO dice que no los haya. `null`
+   * si todos están bien declarados.
+   */
+  aviso_protocolo: string | null;
+
+  /**
    * Agrupaciones diagnósticas de la lista de problemas por criterios ontológicos de consenso (medsemiotics-db).
    */
   agrupaciones_triage: AgrupacionDiagnostica[];

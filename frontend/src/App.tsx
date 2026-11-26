@@ -302,6 +302,15 @@ export default function App() {
                       </section>
                     )}
 
+                    {tic.aviso_protocolo && (
+                      <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
+                        <h3 className="font-semibold text-amber-900 text-sm mb-2">
+                          Protocolo sin calcular
+                        </h3>
+                        <p className="text-sm text-amber-900">{tic.aviso_protocolo}</p>
+                      </section>
+                    )}
+
                     {tic.todas_vetadas && (
                       <section className="border-2 border-amber-300 rounded-lg bg-amber-50 p-4 mb-4 shadow-sm">
                         <h3 className="font-semibold text-amber-900 text-sm mb-2">
