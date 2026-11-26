@@ -18,6 +18,40 @@ de la máquina.
 
 ---
 
+## Así se ve
+
+Capturas de la interfaz con **pacientes sintéticos** y una base temporal,
+usando `medgemma-1.5-4b-it` en local. Son un ejemplo de la pantalla, no una
+medida del rendimiento del modelo, y los porcentajes no son diagnósticos.
+
+### Consulta: evidencia y borrador de evolución
+
+Cada hallazgo se marca sobre el texto original. La nota queda sin firma, y la
+valoración (A) y el plan (P) los escribe el profesional.
+
+![Vista de consulta: narrativa sintética con la evidencia resaltada y el inicio de una nota de evolución en borrador sin firma](docs/capturas/consulta-nota-soap.jpg)
+
+### Razonamiento a la vista
+
+La probabilidad se muestra con la previa, cada factor y cada likelihood ratio,
+junto al acoplamiento Φ y lo que falta por comprobar.
+
+![Paneles de inferencia abductiva y acoplamiento semiótico con la traza del cálculo y los datos que faltan](docs/capturas/inferencia-acoplamiento.jpg)
+
+### Lista de problemas
+
+Se distingue lo derivado por un criterio de lo que está escrito en la nota.
+
+![Lista numerada de problemas con su código, número de veces y fechas de registro](docs/capturas/lista-problemas.jpg)
+
+### Grafo de conceptos
+
+Los hallazgos validados y los conceptos que los agrupan.
+
+![Grafo que une dos hallazgos validados con los conceptos del vocabulario que los agrupan](docs/capturas/grafo-conceptos.jpg)
+
+---
+
 ## El problema
 
 Un modelo de lenguaje aplicado a texto clínico produce output plausible.
