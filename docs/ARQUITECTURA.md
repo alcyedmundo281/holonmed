@@ -34,7 +34,7 @@ flowchart TD
     H -->|no| R
     H -->|sí| J[Capa 3: auditoría lógica]
 
-    J --> K{score ≥ 85<br/>y lógica OK?}
+    J --> K{score ≥ 85, lógica OK<br/>y re-ranking con<br/>similitud léxica ≥ 85?}
     K -->|sí| V
     K -->|score ≥ 75| AL[ALERTA]
     K -->|resto| R

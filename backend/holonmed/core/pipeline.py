@@ -1032,8 +1032,10 @@ class CrystallizationPipeline:
         es_logico = False
 
         if match.score >= self.settings.threshold_audit:
+            # Se audita lo que se va a guardar, no lo que propuso el
+            # extractor: que el texto sostenga «X» no dice nada de «Y».
             auditoria = await self.verificador.auditar(
-                termino,
+                match.termino,
                 texto_original,
                 skill.para_prompt(self.settings.formato_protocolo),
                 ausente=(polaridad is Polaridad.AUSENTE),
@@ -1043,7 +1045,11 @@ class CrystallizationPipeline:
             certeza_logica = auditoria.certeza
 
         # Veredicto
-        if match.score >= self.settings.threshold_validated and es_logico:
+        if (
+            match.score >= self.settings.threshold_validated
+            and es_logico
+            and match.motivo_revision is None
+        ):
             estado = EstadoInfon.VALIDADO
             confianza = match.score * PESO_ONTOLOGICO + certeza_logica * PESO_LOGICO
         elif match.score >= self.settings.threshold_alert:
@@ -1051,6 +1057,15 @@ class CrystallizationPipeline:
             # marcado, nunca se descarta en silencio ni se da por bueno.
             estado = EstadoInfon.ALERTA
             confianza = match.score
+            if match.motivo_revision:
+                # Un 99 junto a un concepto sin confirmar se leería como
+                # certeza; se muestra lo que de verdad casaban las cadenas.
+                if match.similitud_lexica is not None:
+                    confianza = match.similitud_lexica
+                razon = (
+                    f"{razon}; {match.motivo_revision}: se propuso «{termino}», "
+                    f"requiere revisión humana"
+                )
         else:
             estado = EstadoInfon.RUIDO
             confianza = match.score

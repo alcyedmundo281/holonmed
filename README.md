@@ -43,7 +43,11 @@ una puede ser rechazado:
 | **0 — Skill-hints** | ¿Lo codificó ya un humano? | Diccionario término→código del protocolo activo |
 | **1 — Recuperación** | ¿Existe el concepto? | FTS5 con BM25 acota; puntuado difuso ordena |
 | **2 — Re-ranking** | ¿Es *este* concepto? | El LLM audita candidatos y **puede responder "ninguno"** |
-| **3 — Auditoría lógica** | ¿Lo sostiene la evidencia? | Comparación numérica explícita contra el protocolo |
+| **3 — Auditoría lógica** | ¿Lo sostiene la evidencia? | Comparación numérica explícita contra el protocolo, sobre el término **que se va a guardar** |
+
+La capa 2 propone un concepto, no lo certifica: si su similitud léxica no
+alcanza el umbral de validación, el hallazgo queda en ALERTA aunque la
+capa 3 lo apruebe ([la medición](docs/VALIDACION.md)).
 
 El resultado no es un booleano sino un veredicto de tres estados:
 
