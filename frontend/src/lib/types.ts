@@ -703,7 +703,7 @@ export interface PropuestaTic {
 }
 
 export type RespuestaChat =
-  | { tipo: 'texto'; datos: { respuesta: string } }
+  | { tipo: 'texto'; datos: { respuesta: string; respuesta_id: string } }
   | { tipo: 'tic_propuesto'; datos: PropuestaTic }
   | { tipo: 'receta_propuesta'; datos: PropuestaReceta }
   | { tipo: 'cita_propuesta'; datos: PropuestaCita }

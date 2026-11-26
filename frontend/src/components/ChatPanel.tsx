@@ -8,6 +8,7 @@ import type {
   PropuestaTic,
   RespuestaChat,
 } from '../lib/types';
+import { CorreccionRedaccion } from './CorreccionRedaccion';
 import {
   PropuestaCitaCard,
   PropuestaPacienteCard,
@@ -18,6 +19,8 @@ import { PropuestaRecetaCard } from './PropuestaRecetaCard';
 interface Mensaje {
   autor: 'usuario' | 'sistema';
   texto: string;
+  /** Sólo las respuestas libres del modelo se pueden corregir. */
+  respuestaId?: string;
   accion?: { etiqueta: string; url: string; aviso?: string };
   propuesta?: PropuestaReceta;
   cita?: PropuestaCita;
@@ -94,6 +97,10 @@ export function ChatPanel({
             >
               <p className="whitespace-pre-wrap break-words">{m.texto}</p>
 
+              {m.respuestaId && (
+                <CorreccionRedaccion respuestaId={m.respuestaId} pacienteId={pacienteId} />
+              )}
+
               {m.propuesta && <PropuestaRecetaCard propuesta={m.propuesta} />}
               {m.cita && <PropuestaCitaCard propuesta={m.cita} />}
               {m.alta && <PropuestaPacienteCard propuesta={m.alta} />}
@@ -155,7 +162,11 @@ export function ChatPanel({
 function interpretar(r: RespuestaChat): Mensaje {
   switch (r.tipo) {
     case 'texto':
-      return { autor: 'sistema', texto: r.datos.respuesta };
+      return {
+        autor: 'sistema',
+        texto: r.datos.respuesta,
+        respuestaId: r.datos.respuesta_id,
+      };
 
     case 'receta_propuesta':
       return {
