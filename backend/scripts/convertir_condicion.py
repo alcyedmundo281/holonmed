@@ -1988,6 +1988,7 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
     vocab_acumulado: list[dict] = []
     vistos_acumulado = set()
+    retenidos: list[str] = []
     for identificador in nuevas:
         condicion = indice.condiciones[identificador]
         informe = Informe()
@@ -2012,8 +2013,12 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
 
         nombre = nombre_por_defecto(identificador, indice)
         destino = DIRECTORIO_BORRADORES / f"{nombre}.md"
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
+        perdidas = escribir_protocolo(destino, borrador.texto)
+        if perdidas:
+            # Se retiene sólo éste: los demás no dependen de él.
+            retenidos.append(destino.name)
+            print(_aviso_perdida(destino, perdidas) + "\n", file=sys.stderr)
+            continue
 
         print(
             f"=== {identificador} · {condicion.get('termino')} -> {destino.name} ===",
@@ -2040,7 +2045,7 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         )
 
     print(
-        f"\n{len(nuevas)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
+        f"\n{len(nuevas) - len(retenidos)} protocolo(s) escrito(s) en {DIRECTORIO_BORRADORES}. Ninguno se "
         f"auto-completa: cada uno necesita prosa (rol, contexto fisiopatológico, "
         f"banderas rojas), fijar `probabilidad_base` y `factores_riesgo` si aplica, "
         f"pasar `holonmed skills --validar` y subirse como pull request — uno por "
@@ -2048,6 +2053,13 @@ def sync_all(indice: Indice, forzar: bool, ruta_vocab: Path | None) -> int:
         f"en `borradores/`, que el cargador no lee: súbelos un nivel para activarlos.",
         file=sys.stderr,
     )
+    if retenidos:
+        print(
+            f"\n{len(retenidos)} sin sobrescribir para no perder `incluido_en`: "
+            f"{', '.join(retenidos)}.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
@@ -2072,6 +2084,35 @@ def inclusiones_perdidas(anterior: str, nuevo: str) -> list[str]:
     """Inclusiones declaradas en `anterior` que no sobreviven en `nuevo`."""
     perdidas = _inclusiones_de(anterior) - _inclusiones_de(nuevo)
     return sorted(f"{estrecho} en {amplio}" for estrecho, amplio in perdidas)
+
+
+def escribir_protocolo(destino: Path, texto: str) -> list[str]:
+    """La única escritura de un protocolo. Devuelve lo que la impide.
+
+    Con la lista vacía, escribió. Si al sobrescribir se perdería un
+    `incluido_en`, no toca el archivo. La comparten la conversión de una
+    condición y `--sync-all`: una protección en una sola de las dos deja la
+    otra borrando el parámetro en silencio.
+    """
+    if destino.exists():
+        perdidas = inclusiones_perdidas(destino.read_text(encoding="utf-8"), texto)
+        if perdidas:
+            return perdidas
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    # `newline` explícito: en Windows el traslado saldría con CRLF y el
+    # repositorio es LF entero. Un protocolo nuevo aparecería como
+    # archivo reescrito de arriba abajo en cuanto alguien lo tocara.
+    destino.write_text(texto, encoding="utf-8", newline="\n")
+    return []
+
+
+def _aviso_perdida(destino: Path, perdidas: list[str]) -> str:
+    return (
+        f"No se sobrescribe {destino}: se perdería `incluido_en` en "
+        f"{', '.join(perdidas)}.\n"
+        f"Sin él esos cocientes vuelven a multiplicarse. Decláralo en el "
+        f"índice antes de regenerar."
+    )
 
 
 def main() -> int:
@@ -2173,22 +2214,9 @@ def main() -> int:
                 f"  python scripts/convertir_condicion.py {identificador} "
                 f"--salida {destino.with_suffix('.nuevo.md')}"
             )
-        if destino.exists():
-            perdidas = inclusiones_perdidas(
-                destino.read_text(encoding="utf-8"), borrador.texto
-            )
-            if perdidas:
-                raise SystemExit(
-                    f"No se sobrescribe {destino}: se perdería `incluido_en` en "
-                    f"{', '.join(perdidas)}.\n"
-                    f"Sin él esos cocientes vuelven a multiplicarse. Decláralo en el "
-                    f"índice antes de regenerar."
-                )
-        destino.parent.mkdir(parents=True, exist_ok=True)
-        # `newline` explícito: en Windows el traslado saldría con CRLF y el
-        # repositorio es LF entero. Un protocolo nuevo aparecería como
-        # archivo reescrito de arriba abajo en cuanto alguien lo tocara.
-        destino.write_text(borrador.texto, encoding="utf-8", newline="\n")
+        perdidas = escribir_protocolo(destino, borrador.texto)
+        if perdidas:
+            raise SystemExit(_aviso_perdida(destino, perdidas))
         print(f"Escrito: {destino}", file=sys.stderr)
 
     print(

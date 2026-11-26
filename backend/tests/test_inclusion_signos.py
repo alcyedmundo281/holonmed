@@ -503,3 +503,35 @@ def test_el_conversor_no_pisa_una_inclusion_que_no_sabe_regenerar(sca):
     assert convertir_condicion.inclusiones_perdidas(anterior, sin_ella) == [
         "HM:3015 en HM:3016"
     ]
+
+
+@pytest.mark.parametrize("se_pierde", [True, False])
+def test_la_conversion_masiva_tampoco_pisa_una_inclusion(
+    tmp_path, monkeypatch, sca, se_pierde
+):
+    """`--sync-all --forzar` escribe por su lado y necesita la misma guarda."""
+    anterior = sca.contenido_completo
+    nuevo = anterior.replace("version: 1.1.0", "version: 0.1.0-borrador")
+    if se_pierde:
+        nuevo = nuevo.replace('    incluido_en: ["HM:3016"]\n', "")
+    afectado, otro = tmp_path / "a.md", tmp_path / "b.md"
+    afectado.write_text(anterior, encoding="utf-8", newline="\n")
+
+    indice = _indice({})
+    indice.condiciones = {"a": {"termino": "a"}, "b": {"termino": "b"}}
+    for nombre, doble in {
+        "DIRECTORIO_BORRADORES": tmp_path,
+        "vocabulario_local": lambda: (set(), Path("semilla.json")),
+        "condiciones_con_protocolo": set,
+        "nombre_por_defecto": lambda identificador, _: identificador,
+        "fragmento_vocabulario": lambda *_: [],
+        "convertir": lambda *_: convertir_condicion.Borrador(nuevo, []),
+    }.items():
+        monkeypatch.setattr(convertir_condicion, nombre, doble)
+
+    salida = convertir_condicion.sync_all(indice, forzar=True, ruta_vocab=None)
+
+    assert salida == (1 if se_pierde else 0)
+    assert afectado.read_text(encoding="utf-8") == (anterior if se_pierde else nuevo)
+    # Retener uno no impide escribir los demás.
+    assert otro.read_text(encoding="utf-8") == nuevo
